@@ -1,0 +1,6 @@
+[submodule "external/StarlitLibrary"]
+	path = external/StarlitLibrary
+	url = https://github.com/demiurgeQuantified/StarlitLibrary.git
+[submodule "external/lua-reactivex"]
+	path = external/lua-reactivex
+	url = https://github.com/christophstrasen/lua-reactivex
