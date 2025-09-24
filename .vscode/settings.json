@@ -1,8 +1,7 @@
 {
     "Lua.workspace.library": [
-        "~/.steam/steam/steamapps/common/ProjectZomboid/projectzomboid/media/lua",
-        "~/.local/share/Steam/steamapps/workshop/content/108600/3378285185/mods/StarlitLibrary/media/lua/",
-        "${addons}/umbrella-unstable/module/library"
+        "${workspaceFolder}/external/lua-reactivex",
+        "${workspaceFolder}/external/StarlitLibrary/Contents/mods/StarlitLibrary/42/media/lua/shared"
     ],
     "Lua.runtime.version": "Lua 5.1",
     "Lua.workspace.checkThirdParty": false,

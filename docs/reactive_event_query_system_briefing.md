@@ -13,12 +13,12 @@ This briefing captures the principles we discussed for an RxLua-backed event que
 
 ## Design criteria & constraints (please confirm/clarify)
 
-1. **Headless-friendly:** Core query engine runs in plain Lua 5.1 with zero Project Zomboid dependencies so it can be unit-tested outside the game.
-2. **Lua-ReactiveX-native runtime:** Builder/DSL is a thin veneer; internally everything is an `Observable`/`Subscription`, and advanced users can access raw Rx primitives.
-3. **Immutable fluent API:** Every builder call returns a new query definition (no hidden mutation), matching Rx operator chaining expectations.
-4. **Interoperable outputs:** Queries expose both high-level conveniences (`into`) and the underlying observable so consumers can compose further in Rx.
-5. **Graceful backpressure & lifecycle:** Provide all standard Lua-ReactiveX operators like (`throttle`, `buffer`, `sample`) and ensure `subscribe()` always returns disposable subscriptions.
-7. **Error routing:** User predicates/effects are wrapped in `pcall` and errors flow through `onError`, enabling `catch`, `retry`, etc. just like in standard Lua-ReactiveX
+- **Headless-friendly:** Core query engine runs in plain Lua 5.1 with zero Project Zomboid dependencies so it can be unit-tested outside the game.
+- **Lua-ReactiveX-native runtime:** Builder/DSL is a thin veneer; internally everything is an `Observable`/`Subscription`, and advanced users can access raw Rx primitives.
+- **Immutable fluent API:** Every builder call returns a new query definition (no hidden mutation), matching Rx operator chaining expectations.
+- **Interoperable outputs:** Queries expose both high-level conveniences (`into`) and the underlying observable so consumers can compose further in Rx.
+- **Graceful backpressure & lifecycle:** Provide all standard Lua-ReactiveX operators like (`throttle`, `buffer`, `sample`) and ensure `subscribe()` always returns disposable subscriptions.
+- **Error routing:** User predicates/effects are wrapped in `pcall` and errors flow through `onError`, enabling `catch`, `retry`, etc. just like in standard Lua-ReactiveX
 - **Starlit stays data-light:** The existing LuaEvent hub remains unchanged; the query engine listens via adapters but does not force Starlit to track extra state.
 - **Payload shape is opaque:** Queries treat events as generic tables (stream id + arbitrary keys). Domain logic (SquareCtx, RoomCtx) lives in users of the system.
 - **Minimal dependencies:** Lua-ReactiveX (and its scheduler) and Starlit are the only third-party pieces introduced; everything else ships with the module.
@@ -27,7 +27,7 @@ Let me know if any constraints need relaxing or if new ones (performance budgets
 
 ## Design Decisions and insights to Date (guidance, however not set in stone)
 - **Lua-ReactiveX** We will use https://github.com/4O4/lua-reactivex / https://luarocks.org/modules/4o4/reactivex as our ReactiveX implementation
-
+- **LuaEvent** We will use https://github.com/demiurgeQuantified/StarlitLibrary/blob/main/Contents/mods/StarlitLibrary/42/media/lua/shared/Starlit/LuaEvent.lua as the key primitive and "stream data" to operate on
 - **Testing via schedulers:** Virtual-time scheduler or deterministic clock may be required for unit tests—plan to expose a hook to inject one.
 - **Join semantics custom:** Lua-ReactiveX lacks keyed joins, so we will provide bespoke helpers (with timeout windows) layered atop core operators.
 - **Bridge adapter:** `observableFromLuaEvent(luaEvent)` converts any Starlit LuaEvent into an Rx Observable, handling `Add`/`Remove`.

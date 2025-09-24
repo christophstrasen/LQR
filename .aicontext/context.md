@@ -6,7 +6,6 @@
 - **Assume** this `context.md` is attached for every task and make sure you load it.
 - **Cut flattery** like "This is a good question" etc.
 - **Hold before coding** Do not present code for simple and clear questions. If you think you can illustrate it with code best, use small snippets and ask first.
-- **Always verify** Build 42 API availability before suggesting calls.
 - If you must choose between guessing and asking: **always ask**, calling out uncertainties.
 - When refactoring: preserve behavior; list any intentional changes.
 - **Warn** when context may be missing
@@ -27,15 +26,12 @@
 - **Be clear** about files and code locations
 - **Use EmmyLua doctags** Add them and keep them compatible with existing ones.
 - **Respect the Coding Style & Conventions** in `context.md`
-- When logging use `log("String Message")` or `U.logCtx(LOG_TAG, "String Message", ContextTable)` (both from the shipped `util.lua`)
-- Use assertf() from `util.lua`
-- Keep imports/`require()` paths valid for Build 42 (no `client/server/shared` segments in `require`).
 
 ## 3) Project Summary
-- experimentation
+- experimenting with the possibilities, principles etc. of Lua-ReactiveX
 
 ## 4) Tech Stack & Environment
-- **Language(s):** Lua 5.1 (Build 42) on kahlua vm, optional shell tooling. 
+- **Language(s):** Lua 5.1. Later: Zomboid (Build 42) runtime on kahlua vm.
 - **Editor/OS:** VS Code with VIM support on NixOS.
 - **Authoritative Repo Layout**
 ```
@@ -54,6 +50,9 @@ tbd
 - **Lua-ReactiveX luarocks module**
   https://luarocks.org/modules/4o4/reactivex
 
+- **Starlot LuaEvent** 
+  https://github.com/demiurgeQuantified/StarlitLibrary/blob/main/Contents/mods/StarlitLibrary/42/media/lua/shared/Starlit/LuaEvent.lua
+
   ### Sourcing Policy
 1. reactivex.io describes principles and "ideal API" but implementations may differ
 2. lua-reactivex is the authorative implementation we can use
@@ -66,6 +65,7 @@ tbd
 ## 7) Coding Style & Conventions
 - **Lua:** EmmyLua on all public functions; keep lines ≤ 100 chars. Scene prefabs are exempt from strict style enforcement. 
 - **Globals:** If possible, avoid new globals. If needed, use **Capitalized** form (e.g., `SomeTerm`) 
+- **use ReactiveX base** like `rx.Observable.` in order to typehint to EmmyLua correctly
 - **Naming:** `camelCase` for fields, options, and functions (to match PZ API)  `snake_case` for file-names.
 - **Backwards-compatibility** Hard refactors are allowed during early development. Compatibility shims or aliases are added only for public API calls — and only once the mod has active external users.
 - **Avoid:** `setmetatable` unless explicitly requested.
