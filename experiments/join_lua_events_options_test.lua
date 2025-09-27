@@ -2,7 +2,10 @@ require("bootstrap")
 
 local rx = require("reactivex")
 local LuaEvent = require("Starlit.LuaEvent")
+local JoinObservable = require("JoinObservable")
 local io = require("io")
+
+local createJoinObservable = JoinObservable.createJoinObservable
 
 math.randomseed(os.time())
 
@@ -55,122 +58,20 @@ local function describeEntries(label, entries)
 	end
 end
 
-local function normalizeKeySelector(on)
-	if type(on) == "function" then
-		return on
+local function describeExpired(prefix, packet)
+	if not packet then
+		return
 	end
 
-	local field = on or "id"
-	return function(entry)
-		return entry[field]
-	end
-end
-
-local function touchKey(order, key)
-	for i = 1, #order do
-		if order[i] == key then
-			table.remove(order, i)
-			break
-		end
-	end
-	table.insert(order, key)
-end
-
-local function createJoinStream(leftStream, rightStream, options)
-	options = options or {}
-	local joinType = (options.joinType or "inner"):lower()
-	local keySelector = normalizeKeySelector(options.on)
-	local maxCacheSize = options.maxCacheSize or 5
-
-	local function emitUnmatched(observer, side, record)
-		if joinType ~= "outer" or not record or record.matched then
-			return
-		end
-
-		if side == "left" then
-			observer:onNext({ left = record.entry, right = nil })
-		else
-			observer:onNext({ left = nil, right = record.entry })
-		end
-	end
-
-	return rx.Observable.create(function(observer)
-		local leftCache, rightCache = {}, {}
-		local leftOrder, rightOrder = {}, {}
-
-		local function evictIfNeeded(cache, order, side)
-			while #order > maxCacheSize do
-				local oldestKey = table.remove(order, 1)
-				local record = cache[oldestKey]
-				cache[oldestKey] = nil
-				emitUnmatched(observer, side, record)
-			end
-		end
-
-	local function handleMatch(leftRecord, rightRecord)
-		leftRecord.matched = true
-		rightRecord.matched = true
-		if joinType == "inner" then
-			observer:onNext({ left = leftRecord.entry, right = rightRecord.entry })
-		end
-	end
-
-		local function handleEntry(side, cache, otherCache, order, entry)
-			local key = keySelector(entry)
-			if key == nil then
-				return
-			end
-
-			local record = cache[key]
-			if record then
-				record.entry = entry
-			else
-				cache[key] = { entry = entry, matched = false }
-			end
-
-			touchKey(order, key)
-
-			local other = otherCache[key]
-			if other then
-				if side == "left" then
-					handleMatch(cache[key], other)
-				else
-					handleMatch(other, cache[key])
-				end
-			end
-
-			evictIfNeeded(cache, order, side)
-		end
-
-		local merged = leftStream:merge(rightStream)
-
-		local subscription
-		subscription = merged:subscribe(function(entry)
-			if entry.schema == "left" then
-				handleEntry("left", leftCache, rightCache, leftOrder, entry)
-			else
-				handleEntry("right", rightCache, leftCache, rightOrder, entry)
-			end
-		end, function(err)
-			observer:onError(err)
-		end, function()
-			if joinType == "outer" then
-				for _, record in pairs(leftCache) do
-					emitUnmatched(observer, "left", record)
-				end
-				for _, record in pairs(rightCache) do
-					emitUnmatched(observer, "right", record)
-				end
-			end
-			observer:onCompleted()
-		end)
-
-		return function()
-			if subscription then
-				subscription:unsubscribe()
-			end
-		end
-	end)
+	local entry = packet.entry
+	print(("[%5.2f] [%s EXPIRED] side=%s key=%s reason=%s entry=%s"):format(
+		scheduler.currentTime,
+		prefix,
+		packet.side or "unknown",
+		tostring(packet.key),
+		packet.reason or "unknown",
+		entry and ("id=" .. tostring(entry.id) .. ",rand=" .. tostring(entry.randNum)) or "nil"
+	))
 end
 
 local leftIds = { 1, 2, 3, 4, 5, 6, 7 }
@@ -191,15 +92,21 @@ scheduleEmitter("RIGHT", rightEvent, rightEntries)
 local leftStream = rx.Observable.fromLuaEvent(leftEvent):take(#leftEntries)
 local rightStream = rx.Observable.fromLuaEvent(rightEvent):take(#rightEntries)
 
-local innerJoinStream = createJoinStream(leftStream, rightStream, {
+local innerJoinStream = createJoinObservable(leftStream, rightStream, {
 	on = "id",
 	joinType = "inner",
 	maxCacheSize = 4,
 })
 
-local outerJoinStream = createJoinStream(leftStream, rightStream, {
+local outerJoinStream, outerExpired = createJoinObservable(leftStream, rightStream, {
 	on = "id",
 	joinType = "outer",
+	maxCacheSize = 4,
+})
+
+local antiOuterJoinStream, antiExpired = createJoinObservable(leftStream, rightStream, {
+	on = "id",
+	joinType = "anti_outer",
 	maxCacheSize = 4,
 })
 
@@ -227,6 +134,34 @@ end, function()
 	print(("[%5.2f] Outer join completed"):format(scheduler.currentTime))
 end)
 
+local outerExpiredSubscription = outerExpired:subscribe(function(packet)
+	describeExpired("OUTER", packet)
+end, function(err)
+	io.stderr:write(("Outer expired error: %s\n"):format(err))
+end, function()
+	print(("[%5.2f] Outer expired completed"):format(scheduler.currentTime))
+end)
+
+local antiOuterSubscription = antiOuterJoinStream:subscribe(function(pair)
+	print(("[%5.2f] [ANTI] left=%s right=%s"):format(
+		scheduler.currentTime,
+		pair.left and ("id=" .. pair.left.id .. ",rand=" .. pair.left.randNum) or "nil",
+		pair.right and ("id=" .. pair.right.id .. ",rand=" .. pair.right.randNum) or "nil"
+	))
+end, function(err)
+	io.stderr:write(("Anti outer join error: %s\n"):format(err))
+end, function()
+	print(("[%5.2f] Anti outer join completed"):format(scheduler.currentTime))
+end)
+
+local antiExpiredSubscription = antiExpired:subscribe(function(packet)
+	describeExpired("ANTI", packet)
+end, function(err)
+	io.stderr:write(("Anti expired error: %s\n"):format(err))
+end, function()
+	print(("[%5.2f] Anti expired completed"):format(scheduler.currentTime))
+end)
+
 while not scheduler:isEmpty() do
 	scheduler:update(TIMER_RESOLUTION)
 	sleep(TIMER_RESOLUTION)
@@ -234,3 +169,6 @@ end
 
 innerSubscription:unsubscribe()
 outerSubscription:unsubscribe()
+antiOuterSubscription:unsubscribe()
+outerExpiredSubscription:unsubscribe()
+antiExpiredSubscription:unsubscribe()

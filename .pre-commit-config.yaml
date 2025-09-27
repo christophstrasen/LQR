@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: busted-tests
+        name: Run busted tests
+        entry: busted tests/unit
+        language: system
+        pass_filenames: false
