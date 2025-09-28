@@ -4,6 +4,23 @@ local JoinObservable = {}
 
 local DEFAULT_MAX_CACHE_SIZE = 5
 
+local function warnf(message, ...)
+	local formatted
+	if select("#", ...) > 0 then
+		local ok, result = pcall(string.format, message, ...)
+		formatted = ok and result or message
+	else
+		formatted = message
+	end
+
+	local sink = io and io.stderr
+	if sink and sink.write then
+		sink:write(("[JoinObservable] warning: %s\n"):format(formatted))
+	elseif print then
+		print(("[JoinObservable] warning: %s"):format(formatted))
+	end
+end
+
 local function normalizeKeySelector(on)
 	if type(on) == "function" then
 		return on
@@ -173,6 +190,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		local function handleEntry(side, cache, otherCache, order, entry)
 			local key = keySelector(entry)
 			if key == nil then
+				warnf("Dropped %s entry because join key resolved to nil", side)
 				return
 			end
 
@@ -220,6 +238,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		local subscription
 		subscription = merged:subscribe(function(packet)
 			if type(packet) ~= "table" then
+				warnf("Ignoring packet emitted as %s (expected table)", type(packet))
 				return
 			end
 
