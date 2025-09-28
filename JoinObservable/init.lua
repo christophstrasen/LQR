@@ -1,10 +1,26 @@
 local rx = require("reactivex")
+local io = require("io")
 
 local JoinObservable = {}
 
 local DEFAULT_MAX_CACHE_SIZE = 5
 
+local function defaultWarningHandler(message)
+	local sink = io and io.stderr
+	if sink and sink.write then
+		sink:write(("[JoinObservable] warning: %s\n"):format(message))
+	elseif print then
+		print(("[JoinObservable] warning: %s"):format(message))
+	end
+end
+
+local warningHandler = defaultWarningHandler
+
 local function warnf(message, ...)
+	if not warningHandler then
+		return
+	end
+
 	local formatted
 	if select("#", ...) > 0 then
 		local ok, result = pcall(string.format, message, ...)
@@ -13,12 +29,7 @@ local function warnf(message, ...)
 		formatted = message
 	end
 
-	local sink = io and io.stderr
-	if sink and sink.write then
-		sink:write(("[JoinObservable] warning: %s\n"):format(formatted))
-	elseif print then
-		print(("[JoinObservable] warning: %s"):format(formatted))
-	end
+	warningHandler(formatted)
 end
 
 local function normalizeKeySelector(on)
@@ -62,8 +73,7 @@ local function emitPair(observer, leftEntry, rightEntry)
 	})
 end
 
-local function noop()
-end
+local function noop() end
 
 local joinStrategies = {
 	inner = {
@@ -269,6 +279,16 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	end)
 
 	return observable, expiredSubject
+end
+
+function JoinObservable.setWarningHandler(handler)
+	if handler ~= nil and type(handler) ~= "function" then
+		error("setWarningHandler expects a function or nil")
+	end
+
+	local previous = warningHandler
+	warningHandler = handler or defaultWarningHandler
+	return previous
 end
 
 return JoinObservable

@@ -20,6 +20,7 @@
 * **prefer the zomboid way of coding** e.g. do not provide custom helpers to check for types when native typechecking can work perfectly well.
 * **Classify your code comments** Into different categories. I see at least these two frequent categoroes "Explainers" that describe the implemented concepts, logic or intent and "Implementation Status" That highlights how complete something is, if we look at a stub, what should happen next etc.
 * **Code comments explain intent** When you leave comments, don't just describe what happens, but _why_ it happens and how it ties in with other systems. Briefly.
+* **Write tests and use them** when we refactor, change or expand our module work (not necessary when we just run experiments).
 
 ## 2) Output Requirements
 - **never use diff output** But only copy-paste ready code and instructions
@@ -32,6 +33,8 @@
 
 ## 4) Tech Stack & Environment
 - **Language(s):** Lua 5.1. Later: Zomboid (Build 42) runtime on kahlua vm.
+- **Testing** we use `busted` for test
+- **CI** we use github actions and pre-commit
 - **Editor/OS:** VS Code with VIM support on NixOS.
 - **Authoritative Repo Layout**
 ```

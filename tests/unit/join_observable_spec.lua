@@ -9,7 +9,11 @@ local JoinObservable = require("JoinObservable")
 
 ---@diagnostic disable: undefined-global
 ---@diagnostic disable: undefined-field
-describe("JoinObservable", function()
+	describe("JoinObservable", function()
+		after_each(function()
+			JoinObservable.setWarningHandler()
+		end)
+
 	local function collectValues(observable)
 		local results = {}
 		local completed = false
@@ -71,6 +75,27 @@ describe("JoinObservable", function()
 		assert.is_true(completed)
 		assert.are.same({
 			{ left = 2, right = 2 },
+		}, summarizePairs(pairs))
+	end)
+
+	it("defaults to an inner join keyed by id when options are omitted", function()
+		local left = rx.Observable.fromTable({
+			{ schema = "left", id = 10 },
+			{ schema = "left", id = 20 },
+		}, ipairs, true)
+
+		local right = rx.Observable.fromTable({
+			{ schema = "right", id = 20 },
+			{ schema = "right", id = 30 },
+		}, ipairs, true)
+
+		local defaultJoin = JoinObservable.createJoinObservable(left, right)
+		local pairs, completed, err = collectValues(defaultJoin)
+
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.same({
+			{ left = 20, right = 20 },
 		}, summarizePairs(pairs))
 	end)
 
@@ -169,7 +194,55 @@ describe("JoinObservable", function()
 		assert.are.same({ 1, 2 }, {
 			leftExpired[1].entry.id,
 			leftExpired[2].entry.id,
+			})
+	end)
+
+	it("only keeps the newest key available for future matches when entries are evicted", function()
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			maxCacheSize = 1,
 		})
+
+		local pairs = {}
+		join:subscribe(function(value)
+			table.insert(pairs, value)
+		end)
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		left:onNext({ schema = "left", id = 1 })
+		left:onNext({ schema = "left", id = 2 })
+		left:onNext({ schema = "left", id = 3 })
+
+		assert.are.equal(2, #expiredEvents)
+		assert.are.same({ "left", "left" }, {
+			expiredEvents[1].side,
+			expiredEvents[2].side,
+		})
+		assert.are.same({ "evicted", "evicted" }, {
+			expiredEvents[1].reason,
+			expiredEvents[2].reason,
+		})
+		assert.are.same({ 1, 2 }, {
+			expiredEvents[1].entry.id,
+			expiredEvents[2].entry.id,
+		})
+
+		right:onNext({ schema = "right", id = 1 })
+		right:onNext({ schema = "right", id = 2 })
+		right:onNext({ schema = "right", id = 3 })
+		right:onCompleted()
+		left:onCompleted()
+
+		assert.are.same({
+			{ left = 3, right = 3 },
+		}, summarizePairs(pairs))
 	end)
 
 	it("supports functional key selectors", function()
@@ -209,5 +282,255 @@ describe("JoinObservable", function()
 			"alpha:1|alpha:1",
 			"beta:1|beta:1",
 		}, matchedKeys)
+	end)
+
+	it("never emits expiration events for matched records", function()
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "inner",
+			maxCacheSize = 5,
+		})
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		local pairs = {}
+		join:subscribe(function(pair)
+			table.insert(pairs, pair)
+		end)
+
+		left:onNext({ schema = "left", id = 42 })
+		right:onNext({ schema = "right", id = 42 })
+		left:onCompleted()
+		right:onCompleted()
+
+		assert.are.same({
+			{ left = 42, right = 42 },
+		}, summarizePairs(pairs))
+		assert.are.equal(0, #expiredEvents)
+	end)
+
+	it("ignores malformed packets emitted by a custom merge observable", function()
+		JoinObservable.setWarningHandler(function() end)
+
+		local left = rx.Observable.fromTable({
+			{ schema = "left", id = 5 },
+		}, ipairs, true)
+
+		local right = rx.Observable.fromTable({
+			{ schema = "right", id = 5 },
+		}, ipairs, true)
+
+		local function noisyMerge(leftTagged, rightTagged)
+			local merged = leftTagged:merge(rightTagged)
+			return rx.Observable.create(function(observer)
+				local subscription
+				subscription = merged:subscribe(function(packet)
+					observer:onNext(packet)
+					observer:onNext("noise")
+					observer:onNext(nil)
+				end, function(err)
+					observer:onError(err)
+				end, function()
+					observer:onCompleted()
+				end)
+
+				return function()
+					if subscription then
+						subscription:unsubscribe()
+					end
+				end
+			end)
+		end
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			merge = noisyMerge,
+		})
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		local pairs, completed, err = collectValues(join)
+
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.same({
+			{ left = 5, right = 5 },
+		}, summarizePairs(pairs))
+		assert.are.equal(0, #expiredEvents)
+	end)
+
+	it("propagates merge errors to both the result and expiration observables", function()
+		local left = rx.Observable.fromTable({
+			{ schema = "left", id = 1 },
+		}, ipairs, true)
+		local right = rx.Observable.fromTable({
+			{ schema = "right", id = 1 },
+		}, ipairs, true)
+
+		local function failingMerge()
+			return rx.Observable.create(function(observer)
+				observer:onError("merge failed")
+			end)
+		end
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			merge = failingMerge,
+		})
+
+		local expiredError
+		expired:subscribe(function() end, function(err)
+			expiredError = err
+		end)
+
+		local _, completed, joinError = collectValues(join)
+
+		assert.is_false(completed)
+		assert.are.equal("merge failed", joinError)
+		assert.are.equal("merge failed", expiredError)
+	end)
+
+	it("completes the expiration observable when the join subscription is disposed", function()
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+		})
+
+		local expiredCompletions = 0
+		local expiredErrors = 0
+		expired:subscribe(function() end, function()
+			expiredErrors = expiredErrors + 1
+		end, function()
+			expiredCompletions = expiredCompletions + 1
+		end)
+
+		local subscription = join:subscribe(function() end)
+
+		left:onNext({ schema = "left", id = 7 })
+
+		assert.are.equal(0, expiredCompletions)
+
+		subscription:unsubscribe()
+
+		assert.are.equal(1, expiredCompletions)
+		assert.are.equal(0, expiredErrors)
+
+		-- Ensure no further completion occurs if we unsubscribe again or touch subjects.
+		subscription:unsubscribe()
+		left:onNext({ schema = "left", id = 8 })
+		assert.are.equal(1, expiredCompletions)
+	end)
+
+	it("drops entries whose key selector returns nil", function()
+		local previousHandler = JoinObservable.setWarningHandler(function() end)
+
+		local left = rx.Observable.fromTable({
+			{ schema = "left", id = 1 },
+			{ schema = "left" }, -- missing id -> nil key
+			{ schema = "left", id = 2 },
+		}, ipairs, true)
+
+		local right = rx.Observable.fromTable({
+			{ schema = "right", id = 1 },
+			{ schema = "right", id = 2 },
+		}, ipairs, true)
+
+		local expiredEvents = {}
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "inner",
+		})
+
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		local pairs, completed, err = collectValues(join)
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.same({
+			{ left = 1, right = 1 },
+			{ left = 2, right = 2 },
+		}, summarizePairs(pairs))
+
+		assert.are.equal(0, #expiredEvents)
+
+		JoinObservable.setWarningHandler(previousHandler)
+	end)
+
+	it("honors custom merge ordering and validates the merge contract", function()
+		local left = rx.Observable.fromTable({
+			{ schema = "left", id = 1 },
+		}, ipairs, true)
+
+		local right = rx.Observable.fromTable({
+			{ schema = "right", id = 1 },
+			{ schema = "right", id = 2 },
+		}, ipairs, true)
+
+		local forwardedOrder = {}
+		local function orderedMerge(leftTagged, rightTagged)
+			return rx.Observable.create(function(observer)
+				local rightSub
+				rightSub = rightTagged:subscribe(function(packet)
+					table.insert(forwardedOrder, packet.side .. ":" .. packet.entry.id)
+					observer:onNext(packet)
+				end, function(err)
+					observer:onError(err)
+				end, function()
+					leftTagged:subscribe(function(packet)
+						table.insert(forwardedOrder, packet.side .. ":" .. packet.entry.id)
+						observer:onNext(packet)
+					end, function(err)
+						observer:onError(err)
+					end, function()
+						observer:onCompleted()
+					end)
+				end)
+
+				return function()
+					if rightSub then
+						rightSub:unsubscribe()
+					end
+				end
+			end)
+		end
+
+		local join = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			merge = orderedMerge,
+		})
+
+		local pairs, completed, err = collectValues(join)
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.same(1, #pairs)
+		assert.are.same("right:1", forwardedOrder[1])
+		assert.are.same("right:2", forwardedOrder[2])
+		assert.are.same("left:1", forwardedOrder[3])
+
+		local ok, failure = pcall(function()
+			local invalidJoin = JoinObservable.createJoinObservable(left, right, {
+				on = "id",
+				merge = function()
+					return {}
+				end,
+			})
+			invalidJoin:subscribe(function() end)
+		end)
+		assert.is_false(ok)
+		assert.matches("mergeSources must return an observable", failure, 1, true)
 	end)
 end)
