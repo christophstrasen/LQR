@@ -533,4 +533,104 @@ local JoinObservable = require("JoinObservable")
 		assert.is_false(ok)
 		assert.matches("mergeSources must return an observable", failure, 1, true)
 	end)
+
+	it("expires records outside the configured interval window", function()
+		local currentTime = 0
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			expirationWindow = {
+				mode = "interval",
+				field = "ts",
+				maxAgeMs = 5,
+				currentFn = function()
+					return currentTime
+				end,
+			},
+		})
+
+		local pairs = {}
+		join:subscribe(function(value)
+			table.insert(pairs, value)
+		end)
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		currentTime = 0
+		left:onNext({ schema = "left", id = 1, ts = 0 })
+		currentTime = 3
+		left:onNext({ schema = "left", id = 2, ts = 3 })
+		currentTime = 7
+		left:onNext({ schema = "left", id = 3, ts = 7 })
+
+		right:onNext({ schema = "right", id = 2, ts = 7 })
+
+		left:onCompleted()
+		right:onCompleted()
+
+		assert.are.same({
+			{ left = 1, right = nil },
+			{ left = 2, right = 2 },
+		}, summarizePairs(pairs))
+
+		local intervalExpired = {}
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_interval" then
+				table.insert(intervalExpired, packet.entry.id)
+			end
+		end
+		assert.are.same({ 1 }, intervalExpired)
+	end)
+
+	it("uses predicate-based expiration to drop unwanted entries", function()
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			expirationWindow = {
+				mode = "predicate",
+				predicate = function(entry)
+					return entry.keep
+				end,
+			},
+		})
+
+		local pairs = {}
+		join:subscribe(function(value)
+			table.insert(pairs, value)
+		end)
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		left:onNext({ schema = "left", id = 1, keep = false })
+		left:onNext({ schema = "left", id = 2, keep = true })
+		right:onNext({ schema = "right", id = 2 })
+
+		left:onCompleted()
+		right:onCompleted()
+
+		assert.are.same({
+			{ left = 1, right = nil },
+			{ left = 2, right = 2 },
+		}, summarizePairs(pairs))
+
+		local predicateExpired = {}
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_predicate" then
+				table.insert(predicateExpired, packet.entry.id)
+			end
+		end
+		assert.are.same({ 1 }, predicateExpired)
+	end)
 end)
