@@ -6,18 +6,17 @@ local Expiration = {}
 
 local DEFAULT_MAX_CACHE_SIZE = 5
 
-function Expiration.normalize(options)
-	options = options or {}
-	local config = options.expirationWindow or {}
-	local mode = (config.mode or "count"):lower()
+local function normalizeSingle(options, config)
+	config = config or {}
+	local mode = (config.mode or options.mode or "count"):lower()
 
 	if mode == "time" then
-		local offset = config.offset or config.maxAge or config.maxAgeMs or config.ttl or 60
+		local ttl = config.ttl or options.ttl or 60
 		config = {
-			field = config.field or "time",
-			maxAge = offset,
-			currentFn = config.currentFn or os.time,
-			reason = config.reason or "expired_time",
+			field = config.field or options.field or "time",
+			offset = ttl,
+			currentFn = config.currentFn or options.currentFn or os.time,
+			reason = config.reason or options.reason or "expired_time",
 		}
 		mode = "interval"
 	end
@@ -34,33 +33,51 @@ function Expiration.normalize(options)
 			maxItems = resolveMaxItems(),
 		}
 	elseif mode == "interval" then
-		local field = config.field
+		local field = config.field or options.field
 		assert(field, "expirationWindow.field is required for interval mode")
-		local maxAge = config.maxAgeMs or config.maxAge or config.ttl
-		assert(type(maxAge) == "number" and maxAge >= 0, "expirationWindow.maxAgeMs must be a non-negative number")
-		local currentFn = config.currentFn or os.time
+		local offset = config.offset or options.offset
+		assert(type(offset) == "number" and offset >= 0, "expirationWindow.offset must be a non-negative number")
+		local currentFn = config.currentFn or options.currentFn or os.time
 		assert(type(currentFn) == "function", "expirationWindow.currentFn must be a function")
 		return {
 			mode = "interval",
 			field = field,
-			maxAge = maxAge,
+			offset = offset,
 			currentFn = currentFn,
-			reason = config.reason or "expired_interval",
+			reason = config.reason or options.reason or "expired_interval",
 		}
 	elseif mode == "predicate" then
 		local predicate = config.predicate or config.evaluator
 		assert(type(predicate) == "function", "expirationWindow.predicate must be a function")
-		local currentFn = config.currentFn or os.time
+		local currentFn = config.currentFn or options.currentFn or os.time
 		assert(type(currentFn) == "function", "expirationWindow.currentFn must be a function")
 		return {
 			mode = "predicate",
 			predicate = predicate,
 			currentFn = currentFn,
-			reason = config.reason or "expired_predicate",
+			reason = config.reason or options.reason or "expired_predicate",
 		}
 	else
 		error(("Unsupported expirationWindow mode '%s'"):format(tostring(config.mode)))
 	end
+end
+
+function Expiration.normalize(options)
+	options = options or {}
+	local config = options.expirationWindow or {}
+	if config.left or config.right then
+		local defaults = normalizeSingle(options, config)
+		return {
+			left = normalizeSingle(options, config.left or defaults),
+			right = normalizeSingle(options, config.right or defaults),
+		}
+	end
+
+	local normalized = normalizeSingle(options, config)
+	return {
+		left = normalized,
+		right = normalized,
+	}
 end
 
 function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUnmatchedFn)
@@ -77,7 +94,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		end
 	elseif expirationConfig.mode == "interval" then
 		local field = expirationConfig.field
-		local maxAge = expirationConfig.maxAge
+		local offset = expirationConfig.offset
 		local currentFn = expirationConfig.currentFn
 		local reason = expirationConfig.reason
 		return function(cache, order, side)
@@ -93,7 +110,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 					if type(value) ~= "number" then
 						warnf("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
 						index = index + 1
-					elseif now - value > maxAge then
+					elseif now - value > offset then
 						table.remove(order, index)
 						cache[key] = nil
 						publishExpirationFn(side, key, record, reason)

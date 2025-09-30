@@ -22,18 +22,18 @@
 
 ## Day 2 – JoinObservable Hardening
 
-### Focus
-- **Test depth:** Added coverage for default inner-join behavior, functional key selectors, cache eviction (two variants), nil-key drops, malformed packet guards, warning suppression, merge error propagation, subscription teardown, matched-record expiration guarantees, custom merge ordering, and merge contract validation. Suite grew from 2 → 12 specs and now runs cleanly via `busted tests/unit/join_observable_spec.lua`.
-- **Observability knobs:** Introduced `warnf` plus `JoinObservable.setWarningHandler` so nil keys and malformed packets emit structured warnings in production yet stay muted in CI/unit tests. Added lifecycle guarantees that `expired` emits completion on unsubscribe and never signals matched records.
-- **CI readiness:** With deterministic tests and warning control, we can wire `busted tests/unit` into local git hooks and CI without flaky noise, sealing the “hardening” work for this iteration.
+### Highlights
+- **Modular core:** Broke the monolithic `JoinObservable/init.lua` into focused helpers (`strategies`, `expiration`, `warnings`) and kept only the observable factory + key-selector/touch helpers in the entry module. This makes reasoning about join behavior, warning plumbing, and expiration logic far easier.
+- **Powerful expiration windows:** Replaced the lone `maxCacheSize` knob with `expirationWindow` modes (`count`, `interval`, `time`, `predicate`). Each mode emits structured expiration packets (“evicted”, “expired_interval”, “expired_time”, etc.) and replays unmatched rows according to the strategy, giving users stronger control over correctness windows. A new LuaEvents experiment demonstrates every mode with timestamped data.
+- **Test depth:** Suite now covers default joins, functional selectors, count/interval/time/predicate retention, nil-key drops, malformed packets, warning suppression, merge ordering + failure, matched-record guarantees, and manual disposal. Everything runs cleanly via `busted tests/unit/join_observable_spec.lua`.
 
-### Key insights
-1. **Drop-on-floor events need visibility:** Silently ignoring malformed packets or nil keys leads to ghost data bugs. Emitting warnings (and testing them) exposed this behavior early and gives ops a place to hook custom loggers.
-2. **Custom merge hooks are a power-user feature:** Allowing stream reordering/buffering is valuable, but enforcing the “must return an observable” contract prevents subtle runtime failures. Tests now cover both the happy path (respecting order) and the failure path (asserting early).
-3. **Lifecycle symmetry matters:** The expiration observable should mirror the primary join: it errors when the join errors and completes when either the sources finish or the consumer unsubscribes. Codifying this prevents downstream resources from leaking.
+### Key learnings
+1. **Visibility beats silence:** Dropped packets (nil keys, malformed merge output, predicate errors) must surface via warnings; exposing `setWarningHandler` lets tests mute noise without sacrificing production observability.
+2. **Retention defines correctness:** Framing cache limits as `expirationWindow` made it clear only “warm” records yield trustworthy joins. Providing time/predicate policies keeps the API flexible without leaking complexity into the core.
+3. **Composable architecture pays off:** Moving strategies/expiration/warnings into their own modules and offering a custom merge hook gave us the confidence to expand features without bloating `init.lua`, and paved the way for future extensions (per-side policies, metrics).
 
-### Decisions captured
-- **Nil key policy:** Keep dropping entries whose selector resolves to `nil`, but emit a warning so the condition is observable; no expired events or join output for these records.
-- **Warning API:** Expose `JoinObservable.setWarningHandler(handler)` and return the previous handler, letting tests silence logs and production integrate with existing logging infrastructures.
-- **Merge contract enforcement:** Treat “merge returned a non-observable” as a runtime assertion that halts execution; we intentionally *don’t* downgrade this to a warning because it indicates a programming error.
-- **Expiration semantics:** Ensure matched records never surface in `expired`, unmatched ones emit exactly once (eviction/completion), and manual unsubscribe closes the subject immediately.
+### Decisions recorded
+- Keep nil-key entries as warnings + drops; matched records never emit expiration events.
+- Enforce merge contracts with hard assertions; failing to return an observable is programmer error.
+- Close `expired` when the main subscription unsubscribes to avoid dangling listeners.
+- Default `expirationWindow.mode = "time"` to a 60-second TTL over the `time` field; callers can override `ttl`, `field`, or `currentFn` as needed.

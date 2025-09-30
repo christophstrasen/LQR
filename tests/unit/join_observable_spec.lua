@@ -545,7 +545,7 @@ local JoinObservable = require("JoinObservable")
 			expirationWindow = {
 				mode = "interval",
 				field = "ts",
-				maxAgeMs = 5,
+				offset = 5,
 				currentFn = function()
 					return currentTime
 				end,
@@ -646,7 +646,7 @@ local JoinObservable = require("JoinObservable")
 			joinType = "outer",
 			expirationWindow = {
 				mode = "time",
-				offset = 5,
+				ttl = 5,
 				currentFn = function()
 					return currentTime
 				end,
@@ -689,5 +689,79 @@ local JoinObservable = require("JoinObservable")
 		assert.are.same({ 1 }, timeExpired)
 
 		JoinObservable.setWarningHandler(previousHandler)
+	end)
+
+	it("allows per-side expiration windows", function()
+		local currentTime = 0
+
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			expirationWindow = {
+				left = {
+					mode = "count",
+					maxItems = 1,
+				},
+				right = {
+					mode = "time",
+					ttl = 5,
+					field = "time",
+					currentFn = function()
+						return currentTime
+					end,
+				},
+			},
+		})
+
+		local pairs = {}
+		join:subscribe(function(value)
+			table.insert(pairs, value)
+		end)
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		left:onNext({ schema = "left", id = 1 })
+		left:onNext({ schema = "left", id = 2 })
+		left:onNext({ schema = "left", id = 3 })
+
+		currentTime = 0
+		right:onNext({ schema = "right", id = 1, time = 0 })
+		currentTime = 10
+		right:onNext({ schema = "right", id = 2, time = 0 })
+		currentTime = 2
+		right:onNext({ schema = "right", id = 3, time = 2 })
+
+		left:onCompleted()
+		right:onCompleted()
+
+		assert.are.same({
+			{ left = 1, right = nil },
+			{ left = 2, right = nil },
+			{ left = 3, right = 3 },
+			{ left = nil, right = 1 },
+			{ left = nil, right = 2 },
+		}, summarizePairs(pairs))
+
+		local leftExpired = {}
+		local rightExpired = {}
+		for _, packet in ipairs(expiredEvents) do
+			if packet.side == "left" then
+				table.insert(leftExpired, packet.entry.id)
+			else
+				table.insert(rightExpired, packet.entry.id)
+			end
+		end
+
+		table.sort(leftExpired)
+		table.sort(rightExpired)
+
+		assert.are.same({ 1, 2 }, leftExpired)
+		assert.are.same({ 1, 2 }, rightExpired)
 	end)
 end)

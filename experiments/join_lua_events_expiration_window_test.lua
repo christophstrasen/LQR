@@ -118,7 +118,7 @@ local intervalJoin, intervalExpired = makeJoin("INTERVAL", {
 	expirationWindow = {
 		mode = "interval",
 		field = "ts",
-		maxAgeMs = 3,
+		offset = 3,
 		currentFn = function()
 			return currentTime
 		end,
@@ -145,10 +145,29 @@ local timeJoin, timeExpired = makeJoin("TIME", {
 	expirationWindow = {
 		mode = "time",
 		field = "ts",
-		offset = 3,
+		ttl = 3,
 		currentFn = function()
 			return scheduler.currentTime
 		end,
+	},
+})
+
+local splitJoin, splitExpired = makeJoin("SPLIT", {
+	on = "id",
+	joinType = "outer",
+	expirationWindow = {
+		left = {
+			mode = "count",
+			maxItems = 1,
+		},
+		right = {
+			mode = "time",
+			field = "ts",
+			ttl = 2,
+			currentFn = function()
+				return scheduler.currentTime
+			end,
+		},
 	},
 })
 
@@ -166,3 +185,5 @@ predicateJoin:unsubscribe()
 predicateExpired:unsubscribe()
 timeJoin:unsubscribe()
 timeExpired:unsubscribe()
+splitJoin:unsubscribe()
+splitExpired:unsubscribe()

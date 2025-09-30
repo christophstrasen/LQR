@@ -97,9 +97,14 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local observable = rx.Observable.create(function(observer)
 		local leftCache, rightCache = {}, {}
 		local leftOrder, rightOrder = {}, {}
-		local enforceRetention = Expiration.createEnforcer(expirationConfig, publishExpiration, function(side, record)
-			emitUnmatched(observer, strategy, side, record)
-		end)
+		local enforceRetention = {
+			left = Expiration.createEnforcer(expirationConfig.left, publishExpiration, function(side, record)
+				emitUnmatched(observer, strategy, side, record)
+			end),
+			right = Expiration.createEnforcer(expirationConfig.right, publishExpiration, function(side, record)
+				emitUnmatched(observer, strategy, side, record)
+			end),
+		}
 
 		local function handleMatch(leftRecord, rightRecord)
 			leftRecord.matched = true
@@ -139,7 +144,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				end
 			end
 
-			enforceRetention(cache, order, side)
+			enforceRetention[side](cache, order, side)
 		end
 
 		local function flushCache(cache, side, reason)
