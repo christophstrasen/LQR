@@ -11,6 +11,17 @@ function Expiration.normalize(options)
 	local config = options.expirationWindow or {}
 	local mode = (config.mode or "count"):lower()
 
+	if mode == "time" then
+		local offset = config.offset or config.maxAge or config.maxAgeMs or config.ttl or 60
+		config = {
+			field = config.field or "time",
+			maxAge = offset,
+			currentFn = config.currentFn or os.time,
+			reason = config.reason or "expired_time",
+		}
+		mode = "interval"
+	end
+
 	local function resolveMaxItems()
 		local maxItems = config.maxItems or config.maxCacheSize or options.maxCacheSize or DEFAULT_MAX_CACHE_SIZE
 		assert(type(maxItems) == "number" and maxItems >= 1, "expirationWindow.maxItems must be a positive number")

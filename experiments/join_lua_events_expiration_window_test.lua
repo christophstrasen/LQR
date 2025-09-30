@@ -139,6 +139,19 @@ local predicateJoin, predicateExpired = makeJoin("PREDICATE", {
 	},
 })
 
+local timeJoin, timeExpired = makeJoin("TIME", {
+	on = "id",
+	joinType = "outer",
+	expirationWindow = {
+		mode = "time",
+		field = "ts",
+		offset = 3,
+		currentFn = function()
+			return scheduler.currentTime
+		end,
+	},
+})
+
 while not scheduler:isEmpty() do
 	currentTime = scheduler.currentTime
 	scheduler:update(TIMER_RESOLUTION)
@@ -151,3 +164,5 @@ intervalJoin:unsubscribe()
 intervalExpired:unsubscribe()
 predicateJoin:unsubscribe()
 predicateExpired:unsubscribe()
+timeJoin:unsubscribe()
+timeExpired:unsubscribe()

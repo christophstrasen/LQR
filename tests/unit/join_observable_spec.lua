@@ -633,4 +633,61 @@ local JoinObservable = require("JoinObservable")
 		end
 		assert.are.same({ 1 }, predicateExpired)
 	end)
+
+	it("supports the time alias for interval-based expiration", function()
+		local currentTime = 0
+		local previousHandler = JoinObservable.setWarningHandler(function() end)
+
+		local left = rx.Subject.create()
+		local right = rx.Subject.create()
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			expirationWindow = {
+				mode = "time",
+				offset = 5,
+				currentFn = function()
+					return currentTime
+				end,
+			},
+		})
+
+		local pairs = {}
+		join:subscribe(function(value)
+			table.insert(pairs, value)
+		end)
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredEvents, packet)
+		end)
+
+		currentTime = 0
+		left:onNext({ schema = "left", id = 1, time = 0 })
+		currentTime = 4
+		left:onNext({ schema = "left", id = 2, time = 4 })
+		currentTime = 7
+		left:onNext({ schema = "left", id = 3, time = 7 })
+
+		right:onNext({ schema = "right", id = 2, time = 7 })
+
+		left:onCompleted()
+		right:onCompleted()
+
+		assert.are.same({
+			{ left = 1, right = nil },
+			{ left = 2, right = 2 },
+		}, summarizePairs(pairs))
+
+		local timeExpired = {}
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_time" then
+				table.insert(timeExpired, packet.entry.id)
+			end
+		end
+		assert.are.same({ 1 }, timeExpired)
+
+		JoinObservable.setWarningHandler(previousHandler)
+	end)
 end)
