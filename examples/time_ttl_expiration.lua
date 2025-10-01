@@ -1,0 +1,65 @@
+-- Expected console: left id 1 expires with reason expired_time, ids 2 and 3 match successfully.
+require("bootstrap")
+local io = require("io")
+
+local rx = require("reactivex")
+local JoinObservable = require("JoinObservable")
+
+local now = 0
+local function currentTime()
+	return now
+end
+
+local function emit(subject, payload)
+	now = payload.time
+	subject:onNext(payload)
+end
+
+local left = rx.Subject.create()
+local right = rx.Subject.create()
+
+local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
+	on = "id",
+	joinType = "outer",
+	expirationWindow = {
+		mode = "time",
+		ttl = 3, -- Only keep records warm for 3 seconds past `record.time`.
+		currentFn = currentTime, -- Custom clock so we can advance time manually.
+	},
+})
+
+local function describePair(pair)
+	local leftId = pair.left and pair.left.id or "nil"
+	local rightId = pair.right and pair.right.id or "nil"
+	print(("[JOIN] left=%s right=%s"):format(leftId, rightId))
+end
+
+joinStream:subscribe(describePair, function(err)
+	io.stderr:write(("Join error: %s\n"):format(err))
+end, function()
+	print("Join stream finished.")
+end)
+
+expiredStream:subscribe(function(packet)
+	print(
+		("[EXPIRED] side=%s id=%s reason=%s"):format(
+			packet.side,
+			packet.entry and packet.entry.id or "nil",
+			packet.reason
+		)
+	)
+end, function(err)
+	io.stderr:write(("Expired stream error: %s\n"):format(err))
+end, function()
+	print("Expired stream finished.")
+end)
+
+emit(left, { id = 1, kind = "invoice", time = 0 })
+emit(right, { id = 2, kind = "payment", time = 1 })
+emit(left, { id = 2, kind = "invoice", time = 2 })
+emit(left, { id = 3, kind = "invoice", time = 6 })
+emit(right, { id = 3, kind = "payment", time = 6 })
+
+now = 6
+left:onCompleted()
+right:onCompleted()
