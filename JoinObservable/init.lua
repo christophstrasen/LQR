@@ -161,14 +161,14 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		assert(merged and merged.subscribe, "mergeSources must return an observable")
 
 		local subscription
-		subscription = merged:subscribe(function(packet)
-			if type(packet) ~= "table" then
-				warnf("Ignoring packet emitted as %s (expected table)", type(packet))
+		subscription = merged:subscribe(function(record)
+			if type(record) ~= "table" then
+				warnf("Ignoring record emitted as %s (expected table)", type(record))
 				return
 			end
 
-			local side = packet.side
-			local entry = packet.entry
+			local side = record.side
+			local entry = record.entry
 
 			if side == "left" then
 				handleEntry("left", leftCache, rightCache, leftOrder, entry)

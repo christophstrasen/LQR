@@ -40,12 +40,12 @@ end, function()
 	print("Join stream finished.")
 end)
 
-expiredStream:subscribe(function(packet)
+expiredStream:subscribe(function(record)
 	print(
 		("[EXPIRED] side=%s id=%s reason=%s"):format(
-			packet.side,
-			packet.entry and packet.entry.id or "nil",
-			packet.reason
+			record.side,
+			record.entry and record.entry.id or "nil",
+			record.reason
 		)
 	)
 end, function(err)

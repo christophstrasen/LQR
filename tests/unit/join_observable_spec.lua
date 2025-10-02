@@ -116,8 +116,8 @@ local JoinObservable = require("JoinObservable")
 		})
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		local pairs = {}
@@ -134,8 +134,8 @@ local JoinObservable = require("JoinObservable")
 
 		assert.are.same(3, #expiredEvents)
 		local expiredIds = {}
-		for _, packet in ipairs(expiredEvents) do
-			expiredIds[packet.entry.id] = packet.side
+		for _, record in ipairs(expiredEvents) do
+			expiredIds[record.entry.id] = record.side
 		end
 		assert.are.same({
 			[1] = "left",
@@ -160,8 +160,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		left:onNext({ schema = "left", id = 1 })
@@ -180,9 +180,9 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local leftExpired = {}
-		for _, packet in ipairs(expiredEvents) do
-			if packet.side == "left" then
-				table.insert(leftExpired, packet)
+		for _, record in ipairs(expiredEvents) do
+			if record.side == "left" then
+				table.insert(leftExpired, record)
 			end
 		end
 
@@ -212,8 +212,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		left:onNext({ schema = "left", id = 1 })
@@ -295,8 +295,8 @@ local JoinObservable = require("JoinObservable")
 		})
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		local pairs = {}
@@ -315,7 +315,7 @@ local JoinObservable = require("JoinObservable")
 		assert.are.equal(0, #expiredEvents)
 	end)
 
-	it("ignores malformed packets emitted by a custom merge observable", function()
+	it("ignores malformed records emitted by a custom merge observable", function()
 		JoinObservable.setWarningHandler(function() end)
 
 		local left = rx.Observable.fromTable({
@@ -330,8 +330,8 @@ local JoinObservable = require("JoinObservable")
 			local merged = leftTagged:merge(rightTagged)
 			return rx.Observable.create(function(observer)
 				local subscription
-				subscription = merged:subscribe(function(packet)
-					observer:onNext(packet)
+				subscription = merged:subscribe(function(record)
+					observer:onNext(record)
 					observer:onNext("noise")
 					observer:onNext(nil)
 				end, function(err)
@@ -354,8 +354,8 @@ local JoinObservable = require("JoinObservable")
 		})
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		local pairs, completed, err = collectValues(join)
@@ -453,8 +453,8 @@ local JoinObservable = require("JoinObservable")
 			joinType = "inner",
 		})
 
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		local pairs, completed, err = collectValues(join)
@@ -484,15 +484,15 @@ local JoinObservable = require("JoinObservable")
 		local function orderedMerge(leftTagged, rightTagged)
 			return rx.Observable.create(function(observer)
 				local rightSub
-				rightSub = rightTagged:subscribe(function(packet)
-					table.insert(forwardedOrder, packet.side .. ":" .. packet.entry.id)
-					observer:onNext(packet)
+				rightSub = rightTagged:subscribe(function(record)
+					table.insert(forwardedOrder, record.side .. ":" .. record.entry.id)
+					observer:onNext(record)
 				end, function(err)
 					observer:onError(err)
 				end, function()
-					leftTagged:subscribe(function(packet)
-						table.insert(forwardedOrder, packet.side .. ":" .. packet.entry.id)
-						observer:onNext(packet)
+					leftTagged:subscribe(function(record)
+						table.insert(forwardedOrder, record.side .. ":" .. record.entry.id)
+						observer:onNext(record)
 					end, function(err)
 						observer:onError(err)
 					end, function()
@@ -558,8 +558,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		currentTime = 0
@@ -580,9 +580,9 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local intervalExpired = {}
-		for _, packet in ipairs(expiredEvents) do
-			if packet.reason == "expired_interval" then
-				table.insert(intervalExpired, packet.entry.id)
+		for _, record in ipairs(expiredEvents) do
+			if record.reason == "expired_interval" then
+				table.insert(intervalExpired, record.entry.id)
 			end
 		end
 		assert.are.same({ 1 }, intervalExpired)
@@ -609,8 +609,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		left:onNext({ schema = "left", id = 1, keep = false })
@@ -626,9 +626,9 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local predicateExpired = {}
-		for _, packet in ipairs(expiredEvents) do
-			if packet.reason == "expired_predicate" then
-				table.insert(predicateExpired, packet.entry.id)
+		for _, record in ipairs(expiredEvents) do
+			if record.reason == "expired_predicate" then
+				table.insert(predicateExpired, record.entry.id)
 			end
 		end
 		assert.are.same({ 1 }, predicateExpired)
@@ -659,8 +659,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		currentTime = 0
@@ -681,9 +681,9 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local timeExpired = {}
-		for _, packet in ipairs(expiredEvents) do
-			if packet.reason == "expired_time" then
-				table.insert(timeExpired, packet.entry.id)
+		for _, record in ipairs(expiredEvents) do
+			if record.reason == "expired_time" then
+				table.insert(timeExpired, record.entry.id)
 			end
 		end
 		assert.are.same({ 1 }, timeExpired)
@@ -722,8 +722,8 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		local expiredEvents = {}
-		expired:subscribe(function(packet)
-			table.insert(expiredEvents, packet)
+		expired:subscribe(function(record)
+			table.insert(expiredEvents, record)
 		end)
 
 		left:onNext({ schema = "left", id = 1 })
@@ -750,11 +750,11 @@ local JoinObservable = require("JoinObservable")
 
 		local leftExpired = {}
 		local rightExpired = {}
-		for _, packet in ipairs(expiredEvents) do
-			if packet.side == "left" then
-				table.insert(leftExpired, packet.entry.id)
+		for _, record in ipairs(expiredEvents) do
+			if record.side == "left" then
+				table.insert(leftExpired, record.entry.id)
 			else
-				table.insert(rightExpired, packet.entry.id)
+				table.insert(rightExpired, record.entry.id)
 			end
 		end
 

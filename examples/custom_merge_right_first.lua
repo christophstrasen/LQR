@@ -17,10 +17,10 @@ local rightStream = rx.Observable.fromTable({
 
 local function rightFirstMerge(leftTagged, rightTagged)
 	local function log(observable)
-		return observable:map(function(packet)
-			local entry = packet.entry or {}
-			print(("[MERGE] forwarding %s id=%s"):format(packet.side, entry.id or "nil"))
-			return packet
+		return observable:map(function(record)
+			local entry = record.entry or {}
+			print(("[MERGE] forwarding %s id=%s"):format(record.side, entry.id or "nil"))
+			return record
 		end)
 	end
 

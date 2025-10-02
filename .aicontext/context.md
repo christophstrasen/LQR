@@ -69,13 +69,11 @@ tbd
 - **Lua:** EmmyLua on all public functions; keep lines ≤ 100 chars. Scene prefabs are exempt from strict style enforcement. 
 - **Globals:** If possible, avoid new globals. If needed, use **Capitalized** form (e.g., `SomeTerm`) 
 - **use ReactiveX base** like `rx.Observable.` in order to typehint to EmmyLua correctly
+- **Record as atomic unit** Our canonical name for each "emmission, element, value, packet" that goes through the ReactiveX system, through our streams and event system is called "record".
 - **Naming:** `camelCase` for fields, options, and functions (to match PZ API)  `snake_case` for file-names.
 - **Backwards-compatibility** Hard refactors are allowed during early development. Compatibility shims or aliases are added only for public API calls — and only once the mod has active external users.
 - **Avoid:** `setmetatable` unless explicitly requested.
-- **Logging:** Don't use `:` in log messages (prevents truncation in PZ logs). Use the logging from the shipped `util.lua`  
-- **Asserts:** Use `assert(...)` or  `U.assertf(...)` as a good practice to hedge against clear programming/contract errors only
-- **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. 
-- **check types the zomboid way** e.g. via `instanceof` instead of inferring type from fields or methods.
+- **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. .
 
 ## 8) Design Principles
 tbd

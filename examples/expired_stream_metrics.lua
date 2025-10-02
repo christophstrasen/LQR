@@ -12,6 +12,7 @@ local leftStream = rx.Observable.fromTable({
 }, ipairs)
 
 local rightStream = rx.Observable.fromTable({
+	{ id = 1, payload = "right-1" },
 	{ id = 2, payload = "right-2" },
 	{ id = 4, payload = "right-4" },
 }, ipairs)
@@ -32,22 +33,22 @@ local metrics = {
 	reasons = {},
 }
 
-expiredStream:subscribe(function(packet)
+expiredStream:subscribe(function(record)
 	metrics.total = metrics.total + 1
-	metrics[packet.side] = metrics[packet.side] + 1
-	metrics.reasons[packet.reason] = (metrics.reasons[packet.reason] or 0) + 1
+	metrics[record.side] = metrics[record.side] + 1
+	metrics.reasons[record.reason] = (metrics.reasons[record.reason] or 0) + 1
 	print(
 		("[EXPIRED] side=%s id=%s reason=%s"):format(
-			packet.side,
-			packet.entry and packet.entry.id or "nil",
-			packet.reason
+			record.side,
+			record.entry and record.entry.id or "nil",
+			record.reason
 		)
 	)
 end, function(err)
 	io.stderr:write(("Expired stream error: %s\n"):format(err))
 end, function()
 	print(
-		("[METRICS] total=%d left=%d right=%d reasons=%s"):format(
+		("[METRICS] Expired total=%d left=%d right=%d reasons=%s"):format(
 			metrics.total,
 			metrics.left,
 			metrics.right,
