@@ -16,7 +16,11 @@ local rightStream = rx.Observable.fromTable({
 })
 
 local function rightFirstMerge(leftTagged, rightTagged)
-	local function log(observable)
+	-- `fromTable` emits synchronously, so the default `merge` would drain the entire
+	-- left stream before the right ever gets a chance. This custom merge forces a
+	-- deliberate ordering so we can observe how the join honors manual interleaving.
+	local function inspect(observable)
+		-- Map each tagged record so the console shows which side the merge forwards first.
 		return observable:map(function(record)
 			local entry = record.entry or {}
 			print(("[MERGE] forwarding %s id=%s"):format(record.side, entry.id or "nil"))
@@ -24,8 +28,10 @@ local function rightFirstMerge(leftTagged, rightTagged)
 		end)
 	end
 
-	-- Concatenating streams drains right entries before left ones, forcing a right-first order.
-	return rx.Observable.concat(log(rightTagged), log(leftTagged))
+	-- Concatenating the tagged observables means right entries are forwarded in full
+	-- before any left entries. The join will therefore see right ids first even
+	-- though both sources are synchronous.
+	return rx.Observable.concat(inspect(rightTagged), inspect(leftTagged))
 end
 
 local joinStream = JoinObservable.createJoinObservable(leftStream, rightStream, {
