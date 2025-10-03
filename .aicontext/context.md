@@ -76,7 +76,7 @@ tbd
 - **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. .
 
 ## 8) Design Principles
-tbd
+- Favor throughput/low latency over strict determinism: the low-level join does not guarantee globally stable emission ordering. If a flow needs determinism, use custom merge/order operators on the way in instead of burdening the core path.
 
 ## 9) Security & Safety
 - No secrets in repo; assume public visibility.

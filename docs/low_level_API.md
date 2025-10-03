@@ -146,6 +146,10 @@ Replaces the warning sink. Pass `nil` to restore the default stderr logger. Warn
 3. **Matched records never expire:** Expiration records are only emitted for unmatched records.
 4. **Custom merge ordering respected:** The join processes records exactly as the merge function emits them (after validating they are tables with `side`/`record`).
 
+### Determinism Policy
+
+We intentionally **do not guarantee strict deterministic emission ordering**. The default merge streams records as soon as they arrive and cache flushes iterate via Lua tables (`pairs`), both chosen for speed and low latency. Enforcing stable global ordering would force extra buffering, sorting, and bookkeeping that would slow the low-level API. If you need deterministic ordering, supply a custom `merge` (see `examples/custom_merge_right_first.lua`) or pre-stage your streams with sequence numbers/timestamps before feeding them into `JoinObservable`.
+
 ## Examples to Build
 
 _(These will live under `examples/` in future work.)_
