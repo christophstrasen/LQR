@@ -1,3 +1,6 @@
+-- Shows the default inner join configuration so you can see the base API with zero options.
+-- Useful when you need the quickest sanity check that two streams align on the same key.
+
 -- Expected console: two match lines for ids 42 and 43, then a completion message.
 require("bootstrap")
 local io = require("io")

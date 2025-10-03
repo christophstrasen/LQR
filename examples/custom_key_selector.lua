@@ -1,3 +1,6 @@
+-- Demonstrates functional key selectors to normalize mismatched payload shapes.
+-- Reach for this when the left/right schemas encode the join key differently.
+
 -- Expected console: one match for acct-001 and no output for other accounts.
 require("bootstrap")
 local io = require("io")

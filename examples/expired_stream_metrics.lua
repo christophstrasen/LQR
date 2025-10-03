@@ -1,3 +1,6 @@
+-- Walks through consuming the expired stream to build simple eviction metrics.
+-- Use it as a template whenever you need visibility into why records fall out of the cache.
+
 -- Expected console: a couple of join lines plus a METRICS summary counting evictions by side/reason.
 require("bootstrap")
 local io = require("io")

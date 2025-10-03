@@ -1,3 +1,6 @@
+-- Highlights per-side interval windows so you can see asymmetric retention in action.
+-- Handy when each source has different freshness guarantees and needs its own TTL.
+
 -- Expected console: match for order 101, right-only output when order 202 expires quickly, and a late left-only expiration for order 303.
 require("bootstrap")
 local io = require("io")
@@ -15,6 +18,8 @@ local function emit(subject, payload)
 	subject:onNext(payload)
 end
 
+-- Subjects act as both observers and observables, letting us push data manually while others subscribe.
+-- We use them here so we can emit timestamped records at controlled times to exercise the TTL logic.
 local left = rx.Subject.create()
 local right = rx.Subject.create()
 
@@ -75,8 +80,8 @@ emit(left, { orderId = 101, ts = 0, note = "left arrives first" })
 emit(right, { orderId = 101, ts = 1, note = "right within window" })
 emit(right, { orderId = 202, ts = 2, note = "right that will expire quickly" })
 emit(left, { orderId = 303, ts = 3, note = "left that will expire later" })
-emit(right, { orderId = 404, ts = 5, note = "fresh right triggers expiration checks" })
-emit(left, { orderId = 404, ts = 10, note = "left arrival forces older left entries to expire" })
+emit(right, { orderId = 404, ts = 5, note = "fresh right, while older right may have expire" })
+emit(left, { orderId = 404, ts = 10, note = "late left, other lefts likely expired" })
 
 now = 12
 left:onCompleted()

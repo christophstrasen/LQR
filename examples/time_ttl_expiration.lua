@@ -1,3 +1,6 @@
+-- Shows the `mode = "time"` alias so you can reason about TTLs on records carrying `time`.
+-- Use this pattern when events already include timestamps and you just need a sliding TTL.
+
 -- Expected console: left id 1 expires with reason expired_time, ids 2 and 3 match successfully.
 require("bootstrap")
 local io = require("io")
@@ -24,7 +27,7 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(left, righ
 	expirationWindow = {
 		mode = "time",
 		ttl = 3, -- Only keep records warm for 3 seconds past `record.time`.
-		currentFn = currentTime, -- Custom clock so we can advance time manually.
+		currentFn = currentTime, -- Custom clock so we can advance time manually, otherwise uses os.time() as default
 	},
 })
 

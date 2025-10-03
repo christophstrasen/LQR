@@ -1,3 +1,6 @@
+-- Illustrates supplying a custom merge observable to control arrival order explicitly.
+-- Reach for this any time upstream ordering matters (e.g., you must process rights first).
+
 -- Expected console: MERGE lines show right records forwarded first, then join matches for ids 1 and 2.
 require("bootstrap")
 local io = require("io")

@@ -1,3 +1,6 @@
+-- Demonstrates predicate-based retention enforcing domain rules instead of simple TTLs.
+-- Use for complex policy dictates which records stay eligible.
+
 -- Expected console: left id 1 drops via policy, id 2 matches, id 3 surfaces as left-only when its partner is rejected.
 require("bootstrap")
 local io = require("io")
@@ -34,7 +37,12 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(trades, ap
 
 local function describePair(pair)
 	local leftId = pair.left and pair.left.id or "nil"
+	local leftStatus = pair.left and pair.left.status or "n/a"
+	local leftAmount = pair.left and pair.left.amount or "n/a"
 	local rightId = pair.right and pair.right.id or "nil"
+	local rightChannel = pair.right and pair.right.channel or "n/a"
+	local rightReviewer = pair.right and pair.right.reviewer or "n/a"
+
 	local status
 	if pair.left and pair.right then
 		status = "MATCH"
@@ -43,7 +51,15 @@ local function describePair(pair)
 	else
 		status = "RIGHT_ONLY"
 	end
-	print(("[JOIN] %s left=%s right=%s"):format(status, leftId, rightId))
+	print(("[JOIN] %s left=%s status=%s amount=%s | right=%s channel=%s reviewer=%s"):format(
+		status,
+		leftId,
+		leftStatus,
+		leftAmount,
+		rightId,
+		rightChannel,
+		rightReviewer
+	))
 end
 
 joinStream:subscribe(describePair, function(err)
