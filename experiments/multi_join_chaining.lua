@@ -34,18 +34,24 @@ local customerOrderJoin = JoinObservable.createJoinObservable(customers, orders,
 })
 
 local enrichedOrdersStream = JoinObservable.chain(customerOrderJoin, {
-	alias = "orders",
-	as = "orders_with_customer",
-	-- Explainer: the projector enriches the forwarded record so the downstream join
-	-- can still mention the original customer without manual subject plumbing.
-	projector = function(orderRecord, result)
-		orderRecord.orderId = orderRecord.orderId or orderRecord.id
-		local customer = result:get("customers")
-		if customer then
-			orderRecord.customer = { id = customer.id, name = customer.name }
-		end
-		return orderRecord
-	end,
+	from = {
+		{
+			schema = "orders",
+			renameTo = "orders_with_customer",
+			map = function(orderRecord, result)
+				-- Explainer: enrich each forwarded order so the next join has customer context.
+				orderRecord.orderId = orderRecord.orderId or orderRecord.id
+				local customer = result:get("customers")
+				if customer then
+					orderRecord.customer = { id = customer.id, name = customer.name }
+				end
+				return orderRecord
+			end,
+		},
+		{
+			schema = "customers",
+		},
+	},
 })
 
 customerOrderJoin:subscribe(function(result)
@@ -73,19 +79,21 @@ local orderPaymentJoin = JoinObservable.createJoinObservable(enrichedOrdersStrea
 
 orderPaymentJoin:subscribe(function(result)
 	local enrichedOrder = result:get("orders_with_customer")
+	local joinedCustomer = result:get("customers")
 	local payment = result:get("payments")
 
 	if enrichedOrder and payment then
+		local customerName = joinedCustomer and joinedCustomer.name or (enrichedOrder.customer and enrichedOrder.customer.name) or "unknown"
 		print(
 			("[ORDER-PAYMENT] order=%s payment=%s amount=%s (customer=%s)"):format(
 				enrichedOrder.orderId,
 				payment.id,
 				payment.amount,
-				enrichedOrder.customer and enrichedOrder.customer.name or "unknown"
+				customerName
 			)
 		)
 	elseif enrichedOrder then
-		local customerName = enrichedOrder.customer and enrichedOrder.customer.name or "unknown"
+		local customerName = joinedCustomer and joinedCustomer.name or (enrichedOrder.customer and enrichedOrder.customer.name) or "unknown"
 		print(
 			("[ORDER-PAYMENT] unmatched order=%s total=%s customer=%s"):format(
 				enrichedOrder.orderId,

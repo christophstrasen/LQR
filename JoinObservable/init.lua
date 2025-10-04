@@ -214,8 +214,8 @@ end
 local function copyMetaDefaults(targetRecord, fallbackMeta, alias)
 	targetRecord.RxMeta = targetRecord.RxMeta or {}
 	targetRecord.RxMeta.schema = alias
-	-- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
-	-- the projector replaces the payload, so we backfill from the original metadata.
+-- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
+-- the mapper replaces the payload, so we backfill from the original metadata.
 	if targetRecord.RxMeta.schemaVersion == nil then
 		targetRecord.RxMeta.schemaVersion = fallbackMeta and fallbackMeta.schemaVersion or nil
 	end
@@ -235,11 +235,28 @@ function JoinObservable.chain(resultStream, opts)
 	assert(resultStream and resultStream.subscribe, "resultStream must be an observable")
 
 	opts = opts or {}
-	local sourceAlias = opts.alias or opts.from
-	assert(type(sourceAlias) == "string" and sourceAlias ~= "", "opts.alias is required")
+	local from = opts.alias or opts.from
+	assert(from, "opts.from (or opts.alias) is required")
 
-	local targetAlias = opts.as or sourceAlias
-	local projector = opts.projector
+	local mappings = {}
+	if type(from) == "string" then
+		table.insert(mappings, {
+			schema = from,
+			renameTo = opts.as or opts.renameTo or from,
+			map = opts.map or opts.projector,
+		})
+	elseif type(from) == "table" then
+		for _, entry in ipairs(from) do
+			assert(type(entry.schema) == "string" and entry.schema ~= "", "each entry in from must define schema")
+			table.insert(mappings, {
+				schema = entry.schema,
+				renameTo = entry.renameTo or entry.schema,
+				map = entry.map or entry.projector,
+			})
+		end
+	else
+		error("opts.from must be string or table")
+	end
 
 	local derived = rx.Observable.create(function(observer)
 		-- Explainer: wrapping in `Observable.create` gives us lazy subscription
@@ -251,26 +268,25 @@ function JoinObservable.chain(resultStream, opts)
 				return
 			end
 
-			local selection = Result.selectAliases(result, { [sourceAlias] = targetAlias })
-			local record = selection:get(targetAlias)
-			if not record then
-				return
-			end
-
-			local output = record
-			if projector then
-				local ok, transformed = pcall(projector, record, result)
-				if not ok then
-					observer:onError(transformed)
-					return
+			for _, mapping in ipairs(mappings) do
+				local selection = Result.selectAliases(result, { [mapping.schema] = mapping.renameTo })
+				local record = selection:get(mapping.renameTo)
+				if record then
+					local output = record
+					if mapping.map then
+						local ok, transformed = pcall(mapping.map, record, result)
+						if not ok then
+							observer:onError(transformed)
+							return
+						end
+						if transformed ~= nil then
+							output = transformed
+						end
+					end
+					copyMetaDefaults(output, record.RxMeta, mapping.renameTo)
+					observer:onNext(output)
 				end
-				if transformed ~= nil then
-					output = transformed
-				end
 			end
-
-			copyMetaDefaults(output, record.RxMeta, targetAlias)
-			observer:onNext(output)
 		end, function(err)
 			observer:onError(err)
 		end, function()
@@ -286,7 +302,7 @@ function JoinObservable.chain(resultStream, opts)
 		end
 	end)
 
-	return Schema.wrap(targetAlias, derived)
+	return derived
 end
 
 function JoinObservable.setWarningHandler(handler)

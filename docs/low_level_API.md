@@ -189,21 +189,25 @@ Every schema name you pass to `Schema.wrap` becomes the alias stored on the resu
 
 ```lua
 local enrichedOrders = JoinObservable.chain(customerOrderJoin, {
-  alias = "orders",
-  as = "orders_with_customer",
-  projector = function(orderRecord, joinResult)
-    local customer = joinResult:get("customers")
-    if customer then
-      orderRecord.customer = { id = customer.id, name = customer.name }
-    end
-    return orderRecord
-  end,
+  from = {
+    {
+      schema = "orders",
+      renameTo = "orders_with_customer",
+      map = function(orderRecord, joinResult)
+        local customer = joinResult:get("customers")
+        if customer then
+          orderRecord.customer = { id = customer.id, name = customer.name }
+        end
+        return orderRecord
+      end,
+    },
+  },
 })
 ```
 
-- `alias` (required) selects the source schema to forward.
-- `as` (optional) renames the schema for the downstream join; defaults to the same alias.
-- `projector` (optional) receives the copied record and the original `JoinResult`; return a replacement table to enrich or filter emissions.
+- `from` (required) is either a schema name or a list of `{ schema, renameTo, map }` entries describing which aliases to forward.
+- `renameTo` (optional per entry) renames the schema for the downstream join; defaults to the same alias.
+- `map` (optional per entry) receives the copied record and the original `JoinResult`; return a replacement table to enrich or filter emissions.
 
 The helper subscribes lazily and unsubscribes upstream when the downstream observer disposes, so backpressure and completion semantics match vanilla Rx. The returned observable already carries `RxMeta` with the requested alias and can be passed directly into another `JoinObservable.createJoinObservable` call.
 

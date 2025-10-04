@@ -931,12 +931,12 @@ describe("JoinObservable.chain helper", function()
 		assert.are.equal(0, activeSubscriptions)
 	end)
 
-	it("applies projectors to enrich forwarded records", function()
+	it("applies map callbacks to enrich forwarded records", function()
 		local upstreamSubject = rx.Subject.create()
 		local chained = JoinObservable.chain(upstreamSubject, {
-			alias = "orders",
+			from = "orders",
 			as = "orders_enriched",
-			projector = function(orderRecord)
+			map = function(orderRecord)
 				orderRecord.tag = "enriched"
 				return orderRecord
 			end,
@@ -953,5 +953,25 @@ describe("JoinObservable.chain helper", function()
 		assert.are.equal(1, #seen)
 		assert.are.equal("orders_enriched", seen[1].RxMeta.schema)
 		assert.are.equal("enriched", seen[1].tag)
+	end)
+
+	it("supports forwarding multiple schemas in one call", function()
+		local upstreamSubject = rx.Subject.create()
+		local chained = JoinObservable.chain(upstreamSubject, {
+			from = {
+				{ schema = "orders", renameTo = "orders_a" },
+				{ schema = "orders", renameTo = "orders_b" },
+			},
+		})
+
+		local seenAliases = {}
+		chained:subscribe(function(record)
+			table.insert(seenAliases, record.RxMeta.schema)
+		end, function(err)
+			error(err)
+		end)
+
+		upstreamSubject:onNext(makeResultWithOrder(3))
+		assert.are.same({ "orders_a", "orders_b" }, seenAliases)
 	end)
 end)

@@ -41,7 +41,7 @@ Goal: move from positional `{ left, right }` join outputs to schema-indexed reco
 
 ### 7. Clean-up & helper ergonomics
 - ✅ `JoinResult` now exposes `clone`, `selectAliases`, and `attachFrom` (shallow copy of payload tables, fresh metadata per alias).
-- ✅ `JoinObservable.chain` wraps the Rx plumbing for forwarding aliases, handling lazy subscription and allowing optional projectors.
+- ✅ `JoinObservable.chain` wraps the Rx plumbing for forwarding aliases (now supporting multi-alias lists), handling lazy subscription and allowing optional per-alias map functions.
 - ✅ Docs/tests updated; `experiments/multi_join_chaining.lua` now exercises the chaining helper instead of manual subjects.
 - Remaining work:
   1. Evaluate whether we want helper sugar for `options.on` (per-schema field lists, multi-key joins).
