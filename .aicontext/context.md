@@ -74,6 +74,9 @@ tbd
 - **Backwards-compatibility** Hard refactors are allowed during early development. Compatibility shims or aliases are added only for public API calls — and only once the mod has active external users.
 - **Avoid:** `setmetatable` unless explicitly requested.
 - **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. .
+- **Schema metadata is mandatory:** Any record entering `JoinObservable.createJoinObservable` must already carry `record.RxMeta.schema` (via `Schema.wrap`). Minimal fields: `schema` (string), optional `schemaVersion` (positive int), optional `sourceTime` (number). The join stamps `RxMeta.joinKey` itself.
+- **Chaining joins:** Prefer `JoinObservable.chain` + `JoinResult.selectAliases` over manual subjects when forwarding aliases to downstream joins. Treat intermediate payloads as immutable unless you intentionally mutate them right before emitting.
+- **Join outputs are schema-indexed:** Subscribers receive `JoinResult` objects—call `result:get("schemaName")` instead of relying on `pair.left/right`. Expiration packets expose `packet.alias` and `packet.result`.
 
 ## 8) Design Principles
 - Favor throughput/low latency over strict determinism: the low-level join does not guarantee globally stable emission ordering. If a flow needs determinism, use custom merge/order operators on the way in instead of burdening the core path.

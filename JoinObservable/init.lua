@@ -1,4 +1,6 @@
 local rx = require("reactivex")
+local Schema = require("JoinObservable.schema")
+local Result = require("JoinObservable.result")
 local Strategies = require("JoinObservable.strategies")
 local Expiration = require("JoinObservable.expiration")
 local warnings = require("JoinObservable.warnings")
@@ -16,6 +18,13 @@ local function normalizeKeySelector(on)
 	return function(entry)
 		return entry[field]
 	end
+end
+
+local function resolveAlias(meta, fallback)
+	if meta and type(meta.schema) == "string" and meta.schema ~= "" then
+		return meta.schema
+	end
+	return fallback or "unknown"
 end
 
 local function touchKey(order, key)
@@ -46,17 +55,15 @@ local function emitUnmatched(observer, strategy, side, record)
 		return
 	end
 
-	if side == "left" and strategy.emitUnmatchedLeft then
-		observer:onNext({
-			left = record.entry,
-			right = nil,
-		})
-	elseif side == "right" and strategy.emitUnmatchedRight then
-		observer:onNext({
-			left = nil,
-			right = record.entry,
-		})
+	local shouldEmit = (side == "left" and strategy.emitUnmatchedLeft)
+		or (side == "right" and strategy.emitUnmatchedRight)
+
+	if not shouldEmit then
+		return
 	end
+
+	local result = Result.new():attach(record.alias, record.entry)
+	observer:onNext(result)
 end
 
 function JoinObservable.createJoinObservable(leftStream, rightStream, options)
@@ -85,12 +92,13 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		if not record or record.matched then
 			return
 		end
-
+		local packet = Result.new():attach(record.alias, record.entry)
 		expiredSubject:onNext({
-			side = side,
+			alias = record.alias,
+			schema = record.schemaName,
 			key = key,
-			entry = record.entry,
 			reason = reason,
+			result = packet,
 		})
 	end
 
@@ -113,22 +121,29 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		end
 
 		local function handleEntry(side, cache, otherCache, order, entry)
+			local meta = Schema.assertRecordHasMeta(entry, side)
 			local key = keySelector(entry)
 			if key == nil then
 				warnf("Dropped %s entry because join key resolved to nil", side)
 				return
 			end
+			meta.joinKey = key
 
+			local alias = resolveAlias(meta, side)
 			local record = cache[key]
 			if record then
 				record.entry = entry
 				record.matched = false
 				record.key = key
+				record.alias = alias
+				record.schemaName = meta.schema or alias
 			else
 				cache[key] = {
 					entry = entry,
 					matched = false,
 					key = key,
+					alias = alias,
+					schemaName = meta.schema or alias,
 				}
 				record = cache[key]
 			end
@@ -194,6 +209,84 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	end)
 
 	return observable, expiredSubject
+end
+
+local function copyMetaDefaults(targetRecord, fallbackMeta, alias)
+	targetRecord.RxMeta = targetRecord.RxMeta or {}
+	targetRecord.RxMeta.schema = alias
+	-- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
+	-- the projector replaces the payload, so we backfill from the original metadata.
+	if targetRecord.RxMeta.schemaVersion == nil then
+		targetRecord.RxMeta.schemaVersion = fallbackMeta and fallbackMeta.schemaVersion or nil
+	end
+	if targetRecord.RxMeta.joinKey == nil then
+		targetRecord.RxMeta.joinKey = fallbackMeta and fallbackMeta.joinKey or nil
+	end
+	if targetRecord.RxMeta.sourceTime == nil then
+		targetRecord.RxMeta.sourceTime = fallbackMeta and fallbackMeta.sourceTime or nil
+	end
+end
+
+---Creates a derived observable by forwarding one alias from an upstream JoinResult stream.
+---@param resultStream rx.Observable
+---@param opts table
+---@return rx.Observable
+function JoinObservable.chain(resultStream, opts)
+	assert(resultStream and resultStream.subscribe, "resultStream must be an observable")
+
+	opts = opts or {}
+	local sourceAlias = opts.alias or opts.from
+	assert(type(sourceAlias) == "string" and sourceAlias ~= "", "opts.alias is required")
+
+	local targetAlias = opts.as or sourceAlias
+	local projector = opts.projector
+
+	local derived = rx.Observable.create(function(observer)
+		-- Explainer: wrapping in `Observable.create` gives us lazy subscription
+		-- semantics, so we avoid dangling Subjects and respect downstream disposal.
+		local subscription
+		subscription = resultStream:subscribe(function(result)
+			if getmetatable(result) ~= Result then
+				observer:onError("JoinObservable.chain expects upstream JoinResult values")
+				return
+			end
+
+			local selection = Result.selectAliases(result, { [sourceAlias] = targetAlias })
+			local record = selection:get(targetAlias)
+			if not record then
+				return
+			end
+
+			local output = record
+			if projector then
+				local ok, transformed = pcall(projector, record, result)
+				if not ok then
+					observer:onError(transformed)
+					return
+				end
+				if transformed ~= nil then
+					output = transformed
+				end
+			end
+
+			copyMetaDefaults(output, record.RxMeta, targetAlias)
+			observer:onNext(output)
+		end, function(err)
+			observer:onError(err)
+		end, function()
+			observer:onCompleted()
+		end)
+
+		return function()
+			-- Explainer: cascade unsubscription upstream so chained joins don't keep
+			-- consuming records after the downstream observer is gone.
+			if subscription then
+				subscription:unsubscribe()
+			end
+		end
+	end)
+
+	return Schema.wrap(targetAlias, derived)
 end
 
 function JoinObservable.setWarningHandler(handler)

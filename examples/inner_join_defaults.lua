@@ -7,25 +7,30 @@ local io = require("io")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 
-local customers = rx.Observable.fromTable({
+local customers = Schema.wrap("customers", rx.Observable.fromTable({
 	{ id = 42, name = "Ada" },
 	{ id = 43, name = "Ben" },
 	{ id = 77, name = "Left only" },
-})
+}), "customers")
 
-local orders = rx.Observable.fromTable({
+local orders = Schema.wrap("orders", rx.Observable.fromTable({
 	{ id = 43, total = 199 },
 	{ id = 42, total = 250 },
 	{ id = 99, total = 75 },
-})
+}), "orders")
 
 -- Defaults: the key selector reads the `id` field and the join type is `inner`,
 -- so only rows that share an id are emitted while stray rows stay silent.
 local joinStream = JoinObservable.createJoinObservable(customers, orders)
 
-joinStream:subscribe(function(pair)
-	print(("[MATCH] id=%d customer=%s total=%d"):format(pair.left.id, pair.left.name, pair.right.total))
+joinStream:subscribe(function(result)
+	local customer = result:get("customers")
+	local order = result:get("orders")
+	if customer and order then
+		print(("[MATCH] id=%d customer=%s total=%d"):format(customer.id, customer.name, order.total))
+	end
 end, function(err)
 	io.stderr:write(("Join error: %s\n"):format(err))
 end, function()

@@ -7,16 +7,17 @@ local io = require("io")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 
-local leftStream = rx.Observable.fromTable({
+local leftStream = Schema.wrap("customers", rx.Observable.fromTable({
 	{ id = 1, side = "left", note = "would normally arrive first" },
 	{ id = 2, side = "left", note = "still left" },
-})
+}), "customers")
 
-local rightStream = rx.Observable.fromTable({
+local rightStream = Schema.wrap("payments", rx.Observable.fromTable({
 	{ id = 1, side = "right", note = "right events" },
 	{ id = 2, side = "right", note = "another right" },
-})
+}), "payments")
 
 local function rightFirstMerge(leftTagged, rightTagged)
 	-- `fromTable` emits synchronously, so the default `merge` would drain the entire
@@ -43,8 +44,11 @@ local joinStream = JoinObservable.createJoinObservable(leftStream, rightStream, 
 	merge = rightFirstMerge, -- Custom merge enforces a deterministic right-before-left ordering.
 })
 
-joinStream:subscribe(function(pair)
-	print(("[JOIN] matched id=%d"):format(pair.left.id))
+joinStream:subscribe(function(result)
+	local leftRecord = result:get("customers")
+	if leftRecord then
+		print(("[JOIN] matched id=%d"):format(leftRecord.id))
+	end
 end, function(err)
 	io.stderr:write(("Join error: %s\n"):format(err))
 end, function()

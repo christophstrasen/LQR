@@ -106,7 +106,9 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 				if not record then
 					table.remove(order, index)
 				else
-					local value = record.entry and record.entry[field]
+					local entry = record.entry
+					local meta = entry and entry.RxMeta
+					local value = meta and meta.sourceTime or (entry and entry[field])
 					if type(value) ~= "number" then
 						warnf("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
 						index = index + 1

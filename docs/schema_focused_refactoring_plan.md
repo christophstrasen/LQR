@@ -11,14 +11,14 @@ This plan captures the current agreements around schema metadata for `JoinObserv
    - `joinKey` (any): the resolved join key. Single values today; future compound keys may use tables (`{ value = {...}, parts = {...} }`).
 2. **Schema prefixing:** All system-managed fields are prefixed with `Rx` to avoid user collisions; internal helpers may add more under `RxMeta` later.
 3. **Mandatory schemas:** Any observable entering `JoinObservable.createJoinObservable` **must** emit records with populated `RxMeta`. The join will assert hard if metadata is missing or malformed—no silent defaults.
-4. **Schema helper:** We provide a helper (e.g., `Schema.wrap(stream, schemaName, opts)`) so call sites can wrap raw observables before joining. Helper injects `RxMeta` if absent and leaves existing metadata untouched.
+4. **Schema helper:** We provide a helper (e.g., `Schema.wrap(schemaName, stream, opts)`) so call sites can wrap raw observables before joining. Helper injects `RxMeta` if absent and leaves existing metadata untouched.
 5. **Metadata propagation:** Expiration and match outputs forward each side’s metadata unchanged. No automatic merging of left/right; higher-level utilities (`asSchema`, aliases) can compose new schemas when desired.
 6. **No default stripping:** The low-level API exposes `RxMeta` by default. A future helper may “rename” or rebuild schemas for downstream consumers, but the join itself never removes metadata.
 
 ## Implementation Steps
 
 1. **Helper module**
-   - Create `Schema.wrap(observable, schemaName, opts)` (schema name mandatory, `schemaVersion` optional).
+   - Create `Schema.wrap(schemaName, observable, opts)` (schema name mandatory, `schemaVersion` optional).
    - Validate inputs, inject `RxMeta` when missing, preserve existing metadata if already present.
    - Emit informative errors when schema metadata is absent or invalid.
 
@@ -39,7 +39,7 @@ This plan captures the current agreements around schema metadata for `JoinObserv
 5. **Examples/tests refresh**
    - Wrap every example stream through the new helper so they emit proper metadata.
    - Adjust tests (or add new ones) verifying that the join rejects metadata-free records and stamps `RxMeta.joinKey`.
-   - Document how to inspect schemas in the example output (e.g., print `pair.left.RxMeta.schema`).
+   - Document how to inspect schemas in the example output (e.g., `local customer = result:get("customers")`).
 
 6. **Future work placeholders**
    - Design `asSchema`/alias helpers that can rename or merge schemas for chained joins.

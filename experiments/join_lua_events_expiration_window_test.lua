@@ -3,6 +3,7 @@ require("bootstrap")
 local rx = require("reactivex")
 local LuaEvent = require("Starlit.LuaEvent")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 local io = require("io")
 
 local scheduler = rx.CooperativeScheduler.create()
@@ -14,21 +15,24 @@ local function sleep(seconds)
 	end
 end
 
-local function printPair(label, pair)
+local function printPair(label, result)
+	local left = result:get("luaIntervalLeft")
+	local right = result:get("luaIntervalRight")
 	print(("[%5.2f] [%s] left=%s right=%s"):format(
 		scheduler.currentTime,
 		label,
-		pair.left and ("id=" .. pair.left.id .. ",ts=" .. pair.left.ts) or "nil",
-		pair.right and ("id=" .. pair.right.id .. ",ts=" .. pair.right.ts) or "nil"
+		left and ("id=" .. left.id .. ",ts=" .. left.ts) or "nil",
+		right and ("id=" .. right.id .. ",ts=" .. right.ts) or "nil"
 	))
 end
 
 local function printExpired(label, packet)
-	local entry = packet.entry
-	print(("[%5.2f] [%s expired] side=%s key=%s reason=%s entry=%s"):format(
+	local alias = packet.alias or "unknown"
+	local entry = packet.result and packet.result:get(alias)
+	print(("[%5.2f] [%s expired] alias=%s key=%s reason=%s entry=%s"):format(
 		scheduler.currentTime,
 		label,
-		packet.side or "unknown",
+		alias,
 		tostring(packet.key),
 		packet.reason or "n/a",
 		entry and ("id=" .. tostring(entry.id) .. ",ts=" .. tostring(entry.ts)) or "nil"
@@ -74,8 +78,8 @@ local rightEntries = createEntries("right", { 1, 3, 5, 7, 9 })
 scheduleEmitter("LEFT", leftEvent, leftEntries)
 scheduleEmitter("RIGHT", rightEvent, rightEntries)
 
-local leftStream = rx.Observable.fromLuaEvent(leftEvent):take(#leftEntries)
-local rightStream = rx.Observable.fromLuaEvent(rightEvent):take(#rightEntries)
+local leftStream = Schema.wrap("luaIntervalLeft", rx.Observable.fromLuaEvent(leftEvent):take(#leftEntries))
+local rightStream = Schema.wrap("luaIntervalRight", rx.Observable.fromLuaEvent(rightEvent):take(#rightEntries))
 
 local function collect(label, stream)
 	return stream:subscribe(function(value)

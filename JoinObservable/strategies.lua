@@ -1,10 +1,16 @@
+local Result = require("JoinObservable.result")
+
 local Strategies = {}
 
-local function emitPair(observer, leftEntry, rightEntry)
-	observer:onNext({
-		left = leftEntry,
-		right = rightEntry,
-	})
+local function emitResult(observer, leftRecord, rightRecord)
+	local packet = Result.new()
+	if leftRecord then
+		packet:attach(leftRecord.alias, leftRecord.entry)
+	end
+	if rightRecord then
+		packet:attach(rightRecord.alias, rightRecord.entry)
+	end
+	observer:onNext(packet)
 end
 
 local function noop()
@@ -13,28 +19,28 @@ end
 local joinStrategies = {
 	inner = {
 		onMatch = function(observer, leftRecord, rightRecord)
-			emitPair(observer, leftRecord.entry, rightRecord.entry)
+			emitResult(observer, leftRecord, rightRecord)
 		end,
 		emitUnmatchedLeft = false,
 		emitUnmatchedRight = false,
 	},
 	left = {
 		onMatch = function(observer, leftRecord, rightRecord)
-			emitPair(observer, leftRecord.entry, rightRecord.entry)
+			emitResult(observer, leftRecord, rightRecord)
 		end,
 		emitUnmatchedLeft = true,
 		emitUnmatchedRight = false,
 	},
 	right = {
 		onMatch = function(observer, leftRecord, rightRecord)
-			emitPair(observer, leftRecord.entry, rightRecord.entry)
+			emitResult(observer, leftRecord, rightRecord)
 		end,
 		emitUnmatchedLeft = false,
 		emitUnmatchedRight = true,
 	},
 	outer = {
 		onMatch = function(observer, leftRecord, rightRecord)
-			emitPair(observer, leftRecord.entry, rightRecord.entry)
+			emitResult(observer, leftRecord, rightRecord)
 		end,
 		emitUnmatchedLeft = true,
 		emitUnmatchedRight = true,
@@ -64,7 +70,5 @@ function Strategies.resolve(joinType)
 	end
 	return strategy
 end
-
-Strategies.emitPair = emitPair
 
 return Strategies

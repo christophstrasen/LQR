@@ -7,6 +7,7 @@ local io = require("io")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 
 local now = 0
 local function currentTime()
@@ -20,8 +21,10 @@ end
 
 -- Subjects act as both observers and observables, letting us push data manually while others subscribe.
 -- We use them here so we can emit timestamped records at controlled times to exercise the TTL logic.
-local left = rx.Subject.create()
-local right = rx.Subject.create()
+local leftSource = rx.Subject.create()
+local rightSource = rx.Subject.create()
+local left = Schema.wrap("slowOrders", leftSource)
+local right = Schema.wrap("fastOrders", rightSource)
 
 local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
 	on = "orderId", -- Join on the `orderId` field found in both streams.
@@ -42,13 +45,15 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(left, righ
 	},
 })
 
-local function describePair(pair)
-	local leftId = pair.left and pair.left.orderId or "nil"
-	local rightId = pair.right and pair.right.orderId or "nil"
+local function describePair(result)
+	local leftEntry = result:get("slowOrders")
+	local rightEntry = result:get("fastOrders")
+	local leftId = leftEntry and leftEntry.orderId or "nil"
+	local rightId = rightEntry and rightEntry.orderId or "nil"
 	local status
-	if pair.left and pair.right then
+	if leftEntry and rightEntry then
 		status = "MATCH"
-	elseif pair.left then
+	elseif leftEntry then
 		status = "LEFT_ONLY"
 	else
 		status = "RIGHT_ONLY"
@@ -62,12 +67,14 @@ end, function()
 	print("Join stream finished.")
 end)
 
-expiredStream:subscribe(function(record)
+expiredStream:subscribe(function(packet)
+	local alias = packet.alias or "unknown"
+	local entry = packet.result and packet.result:get(alias)
 	print(
-		("[EXPIRED] side=%s id=%s reason=%s"):format(
-			record.side,
-			record.entry and record.entry.orderId or "nil",
-			record.reason
+		("[EXPIRED] alias=%s id=%s reason=%s"):format(
+			alias,
+			entry and entry.orderId or "nil",
+			packet.reason
 		)
 	)
 end, function(err)
@@ -76,13 +83,13 @@ end, function()
 	print("Expired stream finished.")
 end)
 
-emit(left, { orderId = 101, ts = 0, note = "left arrives first" })
-emit(right, { orderId = 101, ts = 1, note = "right within window" })
-emit(right, { orderId = 202, ts = 2, note = "right that will expire quickly" })
-emit(left, { orderId = 303, ts = 3, note = "left that will expire later" })
-emit(right, { orderId = 404, ts = 5, note = "fresh right, while older right may have expire" })
-emit(left, { orderId = 404, ts = 10, note = "late left, other lefts likely expired" })
+emit(leftSource, { orderId = 101, ts = 0, note = "left arrives first" })
+emit(rightSource, { orderId = 101, ts = 1, note = "right within window" })
+emit(rightSource, { orderId = 202, ts = 2, note = "right that will expire quickly" })
+emit(leftSource, { orderId = 303, ts = 3, note = "left that will expire later" })
+emit(rightSource, { orderId = 404, ts = 5, note = "fresh right, while older right may have expire" })
+emit(leftSource, { orderId = 404, ts = 10, note = "late left, other lefts likely expired" })
 
 now = 12
-left:onCompleted()
-right:onCompleted()
+leftSource:onCompleted()
+rightSource:onCompleted()

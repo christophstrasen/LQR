@@ -6,6 +6,8 @@ require("bootstrap")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
+local Result = require("JoinObservable.result")
 
 ---@diagnostic disable: undefined-global
 ---@diagnostic disable: undefined-field
@@ -33,8 +35,10 @@ local JoinObservable = require("JoinObservable")
 	local function summarizePairs(pairs)
 		local summary = {}
 		for _, pair in ipairs(pairs) do
-			local leftId = pair.left and pair.left.id or nil
-			local rightId = pair.right and pair.right.id or nil
+			local leftRecord = pair:get("left")
+			local rightRecord = pair:get("right")
+			local leftId = leftRecord and leftRecord.id or nil
+			local rightId = rightRecord and rightRecord.id or nil
 			table.insert(summary, { left = leftId, right = rightId })
 		end
 
@@ -52,16 +56,123 @@ local JoinObservable = require("JoinObservable")
 		return summary
 	end
 
+	local function observableFromTable(schemaName, rows)
+		return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true))
+	end
+
+	local function subjectWithSchema(schemaName)
+		local source = rx.Subject.create()
+		return source, Schema.wrap(schemaName, source)
+	end
+
+	local function expiredEntry(packet)
+		if not packet then
+			return nil, nil
+		end
+		local alias = packet.alias or "unknown"
+		local entry = packet.result and packet.result:get(alias)
+		return entry, alias
+	end
+
+describe("JoinResult helper", function()
+	local function buildResult()
+		local customer = {
+			id = 1,
+			name = "Ada",
+			RxMeta = { schema = "customers", schemaVersion = 2, joinKey = "1", sourceTime = 100 },
+		}
+		local order = {
+			id = 100,
+			customerId = 1,
+			RxMeta = { schema = "orders", joinKey = "1", sourceTime = 120 },
+		}
+
+		local result = Result.new():attach("customers", customer):attach("orders", order)
+		return result
+	end
+
+	it("attaches schemas and preserves metadata", function()
+		local result = buildResult()
+
+		assert.is_not_nil(result:get("customers"))
+		assert.is_not_nil(result:get("orders"))
+		assert.are.same({ "customers", "orders" }, result:aliases())
+	end)
+
+	it("clones aliases without mutating the source", function()
+		local result = buildResult()
+		local clone = result:clone()
+
+		assert.are_not.equal(result:get("orders"), clone:get("orders"))
+		clone:get("orders").customerId = 999
+		assert.are.equal(1, result:get("orders").customerId)
+	end)
+
+	it("selects and renames aliases", function()
+		local result = buildResult()
+		local renamed = Result.selectAliases(result, { customers = "buyer" })
+		local buyer = renamed:get("buyer")
+
+		assert.is_not_nil(buyer)
+		assert.are.equal("buyer", buyer.RxMeta.schema)
+	end)
+
+	it("attaches from another result", function()
+		local source = buildResult()
+		local target = Result.new()
+		target:attachFrom(source, "orders", "forwarded_orders")
+		local forwarded = target:get("forwarded_orders")
+		assert.is_not_nil(forwarded)
+		assert.are.equal("forwarded_orders", forwarded.RxMeta.schema)
+	end)
+end)
+
+describe("Schema.wrap subject chaining", function()
+	it("allows re-emitting wrapped records into new streams", function()
+		local sourceSubject = rx.Subject.create()
+		local bufferSubject = rx.Subject.create()
+		local firstWrapped = Schema.wrap("orders", sourceSubject)
+			local secondWrapped = Schema.wrap("orders", bufferSubject)
+
+			local firstCaptured, secondCaptured = {}, {}
+
+			local firstSubscription = firstWrapped:subscribe(function(record)
+				table.insert(firstCaptured, record)
+				bufferSubject:onNext(record)
+			end)
+
+			local secondSubscription = secondWrapped:subscribe(function(record)
+				table.insert(secondCaptured, record)
+			end)
+
+			sourceSubject:onNext({ id = 1, total = 50 })
+			sourceSubject:onNext({ id = 2, total = 75 })
+			sourceSubject:onCompleted()
+			bufferSubject:onCompleted()
+
+			assert.are.equal(2, #firstCaptured)
+			assert.are.equal(2, #secondCaptured)
+			for i = 1, 2 do
+				assert.are.equal(firstCaptured[i], secondCaptured[i])
+				assert.are.equal("orders", firstCaptured[i].RxMeta.schema)
+				assert.are.equal("orders", secondCaptured[i].RxMeta.schema)
+			end
+
+			firstSubscription:unsubscribe()
+			secondSubscription:unsubscribe()
+		end)
+	end)
+
 	it("emits only matched pairs for an inner join", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left", id = 2 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 2 },
 			{ schema = "right", id = 3 },
-		}, ipairs, true)
+		})
 
 		local innerJoin = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -79,15 +190,15 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("defaults to an inner join keyed by id when options are omitted", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 10 },
 			{ schema = "left", id = 20 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 20 },
 			{ schema = "right", id = 30 },
-		}, ipairs, true)
+		})
 
 		local defaultJoin = JoinObservable.createJoinObservable(left, right)
 		local pairs, completed, err = collectValues(defaultJoin)
@@ -100,14 +211,14 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("surfaces expired records via the secondary observable", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left", id = 2 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 3 },
-		}, ipairs, true)
+		})
 
 		local antiOuter, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -134,8 +245,11 @@ local JoinObservable = require("JoinObservable")
 
 		assert.are.same(3, #expiredEvents)
 		local expiredIds = {}
-		for _, record in ipairs(expiredEvents) do
-			expiredIds[record.entry.id] = record.side
+		for _, packet in ipairs(expiredEvents) do
+			local entry, alias = expiredEntry(packet)
+			if entry then
+				expiredIds[entry.id] = alias
+			end
 		end
 		assert.are.same({
 			[1] = "left",
@@ -145,8 +259,8 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("evicts the oldest cached entries when the cache exceeds the cap", function()
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local innerJoin, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -164,25 +278,25 @@ local JoinObservable = require("JoinObservable")
 			table.insert(expiredEvents, record)
 		end)
 
-		left:onNext({ schema = "left", id = 1 })
-		left:onNext({ schema = "left", id = 2 })
-		left:onNext({ schema = "left", id = 3 })
+		leftSubject:onNext({ schema = "left", id = 1 })
+		leftSubject:onNext({ schema = "left", id = 2 })
+		leftSubject:onNext({ schema = "left", id = 3 })
 
-		right:onNext({ schema = "right", id = 1 })
-		right:onNext({ schema = "right", id = 2 })
-		right:onNext({ schema = "right", id = 3 })
+		rightSubject:onNext({ schema = "right", id = 1 })
+		rightSubject:onNext({ schema = "right", id = 2 })
+		rightSubject:onNext({ schema = "right", id = 3 })
 
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 3, right = 3 },
 		}, summarizePairs(pairs))
 
 		local leftExpired = {}
-		for _, record in ipairs(expiredEvents) do
-			if record.side == "left" then
-				table.insert(leftExpired, record)
+		for _, packet in ipairs(expiredEvents) do
+			if packet.alias == "left" then
+				table.insert(leftExpired, packet)
 			end
 		end
 
@@ -191,15 +305,14 @@ local JoinObservable = require("JoinObservable")
 			leftExpired[1].reason,
 			leftExpired[2].reason,
 		})
-		assert.are.same({ 1, 2 }, {
-			leftExpired[1].entry.id,
-			leftExpired[2].entry.id,
-			})
+		local entryOne = expiredEntry(leftExpired[1])
+		local entryTwo = expiredEntry(leftExpired[2])
+		assert.are.same({ 1, 2 }, { entryOne and entryOne.id, entryTwo and entryTwo.id })
 	end)
 
 	it("only keeps the newest key available for future matches when entries are evicted", function()
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -216,29 +329,31 @@ local JoinObservable = require("JoinObservable")
 			table.insert(expiredEvents, record)
 		end)
 
-		left:onNext({ schema = "left", id = 1 })
-		left:onNext({ schema = "left", id = 2 })
-		left:onNext({ schema = "left", id = 3 })
+		leftSubject:onNext({ schema = "left", id = 1 })
+		leftSubject:onNext({ schema = "left", id = 2 })
+		leftSubject:onNext({ schema = "left", id = 3 })
 
 		assert.are.equal(2, #expiredEvents)
 		assert.are.same({ "left", "left" }, {
-			expiredEvents[1].side,
-			expiredEvents[2].side,
+			expiredEvents[1].alias,
+			expiredEvents[2].alias,
 		})
 		assert.are.same({ "evicted", "evicted" }, {
 			expiredEvents[1].reason,
 			expiredEvents[2].reason,
 		})
+		local entryFirst = expiredEntry(expiredEvents[1])
+		local entrySecond = expiredEntry(expiredEvents[2])
 		assert.are.same({ 1, 2 }, {
-			expiredEvents[1].entry.id,
-			expiredEvents[2].entry.id,
+			entryFirst and entryFirst.id,
+			entrySecond and entrySecond.id,
 		})
 
-		right:onNext({ schema = "right", id = 1 })
-		right:onNext({ schema = "right", id = 2 })
-		right:onNext({ schema = "right", id = 3 })
-		right:onCompleted()
-		left:onCompleted()
+		rightSubject:onNext({ schema = "right", id = 1 })
+		rightSubject:onNext({ schema = "right", id = 2 })
+		rightSubject:onNext({ schema = "right", id = 3 })
+		rightSubject:onCompleted()
+		leftSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 3, right = 3 },
@@ -246,16 +361,16 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("supports functional key selectors", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", partition = "alpha", localId = 1 },
 			{ schema = "left", partition = "beta", localId = 1 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", partition = "alpha", localId = 1 },
 			{ schema = "right", partition = "beta", localId = 2 },
 			{ schema = "right", partition = "beta", localId = 1 },
-		}, ipairs, true)
+		})
 
 		local join = JoinObservable.createJoinObservable(left, right, {
 			on = function(entry)
@@ -272,8 +387,10 @@ local JoinObservable = require("JoinObservable")
 
 		local matchedKeys = {}
 		for _, pair in ipairs(pairs) do
-			local leftKey = ("%s:%s"):format(pair.left.partition, pair.left.localId)
-			local rightKey = ("%s:%s"):format(pair.right.partition, pair.right.localId)
+			local leftRecord = pair:get("left")
+			local rightRecord = pair:get("right")
+			local leftKey = ("%s:%s"):format(leftRecord.partition, leftRecord.localId)
+			local rightKey = ("%s:%s"):format(rightRecord.partition, rightRecord.localId)
 			table.insert(matchedKeys, leftKey .. "|" .. rightKey)
 		end
 		table.sort(matchedKeys)
@@ -285,8 +402,8 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("never emits expiration events for matched records", function()
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -304,10 +421,10 @@ local JoinObservable = require("JoinObservable")
 			table.insert(pairs, pair)
 		end)
 
-		left:onNext({ schema = "left", id = 42 })
-		right:onNext({ schema = "right", id = 42 })
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onNext({ schema = "left", id = 42 })
+		rightSubject:onNext({ schema = "right", id = 42 })
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 42, right = 42 },
@@ -318,13 +435,13 @@ local JoinObservable = require("JoinObservable")
 	it("ignores malformed records emitted by a custom merge observable", function()
 		JoinObservable.setWarningHandler(function() end)
 
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 5 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 5 },
-		}, ipairs, true)
+		})
 
 		local function noisyMerge(leftTagged, rightTagged)
 			local merged = leftTagged:merge(rightTagged)
@@ -369,12 +486,12 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("propagates merge errors to both the result and expiration observables", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
-		}, ipairs, true)
-		local right = rx.Observable.fromTable({
+		})
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 1 },
-		}, ipairs, true)
+		})
 
 		local function failingMerge()
 			return rx.Observable.create(function(observer)
@@ -400,8 +517,8 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("completes the expiration observable when the join subscription is disposed", function()
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -417,7 +534,7 @@ local JoinObservable = require("JoinObservable")
 
 		local subscription = join:subscribe(function() end)
 
-		left:onNext({ schema = "left", id = 7 })
+		leftSubject:onNext({ schema = "left", id = 7 })
 
 		assert.are.equal(0, expiredCompletions)
 
@@ -428,23 +545,23 @@ local JoinObservable = require("JoinObservable")
 
 		-- Ensure no further completion occurs if we unsubscribe again or touch subjects.
 		subscription:unsubscribe()
-		left:onNext({ schema = "left", id = 8 })
+		leftSubject:onNext({ schema = "left", id = 8 })
 		assert.are.equal(1, expiredCompletions)
 	end)
 
 	it("drops entries whose key selector returns nil", function()
 		local previousHandler = JoinObservable.setWarningHandler(function() end)
 
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left" }, -- missing id -> nil key
 			{ schema = "left", id = 2 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 1 },
 			{ schema = "right", id = 2 },
-		}, ipairs, true)
+		})
 
 		local expiredEvents = {}
 
@@ -471,14 +588,14 @@ local JoinObservable = require("JoinObservable")
 	end)
 
 	it("honors custom merge ordering and validates the merge contract", function()
-		local left = rx.Observable.fromTable({
+		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
-		}, ipairs, true)
+		})
 
-		local right = rx.Observable.fromTable({
+		local right = observableFromTable("right", {
 			{ schema = "right", id = 1 },
 			{ schema = "right", id = 2 },
-		}, ipairs, true)
+		})
 
 		local forwardedOrder = {}
 		local function orderedMerge(leftTagged, rightTagged)
@@ -536,8 +653,8 @@ local JoinObservable = require("JoinObservable")
 
 	it("expires records outside the configured interval window", function()
 		local currentTime = 0
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -563,16 +680,16 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		currentTime = 0
-		left:onNext({ schema = "left", id = 1, ts = 0 })
+		leftSubject:onNext({ schema = "left", id = 1, ts = 0 })
 		currentTime = 3
-		left:onNext({ schema = "left", id = 2, ts = 3 })
+		leftSubject:onNext({ schema = "left", id = 2, ts = 3 })
 		currentTime = 7
-		left:onNext({ schema = "left", id = 3, ts = 7 })
+		leftSubject:onNext({ schema = "left", id = 3, ts = 7 })
 
-		right:onNext({ schema = "right", id = 2, ts = 7 })
+		rightSubject:onNext({ schema = "right", id = 2, ts = 7 })
 
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 1, right = nil },
@@ -580,17 +697,18 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local intervalExpired = {}
-		for _, record in ipairs(expiredEvents) do
-			if record.reason == "expired_interval" then
-				table.insert(intervalExpired, record.entry.id)
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_interval" then
+				local entry = expiredEntry(packet)
+				table.insert(intervalExpired, entry and entry.id or nil)
 			end
 		end
 		assert.are.same({ 1 }, intervalExpired)
 	end)
 
 	it("uses predicate-based expiration to drop unwanted entries", function()
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -613,12 +731,12 @@ local JoinObservable = require("JoinObservable")
 			table.insert(expiredEvents, record)
 		end)
 
-		left:onNext({ schema = "left", id = 1, keep = false })
-		left:onNext({ schema = "left", id = 2, keep = true })
-		right:onNext({ schema = "right", id = 2 })
+		leftSubject:onNext({ schema = "left", id = 1, keep = false })
+		leftSubject:onNext({ schema = "left", id = 2, keep = true })
+		rightSubject:onNext({ schema = "right", id = 2 })
 
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 1, right = nil },
@@ -626,9 +744,10 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local predicateExpired = {}
-		for _, record in ipairs(expiredEvents) do
-			if record.reason == "expired_predicate" then
-				table.insert(predicateExpired, record.entry.id)
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_predicate" then
+				local entry = expiredEntry(packet)
+				table.insert(predicateExpired, entry and entry.id or nil)
 			end
 		end
 		assert.are.same({ 1 }, predicateExpired)
@@ -638,8 +757,8 @@ local JoinObservable = require("JoinObservable")
 		local currentTime = 0
 		local previousHandler = JoinObservable.setWarningHandler(function() end)
 
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -664,16 +783,16 @@ local JoinObservable = require("JoinObservable")
 		end)
 
 		currentTime = 0
-		left:onNext({ schema = "left", id = 1, time = 0 })
+		leftSubject:onNext({ schema = "left", id = 1, time = 0 })
 		currentTime = 4
-		left:onNext({ schema = "left", id = 2, time = 4 })
+		leftSubject:onNext({ schema = "left", id = 2, time = 4 })
 		currentTime = 7
-		left:onNext({ schema = "left", id = 3, time = 7 })
+		leftSubject:onNext({ schema = "left", id = 3, time = 7 })
 
-		right:onNext({ schema = "right", id = 2, time = 7 })
+		rightSubject:onNext({ schema = "right", id = 2, time = 7 })
 
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 1, right = nil },
@@ -681,9 +800,10 @@ local JoinObservable = require("JoinObservable")
 		}, summarizePairs(pairs))
 
 		local timeExpired = {}
-		for _, record in ipairs(expiredEvents) do
-			if record.reason == "expired_time" then
-				table.insert(timeExpired, record.entry.id)
+		for _, packet in ipairs(expiredEvents) do
+			if packet.reason == "expired_time" then
+				local entry = expiredEntry(packet)
+				table.insert(timeExpired, entry and entry.id or nil)
 			end
 		end
 		assert.are.same({ 1 }, timeExpired)
@@ -694,8 +814,8 @@ local JoinObservable = require("JoinObservable")
 	it("allows per-side expiration windows", function()
 		local currentTime = 0
 
-		local left = rx.Subject.create()
-		local right = rx.Subject.create()
+		local leftSubject, left = subjectWithSchema("left")
+		local rightSubject, right = subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -726,19 +846,19 @@ local JoinObservable = require("JoinObservable")
 			table.insert(expiredEvents, record)
 		end)
 
-		left:onNext({ schema = "left", id = 1 })
-		left:onNext({ schema = "left", id = 2 })
-		left:onNext({ schema = "left", id = 3 })
+		leftSubject:onNext({ schema = "left", id = 1 })
+		leftSubject:onNext({ schema = "left", id = 2 })
+		leftSubject:onNext({ schema = "left", id = 3 })
 
 		currentTime = 0
-		right:onNext({ schema = "right", id = 1, time = 0 })
+		rightSubject:onNext({ schema = "right", id = 1, time = 0 })
 		currentTime = 10
-		right:onNext({ schema = "right", id = 2, time = 0 })
+		rightSubject:onNext({ schema = "right", id = 2, time = 0 })
 		currentTime = 2
-		right:onNext({ schema = "right", id = 3, time = 2 })
+		rightSubject:onNext({ schema = "right", id = 3, time = 2 })
 
-		left:onCompleted()
-		right:onCompleted()
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
 
 		assert.are.same({
 			{ left = 1, right = nil },
@@ -750,11 +870,12 @@ local JoinObservable = require("JoinObservable")
 
 		local leftExpired = {}
 		local rightExpired = {}
-		for _, record in ipairs(expiredEvents) do
-			if record.side == "left" then
-				table.insert(leftExpired, record.entry.id)
+		for _, packet in ipairs(expiredEvents) do
+			local entry = expiredEntry(packet)
+			if packet.alias == "left" then
+				table.insert(leftExpired, entry and entry.id or nil)
 			else
-				table.insert(rightExpired, record.entry.id)
+				table.insert(rightExpired, entry and entry.id or nil)
 			end
 		end
 
@@ -763,5 +884,74 @@ local JoinObservable = require("JoinObservable")
 
 		assert.are.same({ 1, 2 }, leftExpired)
 		assert.are.same({ 1, 2 }, rightExpired)
+	end)
+end)
+
+describe("JoinObservable.chain helper", function()
+	local function makeResultWithOrder(id)
+		local order = { id = id }
+		order.RxMeta = { schema = "orders", schemaVersion = 1, joinKey = tostring(id) }
+		return Result.new():attach("orders", order)
+	end
+
+	it("forwards aliases lazily and cleans up subscriptions", function()
+		local upstreamSubject = rx.Subject.create()
+		local activeSubscriptions = 0
+
+		local upstream = rx.Observable.create(function(observer)
+			-- Explainer: counting subscriptions proves `JoinObservable.chain` only
+			-- subscribes when needed and tears down the upstream when downstream unsubscribes.
+			activeSubscriptions = activeSubscriptions + 1
+			local sub = upstreamSubject:subscribe(observer)
+			return function()
+				activeSubscriptions = activeSubscriptions - 1
+				sub:unsubscribe()
+			end
+		end)
+
+		local chained = JoinObservable.chain(upstream, {
+			alias = "orders",
+			as = "orders_forward",
+		})
+
+		local seen = {}
+		assert.are.equal(0, activeSubscriptions)
+		local subscription = chained:subscribe(function(record)
+			table.insert(seen, record)
+		end, function(err)
+			error(err)
+		end)
+		assert.are.equal(1, activeSubscriptions)
+
+		upstreamSubject:onNext(makeResultWithOrder(1))
+		assert.are.equal(1, #seen)
+		assert.are.equal("orders_forward", seen[1].RxMeta.schema)
+
+		subscription:unsubscribe()
+		assert.are.equal(0, activeSubscriptions)
+	end)
+
+	it("applies projectors to enrich forwarded records", function()
+		local upstreamSubject = rx.Subject.create()
+		local chained = JoinObservable.chain(upstreamSubject, {
+			alias = "orders",
+			as = "orders_enriched",
+			projector = function(orderRecord)
+				orderRecord.tag = "enriched"
+				return orderRecord
+			end,
+		})
+
+		local seen = {}
+		chained:subscribe(function(record)
+			table.insert(seen, record)
+		end, function(err)
+			error(err)
+		end)
+
+		upstreamSubject:onNext(makeResultWithOrder(2))
+		assert.are.equal(1, #seen)
+		assert.are.equal("orders_enriched", seen[1].RxMeta.schema)
+		assert.are.equal("enriched", seen[1].tag)
 	end)
 end)

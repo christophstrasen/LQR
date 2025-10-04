@@ -7,6 +7,7 @@ local io = require("io")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 
 local now = 0
 local function currentTime()
@@ -18,8 +19,10 @@ local function emit(subject, payload)
 	subject:onNext(payload)
 end
 
-local left = rx.Subject.create()
-local right = rx.Subject.create()
+local leftSource = rx.Subject.create()
+local rightSource = rx.Subject.create()
+local left = Schema.wrap("invoices", leftSource)
+local right = Schema.wrap("payments", rightSource)
 
 local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
 	on = "id",
@@ -31,9 +34,11 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(left, righ
 	},
 })
 
-local function describePair(pair)
-	local leftId = pair.left and pair.left.id or "nil"
-	local rightId = pair.right and pair.right.id or "nil"
+local function describePair(result)
+	local invoice = result:get("invoices")
+	local payment = result:get("payments")
+	local leftId = invoice and invoice.id or "nil"
+	local rightId = payment and payment.id or "nil"
 	print(("[JOIN] left=%s right=%s"):format(leftId, rightId))
 end
 
@@ -43,12 +48,14 @@ end, function()
 	print("Join stream finished.")
 end)
 
-expiredStream:subscribe(function(record)
+expiredStream:subscribe(function(packet)
+	local alias = packet.alias or "unknown"
+	local entry = packet.result and packet.result:get(alias)
 	print(
-		("[EXPIRED] side=%s id=%s reason=%s"):format(
-			record.side,
-			record.entry and record.entry.id or "nil",
-			record.reason
+		("[EXPIRED] alias=%s id=%s reason=%s"):format(
+			alias,
+			entry and entry.id or "nil",
+			packet.reason
 		)
 	)
 end, function(err)
@@ -57,12 +64,12 @@ end, function()
 	print("Expired stream finished.")
 end)
 
-emit(left, { id = 1, kind = "invoice", time = 0 })
-emit(right, { id = 2, kind = "payment", time = 1 })
-emit(left, { id = 2, kind = "invoice", time = 2 })
-emit(left, { id = 3, kind = "invoice", time = 6 })
-emit(right, { id = 3, kind = "payment", time = 6 })
+emit(leftSource, { id = 1, kind = "invoice", time = 0 })
+emit(rightSource, { id = 2, kind = "payment", time = 1 })
+emit(leftSource, { id = 2, kind = "invoice", time = 2 })
+emit(leftSource, { id = 3, kind = "invoice", time = 6 })
+emit(rightSource, { id = 3, kind = "payment", time = 6 })
 
 now = 6
-left:onCompleted()
-right:onCompleted()
+leftSource:onCompleted()
+rightSource:onCompleted()

@@ -7,16 +7,17 @@ local io = require("io")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 
-local profiles = rx.Observable.fromTable({
+local profiles = Schema.wrap("profiles", rx.Observable.fromTable({
 	{ profile = { accountId = "acct-001", name = "Ada" } },
 	{ profile = { accountId = "acct-003", name = "Cara" } },
-})
+}), "profiles")
 
-local billingEvents = rx.Observable.fromTable({
+local billingEvents = Schema.wrap("billingEvents", rx.Observable.fromTable({
 	{ event = { account = "acct-001" }, amount = 150 },
 	{ event = { account = "acct-002" }, amount = 90 },
-})
+}), "billingEvents")
 
 local function accountKey(record)
 	return (record.profile and record.profile.accountId) or (record.event and record.event.account)
@@ -29,14 +30,18 @@ local joinStream = JoinObservable.createJoinObservable(profiles, billingEvents, 
 	joinType = "inner",
 })
 
-joinStream:subscribe(function(pair)
-	print(
-		("[MATCH] account=%s profile=%s amount=%d"):format(
-			pair.left.profile.accountId,
-			pair.left.profile.name,
-			pair.right.amount
+joinStream:subscribe(function(result)
+	local profile = result:get("profiles")
+	local billing = result:get("billingEvents")
+	if profile and billing then
+		print(
+			("[MATCH] account=%s profile=%s amount=%d"):format(
+				profile.profile.accountId,
+				profile.profile.name,
+				billing.amount
+			)
 		)
-	)
+	end
 end, function(err)
 	io.stderr:write(("Join error: %s\n"):format(err))
 end, function()

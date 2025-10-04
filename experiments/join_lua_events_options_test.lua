@@ -3,6 +3,7 @@ require("bootstrap")
 local rx = require("reactivex")
 local LuaEvent = require("Starlit.LuaEvent")
 local JoinObservable = require("JoinObservable")
+local Schema = require("JoinObservable.schema")
 local io = require("io")
 
 local createJoinObservable = JoinObservable.createJoinObservable
@@ -63,11 +64,12 @@ local function describeExpired(prefix, packet)
 		return
 	end
 
-	local entry = packet.entry
-	print(("[%5.2f] [%s EXPIRED] side=%s key=%s reason=%s entry=%s"):format(
+	local alias = packet.alias or "unknown"
+	local entry = packet.result and packet.result:get(alias)
+	print(("[%5.2f] [%s EXPIRED] alias=%s key=%s reason=%s entry=%s"):format(
 		scheduler.currentTime,
 		prefix,
-		packet.side or "unknown",
+		alias,
 		tostring(packet.key),
 		packet.reason or "unknown",
 		entry and ("id=" .. tostring(entry.id) .. ",rand=" .. tostring(entry.randNum)) or "nil"
@@ -89,8 +91,8 @@ local rightEvent = LuaEvent.new()
 scheduleEmitter("LEFT", leftEvent, leftEntries)
 scheduleEmitter("RIGHT", rightEvent, rightEntries)
 
-local leftStream = rx.Observable.fromLuaEvent(leftEvent):take(#leftEntries)
-local rightStream = rx.Observable.fromLuaEvent(rightEvent):take(#rightEntries)
+local leftStream = Schema.wrap("luaEventLeft", rx.Observable.fromLuaEvent(leftEvent):take(#leftEntries))
+local rightStream = Schema.wrap("luaEventRight", rx.Observable.fromLuaEvent(rightEvent):take(#rightEntries))
 
 local innerJoinStream = createJoinObservable(leftStream, rightStream, {
 	on = "id",
@@ -110,11 +112,17 @@ local antiOuterJoinStream, antiExpired = createJoinObservable(leftStream, rightS
 	maxCacheSize = 4,
 })
 
-local innerSubscription = innerJoinStream:subscribe(function(pair)
+local function formatEntry(record)
+	return record and ("id=" .. record.id .. ",rand=" .. record.randNum) or "nil"
+end
+
+local innerSubscription = innerJoinStream:subscribe(function(result)
+	local leftRecord = result:get("luaEventLeft")
+	local rightRecord = result:get("luaEventRight")
 	print(("[%5.2f] [INNER] left=%s right=%s"):format(
 		scheduler.currentTime,
-		pair.left and ("id=" .. pair.left.id .. ",rand=" .. pair.left.randNum) or "nil",
-		pair.right and ("id=" .. pair.right.id .. ",rand=" .. pair.right.randNum) or "nil"
+		formatEntry(leftRecord),
+		formatEntry(rightRecord)
 	))
 end, function(err)
 	io.stderr:write(("Inner join error: %s\n"):format(err))
@@ -122,11 +130,13 @@ end, function()
 	print(("[%5.2f] Inner join completed"):format(scheduler.currentTime))
 end)
 
-local outerSubscription = outerJoinStream:subscribe(function(pair)
+local outerSubscription = outerJoinStream:subscribe(function(result)
+	local leftRecord = result:get("luaEventLeft")
+	local rightRecord = result:get("luaEventRight")
 	print(("[%5.2f] [OUTER] left=%s right=%s"):format(
 		scheduler.currentTime,
-		pair.left and ("id=" .. pair.left.id .. ",rand=" .. pair.left.randNum) or "nil",
-		pair.right and ("id=" .. pair.right.id .. ",rand=" .. pair.right.randNum) or "nil"
+		formatEntry(leftRecord),
+		formatEntry(rightRecord)
 	))
 end, function(err)
 	io.stderr:write(("Outer join error: %s\n"):format(err))
@@ -142,11 +152,13 @@ end, function()
 	print(("[%5.2f] Outer expired completed"):format(scheduler.currentTime))
 end)
 
-local antiOuterSubscription = antiOuterJoinStream:subscribe(function(pair)
+local antiOuterSubscription = antiOuterJoinStream:subscribe(function(result)
+	local leftRecord = result:get("luaEventLeft")
+	local rightRecord = result:get("luaEventRight")
 	print(("[%5.2f] [ANTI] left=%s right=%s"):format(
 		scheduler.currentTime,
-		pair.left and ("id=" .. pair.left.id .. ",rand=" .. pair.left.randNum) or "nil",
-		pair.right and ("id=" .. pair.right.id .. ",rand=" .. pair.right.randNum) or "nil"
+		formatEntry(leftRecord),
+		formatEntry(rightRecord)
 	))
 end, function(err)
 	io.stderr:write(("Anti outer join error: %s\n"):format(err))
