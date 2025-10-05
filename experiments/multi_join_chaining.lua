@@ -5,23 +5,25 @@ local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 local rx = require("reactivex")
 
-local function wrapTable(schemaName, rows)
-	return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true))
+local function wrapTable(schemaName, idField, rows)
+	return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true), {
+		idField = idField,
+	})
 end
 
-local customers = wrapTable("customers", {
+local customers = wrapTable("customers", "id", {
 	{ id = 101, name = "Ada" },
 	{ id = 102, name = "Ben" },
 	{ id = 103, name = "Cara" },
 })
 
-local orders = wrapTable("orders", {
+local orders = wrapTable("orders", "id", {
 	{ id = 1001, customerId = 101, total = 250 },
 	{ id = 1002, customerId = 103, total = 125 },
 	{ id = 1003, customerId = 104, total = 99 },
 })
 
-local payments = wrapTable("payments", {
+local payments = wrapTable("payments", "id", {
 	{ id = 5001, orderId = 1001, amount = 250 },
 	{ id = 5002, orderId = 1004, amount = 80 },
 })

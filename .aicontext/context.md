@@ -75,8 +75,8 @@ tbd
 - **Backwards-compatibility** Hard refactors are allowed during early development. Compatibility shims or aliases are added only for public API calls — and only once the mod has active external users.
 - **Avoid:** `setmetatable` unless explicitly requested.
 - **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. .
-- **Schema metadata is mandatory:** Any record entering `JoinObservable.createJoinObservable` must already carry `record.RxMeta.schema` (via `Schema.wrap`). Minimal fields: `schema` (string), optional `schemaVersion` (positive int), optional `sourceTime` (number). The join stamps `RxMeta.joinKey` itself.
-- **Chaining joins:** Prefer `JoinObservable.chain` + `JoinResult.selectAliases` over manual subjects when forwarding aliases to downstream joins. Treat intermediate payloads as immutable unless you intentionally mutate them right before emitting.
+- **Schema metadata is mandatory:** Any record entering `JoinObservable.createJoinObservable` must already carry `record.RxMeta.schema` and a stable `record.RxMeta.id` (use `Schema.wrap` with `idField`/`idSelector`). Minimal fields: `schema` (string), `id` (any), optional `schemaVersion` (positive int), optional `sourceTime` (number). The join stamps `RxMeta.joinKey` itself.
+- **Chaining joins:** Prefer `JoinObservable.chain` + `JoinResult.selectSchemas` over manual subjects when forwarding schema names to downstream joins. Treat intermediate payloads as immutable unless you intentionally mutate them right before emitting.
 - **Join outputs are schema-indexed:** Subscribers receive `JoinResult` objects—call `result:get("schemaName")` instead of relying on `pair.left/right`. Expiration packets expose `packet.schema` and `packet.result`.
 
 ## 8) Design Principles
@@ -93,7 +93,7 @@ tbd
 - Shell startup emits benign `gpg-agent` warnings; ignore them unless the user flags an issue.
 
 ## 11) Project Glossary
-- **record**: Single emission flowing through Rx graphs. Always a Lua table carrying payload fields plus `record.RxMeta` metadata (`schema`, optional `schemaVersion`/`sourceTime`, and the join’s `joinKey` once computed).
+- **record**: Single emission flowing through Rx graphs. Always a Lua table carrying payload fields plus `record.RxMeta` metadata (`schema`, optional `schemaVersion`/`sourceTime`, mandatory `id/idField`, and the join’s `joinKey` once computed).
 - **schema**: Logical contract describing the shape and intent of a record type (e.g., “orders”, “payments”). We enforce schema tagging by wrapping sources with `Schema.wrap`, which also validates metadata.
 - **schema name**: Human-readable label assigned via `Schema.wrap("name", observable)` or renamed later via `JoinResult.selectSchemas` / `JoinObservable.chain`. Joins and downstream consumers address records by this label (e.g., `result:get("customers")`).
 - **JoinResult**: Container emitted by `JoinObservable.createJoinObservable`. Behaves like a table keyed by schema name and exposes helpers such as `get`, `schemaNames`, `clone`, `selectSchemas`, and `attachFrom`.

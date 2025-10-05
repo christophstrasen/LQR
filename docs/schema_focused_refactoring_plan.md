@@ -8,10 +8,11 @@ This plan captures the current agreements around schema metadata for `JoinObserv
    - `schema` (string, mandatory): canonical name like `"customers"`.
    - `schemaVersion` (integer, optional, `nil` means “latest”). Reject/normalize away `0`.
    - `sourceTime` (number, optional): epoch seconds (or whatever the producer uses consistently). Time-based retention prefers this field.
+   - `id` (any, mandatory): stable record identifier supplied when wrapping sources; derived from a configured field or selector.
    - `joinKey` (any): the resolved join key. Single values today; future compound keys may use tables (`{ value = {...}, parts = {...} }`).
 2. **Schema prefixing:** All system-managed fields are prefixed with `Rx` to avoid user collisions; internal helpers may add more under `RxMeta` later.
 3. **Mandatory schemas:** Any observable entering `JoinObservable.createJoinObservable` **must** emit records with populated `RxMeta`. The join will assert hard if metadata is missing or malformed—no silent defaults.
-4. **Schema helper:** We provide a helper (e.g., `Schema.wrap(schemaName, stream, opts)`) so call sites can wrap raw observables before joining. Helper injects `RxMeta` if absent and leaves existing metadata untouched.
+4. **Schema helper:** We provide a helper (e.g., `Schema.wrap(schemaName, stream, opts)`) so call sites can wrap raw observables before joining. Helper injects `RxMeta` if absent, derives `RxMeta.id` via `opts.idField`/`opts.idSelector`, and leaves existing metadata untouched.
 5. **Metadata propagation:** Expiration and match outputs forward each side’s metadata unchanged. No automatic merging of left/right; higher-level utilities (`asSchema`, schema renaming helpers) can compose new schemas when desired.
 6. **No default stripping:** The low-level API exposes `RxMeta` by default. A future helper may “rename” or rebuild schemas for downstream consumers, but the join itself never removes metadata.
 
@@ -19,7 +20,7 @@ This plan captures the current agreements around schema metadata for `JoinObserv
 
 1. **Helper module**
    - Create `Schema.wrap(schemaName, observable, opts)` (schema name mandatory, `schemaVersion` optional).
-   - Validate inputs, inject `RxMeta` when missing, preserve existing metadata if already present.
+   - Validate inputs, inject `RxMeta` when missing, derive `RxMeta.id` via configured fields/selectors, preserve existing metadata if already present.
    - Emit informative errors when schema metadata is absent or invalid.
 
 2. **Join input validation**

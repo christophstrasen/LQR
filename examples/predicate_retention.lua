@@ -9,16 +9,28 @@ local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 
-local trades = Schema.wrap("trades", rx.Observable.fromTable({
-	{ id = 1, status = "blocked", amount = 50 },
-	{ id = 2, status = "cleared", amount = 75 },
-	{ id = 3, status = "cleared", amount = 120 },
-}), "trades")
+local trades = Schema.wrap(
+	"trades",
+	rx.Observable.fromTable({
+		{ id = 1, status = "blocked", amount = 50 },
+		{ id = 2, status = "cleared", amount = 75 },
+		{ id = 3, status = "cleared", amount = 120 },
+	}),
+	{
+		idField = "id",
+	}
+)
 
-local approvals = Schema.wrap("approvals", rx.Observable.fromTable({
-	{ id = 2, channel = "prod", reviewer = "ops" },
-	{ id = 3, channel = "test", reviewer = "qa" },
-}), "approvals")
+local approvals = Schema.wrap(
+	"approvals",
+	rx.Observable.fromTable({
+		{ id = 2, channel = "prod", reviewer = "ops" },
+		{ id = 3, channel = "test", reviewer = "qa" },
+	}),
+	{
+		idField = "id",
+	}
+)
 
 local joinStream, expiredStream = JoinObservable.createJoinObservable(trades, approvals, {
 	on = "id",
@@ -54,15 +66,17 @@ local function describePair(result)
 	else
 		status = "RIGHT_ONLY"
 	end
-	print(("[JOIN] %s left=%s status=%s amount=%s | right=%s channel=%s reviewer=%s"):format(
-		status,
-		leftId,
-		leftStatus,
-		leftAmount,
-		rightId,
-		rightChannel,
-		rightReviewer
-	))
+	print(
+		("[JOIN] %s left=%s status=%s amount=%s | right=%s channel=%s reviewer=%s"):format(
+			status,
+			leftId,
+			leftStatus,
+			leftAmount,
+			rightId,
+			rightChannel,
+			rightReviewer
+		)
+	)
 end
 
 joinStream:subscribe(describePair, function(err)
@@ -71,16 +85,10 @@ end, function()
 	print("Join stream finished.")
 end)
 
-expiredStream:subscribe(function(packet)
-	local schemaName = packet.schema or "unknown"
-	local entry = packet.result and packet.result:get(schemaName)
-	print(
-		("[EXPIRED] schema=%s id=%s reason=%s"):format(
-			schemaName,
-			entry and entry.id or "nil",
-			packet.reason
-		)
-	)
+expiredStream:subscribe(function(record)
+	local schemaName = record.schema or "unknown"
+	local entry = record.result and record.result:get(schemaName)
+	print(("[EXPIRED] schema=%s id=%s reason=%s"):format(schemaName, entry and entry.id or "nil", record.reason))
 end, function(err)
 	io.stderr:write(("Expired stream error: %s\n"):format(err))
 end, function()

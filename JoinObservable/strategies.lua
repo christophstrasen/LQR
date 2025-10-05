@@ -3,18 +3,17 @@ local Result = require("JoinObservable.result")
 local Strategies = {}
 
 local function emitResult(observer, leftRecord, rightRecord)
-	local packet = Result.new()
+	local record = Result.new()
 	if leftRecord then
-		packet:attach(leftRecord.schemaName, leftRecord.entry)
+		record:attach(leftRecord.schemaName, leftRecord.entry)
 	end
 	if rightRecord then
-		packet:attach(rightRecord.schemaName, rightRecord.entry)
+		record:attach(rightRecord.schemaName, rightRecord.entry)
 	end
-	observer:onNext(packet)
+	observer:onNext(record)
 end
 
-local function noop()
-end
+local function noop() end
 
 local joinStrategies = {
 	inner = {

@@ -31,6 +31,8 @@ result.RxMeta.schemaMap -- metadata per schema (schema name, version, joinKey, s
 
 Records are attached using the schema supplied to `Schema.wrap("schemaName", observable)`. If the same schema is used multiple times, wrap the stream with unique schema names so you can address them unambiguously.
 
+**Record IDs:** When wrapping sources, provide an `idField` (string) or `idSelector` (function) so every record receives a stable `RxMeta.id`. Records missing the configured identifier are dropped with a warning—this keeps cache bookkeeping deterministic and allows downstream stages to trace each record back to its origin.
+
 ## Constructor Reference
 
 ```lua
@@ -135,10 +137,10 @@ Each record emitted via `expiredStream` has the shape:
 
 ```lua
 {
-  side = "left"|"right",
+  schema = "orders",
   key = <join key>,
-  record = <original record table>,
   reason = "evicted" | "completed" | "expired_interval" | "expired_time" | "expired_predicate" | ...,
+  result = <JoinResult containing only the expired schema>,
 }
 ```
 
@@ -170,7 +172,7 @@ Replaces the warning sink. Pass `nil` to restore the default stderr logger. Warn
 
 ## Minimum Internal Schema
 
-Every record fed into `JoinObservable.createJoinObservable` **must** expose system metadata under `record.RxMeta`. Use `Schema.wrap("schemaName", observable, { schemaVersion = 2 })` to inject/validate this metadata before wiring the join; the helper preserves existing metadata and errors when it would need to override it.
+Every record fed into `JoinObservable.createJoinObservable` **must** expose system metadata under `record.RxMeta`. Use `Schema.wrap("schemaName", observable, { idField = "id", schemaVersion = 2 })` (or `idSelector = function(record) ... end`) to inject/validate this metadata before wiring the join; the helper preserves existing metadata and drops records that cannot produce the configured identifier.
 
 Mandatory/optional fields:
 
@@ -179,6 +181,8 @@ Mandatory/optional fields:
 | `RxMeta.schema`      | string  | ✔        | Canonical schema name, e.g. `"customers"`. |
 | `RxMeta.schemaVersion` | integer | ✖        | Positive integer; `nil` means “latest”. Any zero/invalid value is normalized to `nil` with a warning. |
 | `RxMeta.sourceTime`  | number  | ✖        | Event time in epoch seconds (or the unit your pipeline consistently uses). Time-based expiration prefers this value over inline `record.time`. |
+| `RxMeta.id`          | any     | ✔        | Stable per-record identifier supplied by `Schema.wrap` (via `idField` or `idSelector`). |
+| `RxMeta.idField`     | string  | ✔ (set by wrap) | Describes which field/selector produced `RxMeta.id`; useful for debugging. |
 | `RxMeta.joinKey`     | any     | ✔ (set by join) | Populated by the join with the resolved key so downstream operators do not need to recompute it. |
 
 Records lacking `RxMeta` (or with malformed metadata) trigger immediate errors—the join will not silently invent schemas. This keeps low-level operations deterministic and makes chained joins feasible. Downstream consumers should read payloads via `result:get("schemaName")`; higher-level adapters can still rename or merge schemas as needed.

@@ -21,8 +21,8 @@ end
 
 local leftSource = rx.Subject.create()
 local rightSource = rx.Subject.create()
-local left = Schema.wrap("invoices", leftSource)
-local right = Schema.wrap("payments", rightSource)
+local left = Schema.wrap("invoices", leftSource, { idField = "id" })
+local right = Schema.wrap("payments", rightSource, { idField = "id" })
 
 local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
 	on = "id",
@@ -48,16 +48,10 @@ end, function()
 	print("Join stream finished.")
 end)
 
-expiredStream:subscribe(function(packet)
-	local schemaName = packet.schema or "unknown"
-	local entry = packet.result and packet.result:get(schemaName)
-	print(
-		("[EXPIRED] schema=%s id=%s reason=%s"):format(
-			schemaName,
-			entry and entry.id or "nil",
-			packet.reason
-		)
-	)
+expiredStream:subscribe(function(record)
+	local schemaName = record.schema or "unknown"
+	local entry = record.result and record.result:get(schemaName)
+	print(("[EXPIRED] schema=%s id=%s reason=%s"):format(schemaName, entry and entry.id or "nil", record.reason))
 end, function(err)
 	io.stderr:write(("Expired stream error: %s\n"):format(err))
 end, function()

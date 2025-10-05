@@ -5,6 +5,7 @@
 ---@field map fun(self:rx.Observable, mapper:fun(value:any):any):rx.Observable
 ---@field subscribe fun(self:rx.Observable, onNext:fun(value:any), onError:fun(err:any)|nil, onCompleted:fun()|nil):rx.Subscription
 
+local rx = require("reactivex")
 local warnings = require("JoinObservable.warnings")
 local warnf = warnings.warnf
 local Schema = {}
@@ -100,7 +101,41 @@ function Schema.wrap(schemaName, observable, opts)
 	opts = opts or {}
 	local desiredVersion = normalizeSchemaVersion(schemaName, opts.schemaVersion)
 
-	return observable:map(function(record)
+	local idField = opts.idField
+	local idSelector = opts.idSelector
+	if idField ~= nil then
+		if type(idField) ~= "string" or idField == "" then
+			error("opts.idField must be a non-empty string if provided")
+		end
+	end
+	if idSelector ~= nil and type(idSelector) ~= "function" then
+		error("opts.idSelector must be a function if provided")
+	end
+	if idField ~= nil and idSelector ~= nil then
+		error("Provide only one of opts.idField or opts.idSelector")
+	end
+	local idLabel = idField or opts.idLabel or opts.idFieldName or "custom"
+
+local function deriveId(record)
+	if idField then
+		return record[idField]
+	end
+	if idSelector then
+		local ok, value = pcall(idSelector, record)
+		if not ok then
+			warnf(
+				"Schema '%s' idSelector failed (%s); dropping record",
+				schemaName,
+				tostring(value)
+			)
+			return nil, true
+		end
+		return value
+	end
+	return record.id
+end
+
+	local function processRecord(record)
 		if type(record) ~= "table" then
 			error(("Schema.wrap(%s) expects table records, got %s"):format(schemaName, type(record)))
 		end
@@ -129,16 +164,49 @@ function Schema.wrap(schemaName, observable, opts)
 					)
 				end
 			end
-			return record
+		else
+			meta = {
+				schema = schemaName,
+				schemaVersion = desiredVersion,
+			}
+			record.RxMeta = meta
 		end
 
-		record.RxMeta = {
-			schema = schemaName,
-			schemaVersion = desiredVersion,
-		}
+		if meta.id == nil then
+			local idValue, selectorErrored = deriveId(record)
+			if idValue == nil then
+				if idField or idSelector then
+					local reason
+					if selectorErrored then
+						reason = "selector error"
+					elseif idField then
+						reason = ("missing field '%s'"):format(idField)
+					else
+						reason = "selector returned nil"
+					end
+					warnf("Dropped record for schema '%s' because id could not be resolved (%s)", schemaName, reason)
+				else
+					warnf(
+						"Dropped record for schema '%s' because RxMeta.id was missing and no idField/idSelector was configured",
+						schemaName
+					)
+				end
+				return nil
+			end
+			meta.id = idValue
+			meta.idField = idField or (idSelector and idLabel) or meta.idField or "custom"
+		else
+			meta.idField = meta.idField or idField or (idSelector and idLabel) or meta.idField or "unknown"
+		end
 
 		return record
-	end)
+	end
+
+return observable
+		:map(processRecord)
+		:filter(function(record)
+			return record ~= nil
+		end)
 end
 
 return Schema

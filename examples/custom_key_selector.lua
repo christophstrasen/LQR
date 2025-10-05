@@ -9,19 +9,23 @@ local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 
+local function accountKey(record)
+	return (record.profile and record.profile.accountId) or (record.event and record.event.account)
+end
+
 local profiles = Schema.wrap("profiles", rx.Observable.fromTable({
 	{ profile = { accountId = "acct-001", name = "Ada" } },
 	{ profile = { accountId = "acct-003", name = "Cara" } },
-}), "profiles")
+}), {
+	idSelector = accountKey,
+})
 
 local billingEvents = Schema.wrap("billingEvents", rx.Observable.fromTable({
 	{ event = { account = "acct-001" }, amount = 150 },
 	{ event = { account = "acct-002" }, amount = 90 },
-}), "billingEvents")
-
-local function accountKey(record)
-	return (record.profile and record.profile.accountId) or (record.event and record.event.account)
-end
+}), {
+	idSelector = accountKey,
+})
 
 local joinStream = JoinObservable.createJoinObservable(profiles, billingEvents, {
 	-- Functional `on` normalizes different payload shapes into a shared account id.

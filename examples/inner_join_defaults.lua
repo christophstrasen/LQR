@@ -13,13 +13,17 @@ local customers = Schema.wrap("customers", rx.Observable.fromTable({
 	{ id = 42, name = "Ada" },
 	{ id = 43, name = "Ben" },
 	{ id = 77, name = "Left only" },
-}), "customers")
+}), {
+	idField = "id",
+})
 
 local orders = Schema.wrap("orders", rx.Observable.fromTable({
 	{ id = 43, total = 199 },
 	{ id = 42, total = 250 },
 	{ id = 99, total = 75 },
-}), "orders")
+}), {
+	idField = "id",
+})
 
 -- Defaults: the key selector reads the `id` field and the join type is `inner`,
 -- so only rows that share an id are emitted while stray rows stay silent.

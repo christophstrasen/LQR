@@ -6,8 +6,10 @@ require("bootstrap")
 
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
-local Schema = require("JoinObservable.schema")
+local SchemaHelpers = require("tests.support.schema_helpers")
 local Result = require("JoinObservable.result")
+
+local Schema = require("JoinObservable.schema")
 
 local function collectValues(observable)
 	local results = {}
@@ -49,15 +51,6 @@ local function summarizePairs(pairs)
 	return summary
 end
 
-local function observableFromTable(schemaName, rows)
-	return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true))
-end
-
-local function subjectWithSchema(schemaName)
-	local source = rx.Subject.create()
-	return source, Schema.wrap(schemaName, source)
-end
-
 local function expiredEntry(packet)
 	if not packet then
 		return nil, nil
@@ -79,65 +72,65 @@ describe("JoinObservable", function()
 		JoinObservable.setWarningHandler()
 	end)
 
-describe("JoinResult helper", function()
+	describe("JoinResult helper", function()
 	local function buildResult()
-		local customer = {
-			id = 1,
-			name = "Ada",
-			RxMeta = { schema = "customers", schemaVersion = 2, joinKey = "1", sourceTime = 100 },
-		}
-		local order = {
-			id = 100,
-			customerId = 1,
-			RxMeta = { schema = "orders", joinKey = "1", sourceTime = 120 },
-		}
+			local customer = {
+				id = 1,
+				name = "Ada",
+				RxMeta = { schema = "customers", schemaVersion = 2, joinKey = "1", sourceTime = 100 },
+			}
+			local order = {
+				id = 100,
+				customerId = 1,
+				RxMeta = { schema = "orders", joinKey = "1", sourceTime = 120 },
+			}
 
-		local result = Result.new():attach("customers", customer):attach("orders", order)
-		return result
-	end
+			local result = Result.new():attach("customers", customer):attach("orders", order)
+			return result
+		end
 
-	it("attaches schemas and preserves metadata", function()
-		local result = buildResult()
+		it("attaches schemas and preserves metadata", function()
+			local result = buildResult()
 
-		assert.is_not_nil(result:get("customers"))
-		assert.is_not_nil(result:get("orders"))
-		assert.are.same({ "customers", "orders" }, result:schemaNames())
+			assert.is_not_nil(result:get("customers"))
+			assert.is_not_nil(result:get("orders"))
+			assert.are.same({ "customers", "orders" }, result:schemaNames())
+		end)
+
+		it("clones schema payloads without mutating the source", function()
+			local result = buildResult()
+			local clone = result:clone()
+
+			assert.are_not.equal(result:get("orders"), clone:get("orders"))
+			clone:get("orders").customerId = 999
+			assert.are.equal(1, result:get("orders").customerId)
+		end)
+
+		it("selects and renames schema names", function()
+			local result = buildResult()
+			local renamed = Result.selectSchemas(result, { customers = "buyer" })
+			local buyer = renamed:get("buyer")
+
+			assert.is_not_nil(buyer)
+			assert.are.equal("buyer", buyer.RxMeta.schema)
+		end)
+
+		it("attaches from another result", function()
+			local source = buildResult()
+			local target = Result.new()
+			target:attachFrom(source, "orders", "forwarded_orders")
+			local forwarded = target:get("forwarded_orders")
+			assert.is_not_nil(forwarded)
+			assert.are.equal("forwarded_orders", forwarded.RxMeta.schema)
+		end)
 	end)
-
-it("clones schema payloads without mutating the source", function()
-		local result = buildResult()
-		local clone = result:clone()
-
-		assert.are_not.equal(result:get("orders"), clone:get("orders"))
-		clone:get("orders").customerId = 999
-		assert.are.equal(1, result:get("orders").customerId)
-	end)
-
-	it("selects and renames schema names", function()
-		local result = buildResult()
-		local renamed = Result.selectSchemas(result, { customers = "buyer" })
-		local buyer = renamed:get("buyer")
-
-		assert.is_not_nil(buyer)
-		assert.are.equal("buyer", buyer.RxMeta.schema)
-	end)
-
-	it("attaches from another result", function()
-		local source = buildResult()
-		local target = Result.new()
-		target:attachFrom(source, "orders", "forwarded_orders")
-		local forwarded = target:get("forwarded_orders")
-		assert.is_not_nil(forwarded)
-		assert.are.equal("forwarded_orders", forwarded.RxMeta.schema)
-	end)
-end)
 
 describe("Schema.wrap subject chaining", function()
 	it("allows re-emitting wrapped records into new streams", function()
 		local sourceSubject = rx.Subject.create()
 		local bufferSubject = rx.Subject.create()
-		local firstWrapped = Schema.wrap("orders", sourceSubject)
-			local secondWrapped = Schema.wrap("orders", bufferSubject)
+		local firstWrapped = Schema.wrap("orders", sourceSubject, { idField = "id" })
+		local secondWrapped = Schema.wrap("orders", bufferSubject, { idField = "id" })
 
 			local firstCaptured, secondCaptured = {}, {}
 
@@ -164,17 +157,75 @@ describe("Schema.wrap subject chaining", function()
 			end
 
 			firstSubscription:unsubscribe()
-			secondSubscription:unsubscribe()
+		secondSubscription:unsubscribe()
+	end)
+end)
+
+describe("Schema.wrap id enforcement", function()
+	it("derives ids from configured fields", function()
+		local subject = rx.Subject.create()
+		local wrapped = Schema.wrap("events", subject, { idField = "uuid" })
+		local seen = {}
+		wrapped:subscribe(function(record)
+			table.insert(seen, record)
 		end)
+
+		subject:onNext({ uuid = "abc-1", payload = "ok" })
+		subject:onCompleted()
+
+		assert.are.equal(1, #seen)
+		assert.are.equal("abc-1", seen[1].RxMeta.id)
+		assert.are.equal("uuid", seen[1].RxMeta.idField)
 	end)
 
+	it("drops records missing the configured id field", function()
+		local subject = rx.Subject.create()
+		local wrapped = Schema.wrap("events", subject, { idField = "uuid" })
+		local seen, warningsRaised = {}, {}
+		JoinObservable.setWarningHandler(function(message)
+			table.insert(warningsRaised, message)
+		end)
+
+		wrapped:subscribe(function(record)
+			table.insert(seen, record)
+		end)
+
+		subject:onNext({ payload = "missing" }) -- dropped
+		subject:onNext({ uuid = "present" })
+		subject:onCompleted()
+
+		assert.are.equal(1, #seen)
+		assert.are.equal("present", seen[1].RxMeta.id)
+		assert.is_true(#warningsRaised >= 1)
+	end)
+
+	it("derives ids via selectors", function()
+		local subject = rx.Subject.create()
+		local wrapped = Schema.wrap("events", subject, {
+			idSelector = function(entry)
+				return (entry.partition or "?") .. ":" .. tostring(entry.localId)
+			end,
+		})
+		local seen = {}
+		wrapped:subscribe(function(record)
+			table.insert(seen, record)
+		end)
+
+		subject:onNext({ partition = "alpha", localId = 42 })
+		subject:onCompleted()
+
+		assert.are.equal(1, #seen)
+		assert.are.equal("alpha:42", seen[1].RxMeta.id)
+	end)
+end)
+
 	it("emits only matched pairs for an inner join", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left", id = 2 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 2 },
 			{ schema = "right", id = 3 },
 		})
@@ -195,12 +246,12 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("defaults to an inner join keyed by id when options are omitted", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 10 },
 			{ schema = "left", id = 20 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 20 },
 			{ schema = "right", id = 30 },
 		})
@@ -216,12 +267,12 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("matches asymmetric key fields when the selector inspects schema metadata", function()
-		local orders = observableFromTable("orders", {
+		local orders = SchemaHelpers.observableFromTable("orders", {
 			{ orderId = 101, customerId = 1, total = 50 },
 			{ orderId = 102, customerId = 2, total = 75 },
-		})
+		}, { idField = "orderId" })
 
-		local customers = observableFromTable("customers", {
+		local customers = SchemaHelpers.observableFromTable("customers", {
 			{ id = 1, name = "Ada" },
 			{ id = 2, name = "Bela" },
 		})
@@ -274,8 +325,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("evicts unmatched asymmetric rows without dropping schema metadata", function()
-		local orderSubject, orders = subjectWithSchema("orders")
-		local customerSubject, customers = subjectWithSchema("customers")
+		local orderSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "orderId" })
+		local customerSubject, customers = SchemaHelpers.subjectWithSchema("customers")
 
 		local join, expired = JoinObservable.createJoinObservable(orders, customers, {
 			on = ordersCustomersOn,
@@ -330,12 +381,12 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("surfaces expired records via the secondary observable", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left", id = 2 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 3 },
 		})
 
@@ -378,8 +429,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("evicts the oldest cached entries when the cache exceeds the cap", function()
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local innerJoin, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -430,8 +481,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("only keeps the newest key available for future matches when entries are evicted", function()
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -480,15 +531,23 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("supports functional key selectors", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", partition = "alpha", localId = 1 },
 			{ schema = "left", partition = "beta", localId = 1 },
+		}, {
+			idSelector = function(entry)
+				return ("%s:%s"):format(entry.partition, entry.localId)
+			end,
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", partition = "alpha", localId = 1 },
 			{ schema = "right", partition = "beta", localId = 2 },
 			{ schema = "right", partition = "beta", localId = 1 },
+		}, {
+			idSelector = function(entry)
+				return ("%s:%s"):format(entry.partition, entry.localId)
+			end,
 		})
 
 		local join = JoinObservable.createJoinObservable(left, right, {
@@ -521,8 +580,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("never emits expiration events for matched records", function()
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -554,11 +613,11 @@ describe("Schema.wrap subject chaining", function()
 	it("ignores malformed records emitted by a custom merge observable", function()
 		JoinObservable.setWarningHandler(function() end)
 
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 5 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 5 },
 		})
 
@@ -605,10 +664,10 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("propagates merge errors to both the result and expiration observables", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
 		})
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 1 },
 		})
 
@@ -636,8 +695,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("completes the expiration observable when the join subscription is disposed", function()
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -671,13 +730,13 @@ describe("Schema.wrap subject chaining", function()
 	it("drops entries whose key selector returns nil", function()
 		local previousHandler = JoinObservable.setWarningHandler(function() end)
 
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
 			{ schema = "left" }, -- missing id -> nil key
 			{ schema = "left", id = 2 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 1 },
 			{ schema = "right", id = 2 },
 		})
@@ -707,11 +766,11 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("honors custom merge ordering and validates the merge contract", function()
-		local left = observableFromTable("left", {
+		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
 		})
 
-		local right = observableFromTable("right", {
+		local right = SchemaHelpers.observableFromTable("right", {
 			{ schema = "right", id = 1 },
 			{ schema = "right", id = 2 },
 		})
@@ -772,8 +831,8 @@ describe("Schema.wrap subject chaining", function()
 
 	it("expires records outside the configured interval window", function()
 		local currentTime = 0
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -826,8 +885,8 @@ describe("Schema.wrap subject chaining", function()
 	end)
 
 	it("uses predicate-based expiration to drop unwanted entries", function()
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -876,8 +935,8 @@ describe("Schema.wrap subject chaining", function()
 		local currentTime = 0
 		local previousHandler = JoinObservable.setWarningHandler(function() end)
 
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -933,8 +992,8 @@ describe("Schema.wrap subject chaining", function()
 	it("allows per-side expiration windows", function()
 		local currentTime = 0
 
-		local leftSubject, left = subjectWithSchema("left")
-		local rightSubject, right = subjectWithSchema("right")
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
@@ -1029,7 +1088,7 @@ describe("JoinObservable.chain helper", function()
 		end)
 
 		local chained = JoinObservable.chain(upstream, {
-			alias = "orders",
+			schema = "orders",
 			as = "orders_forward",
 		})
 
@@ -1083,24 +1142,24 @@ describe("JoinObservable.chain helper", function()
 			},
 		})
 
-		local seenAliases = {}
+		local seenSchemas = {}
 		chained:subscribe(function(record)
-			table.insert(seenAliases, record.RxMeta.schema)
+			table.insert(seenSchemas, record.RxMeta.schema)
 		end, function(err)
 			error(err)
 		end)
 
 		upstreamSubject:onNext(makeResultWithOrder(3))
-		assert.are.same({ "orders_a", "orders_b" }, seenAliases)
+		assert.are.same({ "orders_a", "orders_b" }, seenSchemas)
 	end)
 
 	it("preserves join metadata when chaining asymmetric key selectors", function()
-		local orders = observableFromTable("orders", {
-			{ orderId = 501, customerId = 1 },
-			{ orderId = 502, customerId = 2 },
-		})
+	local orders = SchemaHelpers.observableFromTable("orders", {
+		{ orderId = 501, customerId = 1 },
+		{ orderId = 502, customerId = 2 },
+	}, { idField = "orderId" })
 
-		local customers = observableFromTable("customers", {
+		local customers = SchemaHelpers.observableFromTable("customers", {
 			{ id = 1 },
 			{ id = 2 },
 		})
@@ -1111,7 +1170,7 @@ describe("JoinObservable.chain helper", function()
 		})
 
 		local forwarded = JoinObservable.chain(join, {
-			alias = "orders",
+			schema = "orders",
 			as = "forwarded_orders",
 			map = function(orderRecord)
 				return { invoiceId = orderRecord.orderId }

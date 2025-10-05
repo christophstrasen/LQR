@@ -41,45 +41,35 @@ local function buildSelector(entry, context)
 end
 
 local function normalizeKeySelector(on)
-    if type(on) == "function" then
-        return on
-    end
+	if type(on) == "function" then
+		return on
+	end
 
-    if type(on) == "table" then
-        local selectorsBySchema = {}
-        local selectorCount = 0
+	if type(on) == "table" then
+		local selectorsBySchema = {}
+		local selectorCount = 0
 
-        for schemaName, selectorConfig in pairs(on) do
-            assert(
-                type(schemaName) == "string" and schemaName ~= "",
-                "options.on keys must be non-empty schema names"
-            )
-            selectorsBySchema[schemaName] = buildSelector(
-                selectorConfig,
-                ("options.on['%s']"):format(schemaName)
-            )
-            selectorCount = selectorCount + 1
-        end
+		for schemaName, selectorConfig in pairs(on) do
+			assert(type(schemaName) == "string" and schemaName ~= "", "options.on keys must be non-empty schema names")
+			selectorsBySchema[schemaName] = buildSelector(selectorConfig, ("options.on['%s']"):format(schemaName))
+			selectorCount = selectorCount + 1
+		end
 
-        assert(selectorCount > 0, "options.on must declare at least one schema selector")
+		assert(selectorCount > 0, "options.on must declare at least one schema selector")
 
-        return function(entry, _side, schemaName)
-            local selector = schemaName and selectorsBySchema[schemaName]
-            if not selector then
-                error(
-                    ("No key selector configured for schema '%s'"):format(
-                        tostring(schemaName or "unknown")
-                    )
-                )
-            end
-            return selector(entry)
-        end
-    end
+		return function(entry, _side, schemaName)
+			local selector = schemaName and selectorsBySchema[schemaName]
+			if not selector then
+				error(("No key selector configured for schema '%s'"):format(tostring(schemaName or "unknown")))
+			end
+			return selector(entry)
+		end
+	end
 
-    local field = on or "id"
-    return function(entry)
-        return entry[field]
-    end
+	local field = on or "id"
+	return function(entry)
+		return entry[field]
+	end
 end
 
 local function resolveSchemaName(meta, fallback)
@@ -112,22 +102,6 @@ local function tagStream(stream, side)
 	end)
 end
 
-local function emitUnmatched(observer, strategy, side, record)
-	if not record or record.matched then
-		return
-	end
-
-	local shouldEmit = (side == "left" and strategy.emitUnmatchedLeft)
-		or (side == "right" and strategy.emitUnmatchedRight)
-
-	if not shouldEmit then
-		return
-	end
-
-	local result = Result.new():attach(record.schemaName, record.entry)
-	observer:onNext(result)
-end
-
 function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	assert(leftStream, "leftStream is required")
 	assert(rightStream, "rightStream is required")
@@ -142,25 +116,43 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local expiredSubject = rx.Subject.create()
 	local expiredClosed = false
 
+	local function singleSchemaResult(record)
+		return Result.new():attach(record.schemaName, record.entry)
+	end
+
+	local function emitUnmatched(observer, strategy, side, record)
+		if not record or record.matched then
+			return
+		end
+
+		local shouldEmit = (side == "left" and strategy.emitUnmatchedLeft)
+			or (side == "right" and strategy.emitUnmatchedRight)
+
+		if not shouldEmit then
+			return
+		end
+
+		observer:onNext(singleSchemaResult(record))
+	end
+
+	local function publishExpiration(side, key, recordEntry, reason)
+		if not recordEntry or recordEntry.matched then
+			return
+		end
+		expiredSubject:onNext({
+			schema = recordEntry.schemaName,
+			key = key,
+			reason = reason,
+			result = singleSchemaResult(recordEntry),
+		})
+	end
+
 	local function closeExpiredWith(method, ...)
 		if expiredClosed then
 			return
 		end
 		expiredClosed = true
 		expiredSubject[method](expiredSubject, ...)
-	end
-
-	local function publishExpiration(side, key, record, reason)
-		if not record or record.matched then
-			return
-		end
-		local packet = Result.new():attach(record.schemaName, record.entry)
-		expiredSubject:onNext({
-			schema = record.schemaName,
-			key = key,
-			reason = reason,
-			result = packet,
-		})
 	end
 
 	local observable = rx.Observable.create(function(observer)
@@ -181,6 +173,25 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			strategy.onMatch(observer, leftRecord, rightRecord)
 		end
 
+		local function upsertCacheEntry(cache, key, entry, schemaName)
+			local record = cache[key]
+			if record then
+				record.entry = entry
+				record.matched = false
+				record.key = key
+				record.schemaName = schemaName
+			else
+				record = {
+					entry = entry,
+					matched = false,
+					key = key,
+					schemaName = schemaName,
+				}
+				cache[key] = record
+			end
+			return record
+		end
+
 		local function handleEntry(side, cache, otherCache, order, entry)
 			local meta = Schema.assertRecordHasMeta(entry, side)
 			local schemaName = resolveSchemaName(meta, side)
@@ -190,21 +201,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				return
 			end
 			meta.joinKey = key
-			local record = cache[key]
-			if record then
-				record.entry = entry
-				record.matched = false
-				record.key = key
-				record.schemaName = meta.schema or schemaName
-			else
-				cache[key] = {
-					entry = entry,
-					matched = false,
-					key = key,
-					schemaName = meta.schema or schemaName,
-				}
-				record = cache[key]
-			end
+			local record = upsertCacheEntry(cache, key, entry, meta.schema or schemaName)
 
 			touchKey(order, key)
 
@@ -272,8 +269,8 @@ end
 local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
 	targetRecord.RxMeta = targetRecord.RxMeta or {}
 	targetRecord.RxMeta.schema = schemaName
--- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
--- the mapper replaces the payload, so we backfill from the original metadata.
+	-- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
+	-- the mapper replaces the payload, so we backfill from the original metadata.
 	if targetRecord.RxMeta.schemaVersion == nil then
 		targetRecord.RxMeta.schemaVersion = fallbackMeta and fallbackMeta.schemaVersion or nil
 	end
@@ -293,7 +290,7 @@ function JoinObservable.chain(resultStream, opts)
 	assert(resultStream and resultStream.subscribe, "resultStream must be an observable")
 
 	opts = opts or {}
-	local from = opts.schema or opts.alias or opts.from
+	local from = opts.schema or opts.from
 	assert(from, "opts.from (or opts.schema) is required")
 
 	local mappings = {}
@@ -326,8 +323,8 @@ function JoinObservable.chain(resultStream, opts)
 				return
 			end
 
-		for _, mapping in ipairs(mappings) do
-			local selection = Result.selectSchemas(result, { [mapping.schema] = mapping.renameTo })
+			for _, mapping in ipairs(mappings) do
+				local selection = Result.selectSchemas(result, { [mapping.schema] = mapping.renameTo })
 				local record = selection:get(mapping.renameTo)
 				if record then
 					local output = record

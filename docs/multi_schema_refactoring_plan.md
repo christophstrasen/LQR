@@ -13,13 +13,13 @@ Goal: move from positional `{ left, right }` join outputs to schema-indexed reco
 ### 1. Baseline inventory (DONE)
 - ✅ `rg "pair\.left"` sweep complete; all examples/experiments/tests now use `result:get("schemaName")`.
 - ✅ Strategies and expiration logic updated to work with `JoinResult`.
-- ✅ Helpers (`Schema.wrap`, tests) now expect schema name first and return schema-tagged observables.
+- ✅ Helpers (`Schema.wrap`, tests) now expect schema name first, enforce per-record IDs, and return schema-tagged observables.
 
 ### 2. Introduce a schema-aware result container
 - Create `JoinObservable/result.lua` with:
   - Constructor `Result.new()` returning `{ RxMeta = { schemas = {} } }`.
   - Methods `attach(schemaName, record)`, `get(schemaName)`, `schemas()` iterator, and serialization helpers.
-  - Logic to merge `record.RxMeta` into `Result.RxMeta.schemas[schemaName]`, preserving join keys/sourceTime.
+  - Logic to merge `record.RxMeta` into `Result.RxMeta.schemaMap[schemaName]`, preserving ids/join keys/sourceTime.
 - Update `JoinObservable/init.lua` to build/emit `Result` objects instead of plain tables. `handleMatch` returns a `Result` that attaches left/right schema payloads; unmatched emissions attach only their side.
 
 ### 3. Update join strategies

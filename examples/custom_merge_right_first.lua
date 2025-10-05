@@ -12,12 +12,16 @@ local Schema = require("JoinObservable.schema")
 local leftStream = Schema.wrap("customers", rx.Observable.fromTable({
 	{ id = 1, side = "left", note = "would normally arrive first" },
 	{ id = 2, side = "left", note = "still left" },
-}), "customers")
+}), {
+	idField = "id",
+})
 
 local rightStream = Schema.wrap("payments", rx.Observable.fromTable({
 	{ id = 1, side = "right", note = "right events" },
 	{ id = 2, side = "right", note = "another right" },
-}), "payments")
+}), {
+	idField = "id",
+})
 
 local function rightFirstMerge(leftTagged, rightTagged)
 	-- `fromTable` emits synchronously, so the default `merge` would drain the entire

@@ -41,7 +41,7 @@
 ## Day 3 – Schema-Aware Chaining
 
 ### What we built
-- **Schema metadata everywhere:** Every stream entering `JoinObservable` now goes through `Schema.wrap("schemaName", observable)`, guaranteeing `record.RxMeta.schema`, versioning, and source times exist before we touch caches. This let us drop the legacy `left/right` pair objects entirely and emit `JoinResult`s keyed by schema name.
+- **Schema metadata everywhere:** Every stream entering `JoinObservable` now goes through `Schema.wrap("schemaName", observable, { idField = ... })`, guaranteeing `record.RxMeta.schema`, IDs, versioning, and source times exist before we touch caches. This let us drop the legacy `left/right` pair objects entirely and emit `JoinResult`s keyed by schema name.
 - **JoinResult utilities:** Added `Result.clone`, `Result.selectSchemas`, and `result:attachFrom(other, schemaName, rename)` so we can persist composite records across joins without rebuilding tables. Payloads are shallow-copied (top-level table only), and metadata is cloned/renamed automatically.
 - **Explicit chaining helper:** `JoinObservable.chain(resultStream, { from = { { schema = "orders", renameTo = "...", map = fn }, ... } })` forwards one or more schema names from an upstream join into a new schema-tagged observable. It subscribes lazily, respects unsubscription, and optionally maps each payload (projector → renamed to `map`). This replaces the manual subject plumbing we started with.
 - **Multi-schema experiment:** `experiments/multi_join_chaining.lua` now chains customers → orders → payments using `chain`. We forward both the enriched order and the raw customer schema so the downstream join can access whichever representation it needs.
@@ -56,3 +56,26 @@
 - Extend `chain` to accept declarative `on` maps or multi-key declarations so downstream joins can reference schemas directly (`customers.id`, `orders.customerId`) without hand-written selectors.
 - Consider auto-generating schema name suffixes (configurable format) when callers omit `renameTo`, especially for self-joins.
 - Explore helper sugar (`Result.flatten`, metrics/logging hooks) once we have a few more real-world scenarios.
+
+## Day 4 – Identity Enforcement & Alias Cleanup
+
+### What we built
+- **Guaranteed record IDs:** `Schema.wrap` now demands an `idField` or `idSelector` (unless the record already carries `RxMeta.id`). Missing or failing IDs trigger a warning and the record is dropped before it reaches the join. The wrapper also stamps `RxMeta.idField` for debugging, so downstream stages know which field produced the identifier.
+- **Schema-first cache metadata:** The join core no longer tracks `record.alias`. Cache entries, expiration packets, and `JoinResult` plumbing all use `record.schemaName`, which removed a bunch of legacy terminology and eliminated ambiguous fields in expirations (`packet.schema` replaces `packet.alias`).
+- **Result API modernization:** `Result` now exposes `schemaNames` and `selectSchemas`. The internal metadata table is `RxMeta.schemaMap`, keeping the naming consistent everywhere.
+- **Examples/tests updated:** Every example/experiment wraps sources with explicit ID info, including functional selectors (partition/localId). Specs were upgraded with helpers that auto-derive IDs, and new tests ensure `Schema.wrap` enforces IDs (field-based and selector-based) while dropping invalid payloads.
+- **Love2D visualization harness:** Added `viz/main.lua` and `viz/pre_render.lua` to rasterize schemas in real time. Inner grids track customers/orders while an outer overlay highlights joined and expired events with separate fades/palettes.
+- **Config-driven knobs:** Centralized palette choices, stream delays, expiration windows, fade durations, and grid geometry in `viz/sources.lua`, along with hundreds of synthetic customers/orders (IDs 101–400+) so demos stay lively.
+
+### Key insights
+1. **Identity must enter at the edge:** Trying to invent IDs inside the join leads to nondeterministic caches. Forcing callers to declare the identifier in `Schema.wrap` keeps retention logic predictable and documents the domain contract.
+2. **Schema terminology beats “alias”:** Once we stopped storing `record.alias`, it became obvious how many code paths and docs were still mixing metaphors. Consolidating on schema names made debugging expiration packets and downstream joins simpler.
+3. **Metadata hygiene prevents leaks:** The temporary regression (misusing `record` inside `publishExpiration`) reminded us how easy it is to stomp on cache entries when variable names overlap. Keeping clear structures (`recordEntry`, avoids those side effects.
+4. **Visualization needs strict metadata:** Because every record passed through `Schema.wrap`, the renderer could introspect without special cases. Hover tooltips became meaningful once we carried full customer/order/record tables rather than pre-formatted strings.
+
+### Open questions / next steps
+- Offer helper sugar for generated IDs (e.g., hash-based) so callers without natural keys can opt in consciously rather than writing selectors by hand.
+- Revisit the `JoinObservable.chain` API to reduce boilerplate now that schema IDs are guaranteed—maybe forward composite records when appropriate.
+- Document best practices for `idSelector` error handling (e.g., metrics hooks) so dropped records remain observable in production.
+- Stream real join output (not just synthetic tables) into the visualization to validate lifetimes under real backpressure.
+- Add keyboard/GUI controls (pause, speed sliders, schema filters) so we can inspect heavy joins without editing code.

@@ -9,17 +9,29 @@ local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 
-local leftStream = Schema.wrap("leftMetrics", rx.Observable.fromTable({
-	{ id = 1, payload = "left-1" },
-	{ id = 2, payload = "left-2" },
-	{ id = 3, payload = "left-3" },
-}, ipairs), "leftMetrics")
+local leftStream = Schema.wrap(
+	"leftMetrics",
+	rx.Observable.fromTable({
+		{ id = 1, payload = "left-1" },
+		{ id = 2, payload = "left-2" },
+		{ id = 3, payload = "left-3" },
+	}, ipairs),
+	{
+		idField = "id",
+	}
+)
 
-local rightStream = Schema.wrap("rightMetrics", rx.Observable.fromTable({
-	{ id = 1, payload = "right-1" },
-	{ id = 2, payload = "right-2" },
-	{ id = 4, payload = "right-4" },
-}, ipairs), "rightMetrics")
+local rightStream = Schema.wrap(
+	"rightMetrics",
+	rx.Observable.fromTable({
+		{ id = 1, payload = "right-1" },
+		{ id = 2, payload = "right-2" },
+		{ id = 4, payload = "right-4" },
+	}, ipairs),
+	{
+		idField = "id",
+	}
+)
 
 local joinStream, expiredStream = JoinObservable.createJoinObservable(leftStream, rightStream, {
 	on = "id",
@@ -36,46 +48,38 @@ local metrics = {
 	schemaNames = {},
 }
 
-expiredStream:subscribe(function(packet)
-	local schemaName = packet.schema or "unknown"
+expiredStream:subscribe(function(record)
+	local schemaName = record.schema or "unknown"
 	metrics.total = metrics.total + 1
 	metrics.schemaNames[schemaName] = (metrics.schemaNames[schemaName] or 0) + 1
-	metrics.reasons[packet.reason] = (metrics.reasons[packet.reason] or 0) + 1
-	local entry = packet.result and packet.result:get(schemaName)
-	print(
-		("[EXPIRED] schema=%s id=%s reason=%s"):format(
-			schemaName,
-			entry and entry.id or "nil",
-			packet.reason
-		)
-	)
+	metrics.reasons[record.reason] = (metrics.reasons[record.reason] or 0) + 1
+	local entry = record.result and record.result:get(schemaName)
+	print(("[EXPIRED] schema=%s id=%s reason=%s"):format(schemaName, entry and entry.id or "nil", record.reason))
 end, function(err)
 	io.stderr:write(("Expired stream error: %s\n"):format(err))
 end, function()
-	print(
-		("[METRICS] Expired total=%d schemas=%s reasons=%s"):format(
-			metrics.total,
+	print(("[METRICS] Expired total=%d schemas=%s reasons=%s"):format(
+		metrics.total,
+		(function()
+			local schemaParts = {}
+			for name, count in pairs(metrics.schemaNames) do
+				table.insert(schemaParts, name .. "=" .. count)
+			end
+			table.sort(schemaParts)
+			return table.concat(schemaParts, ",")
+		end)(),
+		table.concat(
 			(function()
-				local schemaParts = {}
-				for name, count in pairs(metrics.schemaNames) do
-					table.insert(schemaParts, name .. "=" .. count)
+				local reasonParts = {}
+				for reason, count in pairs(metrics.reasons) do
+					table.insert(reasonParts, reason .. "=" .. count)
 				end
-				table.sort(schemaParts)
-				return table.concat(schemaParts, ",")
+				table.sort(reasonParts)
+				return reasonParts
 			end)(),
-			table.concat(
-				(function()
-					local reasonParts = {}
-					for reason, count in pairs(metrics.reasons) do
-						table.insert(reasonParts, reason .. "=" .. count)
-					end
-					table.sort(reasonParts)
-					return reasonParts
-				end)(),
-				","
-			)
+			","
 		)
-	)
+	))
 end)
 
 joinStream:subscribe(function(result)

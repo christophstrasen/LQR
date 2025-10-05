@@ -8,8 +8,8 @@ local function cloneSchemaMeta(meta, overrideSchema)
 		return {}
 	end
 
--- Explainer: schema metadata drives downstream schema tracking, so we shallow-copy it
--- to decouple renamed schema names without rewriting the entire record.
+	-- Explainer: schema metadata drives downstream schema tracking, so we shallow-copy it
+	-- to decouple renamed schema names without rewriting the entire record.
 	return {
 		schema = overrideSchema or meta.schema,
 		schemaVersion = meta.schemaVersion,
@@ -64,11 +64,6 @@ function Result:schemaNames()
 	end
 	table.sort(output)
 	return output
-end
-
-function Result:aliases()
-	-- Compatibility shim: prefer `result:schemaNames()` going forward.
-	return self:schemaNames()
 end
 
 ---Creates a new JoinResult containing the provided schema mapping.
