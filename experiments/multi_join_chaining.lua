@@ -37,7 +37,7 @@ local enrichedOrdersStream = JoinObservable.chain(customerOrderJoin, {
 	from = {
 		{
 			schema = "orders",
-			renameTo = "orders_with_customer",
+			renameTo = "orders_renamed",
 			map = function(orderRecord, result)
 				-- Explainer: enrich each forwarded order so the next join has customer context.
 				orderRecord.orderId = orderRecord.orderId or orderRecord.id
@@ -78,12 +78,14 @@ local orderPaymentJoin = JoinObservable.createJoinObservable(enrichedOrdersStrea
 })
 
 orderPaymentJoin:subscribe(function(result)
-	local enrichedOrder = result:get("orders_with_customer")
-	local joinedCustomer = result:get("customers")
+	local enrichedOrder = result:get("orders_renamed")
+	local forwardedCustomer = result:get("customers")
 	local payment = result:get("payments")
 
 	if enrichedOrder and payment then
-		local customerName = joinedCustomer and joinedCustomer.name or (enrichedOrder.customer and enrichedOrder.customer.name) or "unknown"
+		local customerName = forwardedCustomer and forwardedCustomer.name
+			or (enrichedOrder.customer and enrichedOrder.customer.name)
+			or "unknown"
 		print(
 			("[ORDER-PAYMENT] order=%s payment=%s amount=%s (customer=%s)"):format(
 				enrichedOrder.orderId,
@@ -93,7 +95,9 @@ orderPaymentJoin:subscribe(function(result)
 			)
 		)
 	elseif enrichedOrder then
-		local customerName = joinedCustomer and joinedCustomer.name or (enrichedOrder.customer and enrichedOrder.customer.name) or "unknown"
+		local customerName = forwardedCustomer and forwardedCustomer.name
+			or (enrichedOrder.customer and enrichedOrder.customer.name)
+			or "unknown"
 		print(
 			("[ORDER-PAYMENT] unmatched order=%s total=%s customer=%s"):format(
 				enrichedOrder.orderId,
