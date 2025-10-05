@@ -12,7 +12,7 @@ This plan captures the current agreements around schema metadata for `JoinObserv
 2. **Schema prefixing:** All system-managed fields are prefixed with `Rx` to avoid user collisions; internal helpers may add more under `RxMeta` later.
 3. **Mandatory schemas:** Any observable entering `JoinObservable.createJoinObservable` **must** emit records with populated `RxMeta`. The join will assert hard if metadata is missing or malformed—no silent defaults.
 4. **Schema helper:** We provide a helper (e.g., `Schema.wrap(schemaName, stream, opts)`) so call sites can wrap raw observables before joining. Helper injects `RxMeta` if absent and leaves existing metadata untouched.
-5. **Metadata propagation:** Expiration and match outputs forward each side’s metadata unchanged. No automatic merging of left/right; higher-level utilities (`asSchema`, aliases) can compose new schemas when desired.
+5. **Metadata propagation:** Expiration and match outputs forward each side’s metadata unchanged. No automatic merging of left/right; higher-level utilities (`asSchema`, schema renaming helpers) can compose new schemas when desired.
 6. **No default stripping:** The low-level API exposes `RxMeta` by default. A future helper may “rename” or rebuild schemas for downstream consumers, but the join itself never removes metadata.
 
 ## Implementation Steps
@@ -34,7 +34,7 @@ This plan captures the current agreements around schema metadata for `JoinObserv
 4. **Docs + context updates**
    - Extend `docs/low_level_API.md` with a “Minimum Internal Schema” section describing `RxMeta`.
    - Update `.aicontext/context.md` and any other guidance docs to reflect mandatory schema wrapping and helper usage.
-   - Capture best practices for aliasing and chaining (even if not implemented yet).
+   - Capture best practices for schema naming and chaining (even if not implemented yet).
 
 5. **Examples/tests refresh**
    - Wrap every example stream through the new helper so they emit proper metadata.
@@ -42,7 +42,7 @@ This plan captures the current agreements around schema metadata for `JoinObserv
    - Document how to inspect schemas in the example output (e.g., `local customer = result:get("customers")`).
 
 6. **Future work placeholders**
-   - Design `asSchema`/alias helpers that can rename or merge schemas for chained joins.
+   - Design `asSchema`/renaming helpers that can relabel or merge schemas for chained joins.
    - Explore normalized emission structures once we need multi-schema records beyond `left/right`.
    - Decide whether to warn on `RxMeta.sourceTime` anomalies or let callers self-police.
 

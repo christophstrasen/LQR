@@ -68,11 +68,11 @@ end, function()
 end)
 
 expiredStream:subscribe(function(packet)
-	local alias = packet.alias or "unknown"
-	local entry = packet.result and packet.result:get(alias)
+	local schemaName = packet.schema or "unknown"
+	local entry = packet.result and packet.result:get(schemaName)
 	print(
-		("[EXPIRED] alias=%s id=%s reason=%s"):format(
-			alias,
+		("[EXPIRED] schema=%s id=%s reason=%s"):format(
+			schemaName,
 			entry and entry.orderId or "nil",
 			packet.reason
 		)

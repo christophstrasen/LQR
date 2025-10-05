@@ -16,8 +16,8 @@ Joining event streams differs from joining static tables. Streams are unbounded 
 
 - **Inputs:** any Rx observables; typically `Observable.fromLuaEvent` streams or transformed pipelines.
 - **Outputs:**
-  - `joinStream`: emits `JoinResult` objects (see below) whose fields are indexed by schema/alias name rather than positional `left`/`right`.
-  - `expiredStream`: emits `{ alias, schema, key, reason, result }` packets for every eviction. Access the expired payload via `packet.result:get(packet.alias)`.
+- `joinStream`: emits `JoinResult` objects (see below) whose fields are indexed by schema name rather than positional `left`/`right`.
+- `expiredStream`: emits `{ schema, key, reason, result }` packets for every eviction (schema matches the name supplied to `Schema.wrap`). Access the expired payload via `packet.result:get(packet.schema)`.
 
 ### JoinResult shape
 
@@ -25,11 +25,11 @@ Every emission from `joinStream` is a `JoinResult`. It behaves like a table whos
 
 ```lua
 result:get("customers") -- returns the customer record or nil
-result:aliases()        -- sorted list of attached schema aliases
-result.RxMeta.schemas   -- metadata per alias (schema name, version, joinKey, sourceTime)
+result:schemaNames()    -- sorted list of attached schema names
+result.RxMeta.schemaMap -- metadata per schema (schema name, version, joinKey, sourceTime)
 ```
 
-Records are attached using the schema supplied to `Schema.wrap("schemaName", observable)`. If the same schema is used multiple times, wrap the stream with unique schema names (or future alias helpers) so you can address them unambiguously.
+Records are attached using the schema supplied to `Schema.wrap("schemaName", observable)`. If the same schema is used multiple times, wrap the stream with unique schema names so you can address them unambiguously.
 
 ## Constructor Reference
 
@@ -48,7 +48,17 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(leftStream
 ### `on`
 
 - `string`: field name to read the join key from (default `"id"`).
-- `function(record) -> key`: custom key selector. Returning `nil` drops the record with a warning.
+- `function(record[, side[, schemaName]]) -> key`: custom key selector. Returning `nil` drops the record with a warning. Extra parameters identify which side (`"left"/"right"`) and schema name triggered the call; they can be ignored.
+- `table`: declarative per-schema configuration:
+
+```lua
+on = {
+  customers = "id",
+  orders = { field = "customerId" },
+}
+```
+
+Each key is a schema name (matching what you passed to `Schema.wrap`). Each value accepts either a field name string, a `function(record)` callback, or a table with `field = "name"` / `selector = function(record) ... end`. Missing schema entries raise a descriptive error so misconfigurations surface early.
 
 ### `joinType`
 
@@ -173,19 +183,19 @@ Mandatory/optional fields:
 
 Records lacking `RxMeta` (or with malformed metadata) trigger immediate errors—the join will not silently invent schemas. This keeps low-level operations deterministic and makes chained joins feasible. Downstream consumers should read payloads via `result:get("schemaName")`; higher-level adapters can still rename or merge schemas as needed.
 
-Every schema name you pass to `Schema.wrap` becomes the alias stored on the resulting `JoinResult`. Choose unique names (e.g., `"customers_seller"` vs `"customers_buyer"`) if the same physical schema appears multiple times in a chain.
+Every schema name you pass to `Schema.wrap` becomes the label stored on the resulting `JoinResult`. Choose unique names (e.g., `"customers_seller"` vs `"customers_buyer"`) if the same physical schema appears multiple times in a chain.
 
 ### JoinResult utilities
 
-- `result:clone()` returns a new `JoinResult` with all aliases copied. Payload tables are shallow-copied (nested tables are still shared) so mutating the new record does not affect the original.
-- `Result.selectAliases(result, { fromAlias = "newAlias" })` builds a result containing only the requested aliases (renaming them if desired).
-- `result:attachFrom(otherResult, "orders", "forwardedOrders")` copies a single alias from another result into the current one—useful when you want to persist composite records across multiple joins.
+- `result:clone()` returns a new `JoinResult` with all schema names copied. Payload tables are shallow-copied (nested tables are still shared) so mutating the new record does not affect the original.
+- `Result.selectSchemas(result, { customers = "buyer" })` builds a result containing only the requested schema names (renaming them if desired).
+- `result:attachFrom(otherResult, "orders", "forwardedOrders")` copies a single schema payload from another result into the current one—useful when you want to persist composite records across multiple joins.
 
-**Note:** We shallow-copy payload tables so `record.RxMeta` can reflect the new alias; nested structures remain references. Treat intermediate results as immutable where possible and only mutate right before emitting final sinks.
+**Note:** We shallow-copy payload tables so `record.RxMeta` can reflect the new schema name; nested structures remain references. Treat intermediate results as immutable where possible and only mutate right before emitting final sinks.
 
 ### `JoinObservable.chain`
 
-`JoinObservable.chain(resultStream, opts)` forwards one alias from an upstream join into a new schema-tagged observable:
+`JoinObservable.chain(resultStream, opts)` forwards one schema from an upstream join into a new schema-tagged observable:
 
 ```lua
 local enrichedOrders = JoinObservable.chain(customerOrderJoin, {
@@ -205,11 +215,11 @@ local enrichedOrders = JoinObservable.chain(customerOrderJoin, {
 })
 ```
 
-- `from` (required) is either a schema name or a list of `{ schema, renameTo, map }` entries describing which aliases to forward.
-- `renameTo` (optional per entry) renames the schema for the downstream join; defaults to the same alias.
+- `from` (required) is either a schema name or a list of `{ schema, renameTo, map }` entries describing which schemas to forward.
+- `renameTo` (optional per entry) renames the schema for the downstream join; defaults to the same name.
 - `map` (optional per entry) receives the copied record and the original `JoinResult`; return a replacement table to enrich or filter emissions.
 
-The helper subscribes lazily and unsubscribes upstream when the downstream observer disposes, so backpressure and completion semantics match vanilla Rx. The returned observable already carries `RxMeta` with the requested alias and can be passed directly into another `JoinObservable.createJoinObservable` call.
+The helper subscribes lazily and unsubscribes upstream when the downstream observer disposes, so backpressure and completion semantics match vanilla Rx. The returned observable already carries `RxMeta` with the requested schema name and can be passed directly into another `JoinObservable.createJoinObservable` call.
 
 ### Determinism Policy
 
@@ -222,7 +232,7 @@ _(These will live under `examples/` in future work.)_
 - Inner join with default options, demonstrating key selector and unmatched suppression.
 - Custom key selector (function) and functional `on` example.
 - Interval-based expiration using event timestamps (include per-side asymmetry).
-- Time alias usage with TTL, showing how expired records surface.
+- Time schema usage with TTL, showing how expired records surface.
 - Predicate-based retention enforcing domain-specific logic.
 - Custom merge reordering right-stream records ahead of the left.
 - Consuming `expired` stream to emit metrics/logs.

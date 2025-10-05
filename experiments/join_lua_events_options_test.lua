@@ -64,12 +64,12 @@ local function describeExpired(prefix, packet)
 		return
 	end
 
-	local alias = packet.alias or "unknown"
-	local entry = packet.result and packet.result:get(alias)
-	print(("[%5.2f] [%s EXPIRED] alias=%s key=%s reason=%s entry=%s"):format(
+local schemaName = packet.schema or "unknown"
+local entry = packet.result and packet.result:get(schemaName)
+print(("[%5.2f] [%s EXPIRED] schema=%s key=%s reason=%s entry=%s"):format(
 		scheduler.currentTime,
 		prefix,
-		alias,
+		schemaName,
 		tostring(packet.key),
 		packet.reason or "unknown",
 		entry and ("id=" .. tostring(entry.id) .. ",rand=" .. tostring(entry.randNum)) or "nil"

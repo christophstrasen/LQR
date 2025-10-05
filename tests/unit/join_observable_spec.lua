@@ -9,70 +9,75 @@ local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 local Result = require("JoinObservable.result")
 
+local function collectValues(observable)
+	local results = {}
+	local completed = false
+	local errorMessage
+
+	observable:subscribe(function(value)
+		table.insert(results, value)
+	end, function(err)
+		errorMessage = err
+	end, function()
+		completed = true
+	end)
+
+	return results, completed, errorMessage
+end
+
+local function summarizePairs(pairs)
+	local summary = {}
+	for _, pair in ipairs(pairs) do
+		local leftRecord = pair:get("left")
+		local rightRecord = pair:get("right")
+		local leftId = leftRecord and leftRecord.id or nil
+		local rightId = rightRecord and rightRecord.id or nil
+		table.insert(summary, { left = leftId, right = rightId })
+	end
+
+	table.sort(summary, function(a, b)
+		local leftA = a.left or math.huge
+		local leftB = b.left or math.huge
+		if leftA == leftB then
+			local rightA = a.right or math.huge
+			local rightB = b.right or math.huge
+			return rightA < rightB
+		end
+		return leftA < leftB
+	end)
+
+	return summary
+end
+
+local function observableFromTable(schemaName, rows)
+	return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true))
+end
+
+local function subjectWithSchema(schemaName)
+	local source = rx.Subject.create()
+	return source, Schema.wrap(schemaName, source)
+end
+
+local function expiredEntry(packet)
+	if not packet then
+		return nil, nil
+	end
+	local schemaName = packet.schema or "unknown"
+	local entry = packet.result and packet.result:get(schemaName)
+	return entry, schemaName
+end
+
+local ordersCustomersOn = {
+	orders = "customerId",
+	customers = { field = "id" },
+}
+
 ---@diagnostic disable: undefined-global
 ---@diagnostic disable: undefined-field
-	describe("JoinObservable", function()
-		after_each(function()
-			JoinObservable.setWarningHandler()
-		end)
-
-	local function collectValues(observable)
-		local results = {}
-		local completed = false
-		local errorMessage
-
-		observable:subscribe(function(value)
-			table.insert(results, value)
-		end, function(err)
-			errorMessage = err
-		end, function()
-			completed = true
-		end)
-
-		return results, completed, errorMessage
-	end
-
-	local function summarizePairs(pairs)
-		local summary = {}
-		for _, pair in ipairs(pairs) do
-			local leftRecord = pair:get("left")
-			local rightRecord = pair:get("right")
-			local leftId = leftRecord and leftRecord.id or nil
-			local rightId = rightRecord and rightRecord.id or nil
-			table.insert(summary, { left = leftId, right = rightId })
-		end
-
-		table.sort(summary, function(a, b)
-			local leftA = a.left or math.huge
-			local leftB = b.left or math.huge
-			if leftA == leftB then
-				local rightA = a.right or math.huge
-				local rightB = b.right or math.huge
-				return rightA < rightB
-			end
-			return leftA < leftB
-		end)
-
-		return summary
-	end
-
-	local function observableFromTable(schemaName, rows)
-		return Schema.wrap(schemaName, rx.Observable.fromTable(rows, ipairs, true))
-	end
-
-	local function subjectWithSchema(schemaName)
-		local source = rx.Subject.create()
-		return source, Schema.wrap(schemaName, source)
-	end
-
-	local function expiredEntry(packet)
-		if not packet then
-			return nil, nil
-		end
-		local alias = packet.alias or "unknown"
-		local entry = packet.result and packet.result:get(alias)
-		return entry, alias
-	end
+describe("JoinObservable", function()
+	after_each(function()
+		JoinObservable.setWarningHandler()
+	end)
 
 describe("JoinResult helper", function()
 	local function buildResult()
@@ -96,10 +101,10 @@ describe("JoinResult helper", function()
 
 		assert.is_not_nil(result:get("customers"))
 		assert.is_not_nil(result:get("orders"))
-		assert.are.same({ "customers", "orders" }, result:aliases())
+		assert.are.same({ "customers", "orders" }, result:schemaNames())
 	end)
 
-	it("clones aliases without mutating the source", function()
+it("clones schema payloads without mutating the source", function()
 		local result = buildResult()
 		local clone = result:clone()
 
@@ -108,9 +113,9 @@ describe("JoinResult helper", function()
 		assert.are.equal(1, result:get("orders").customerId)
 	end)
 
-	it("selects and renames aliases", function()
+	it("selects and renames schema names", function()
 		local result = buildResult()
-		local renamed = Result.selectAliases(result, { customers = "buyer" })
+		local renamed = Result.selectSchemas(result, { customers = "buyer" })
 		local buyer = renamed:get("buyer")
 
 		assert.is_not_nil(buyer)
@@ -210,6 +215,120 @@ describe("Schema.wrap subject chaining", function()
 		}, summarizePairs(pairs))
 	end)
 
+	it("matches asymmetric key fields when the selector inspects schema metadata", function()
+		local orders = observableFromTable("orders", {
+			{ orderId = 101, customerId = 1, total = 50 },
+			{ orderId = 102, customerId = 2, total = 75 },
+		})
+
+		local customers = observableFromTable("customers", {
+			{ id = 1, name = "Ada" },
+			{ id = 2, name = "Bela" },
+		})
+
+		local join = JoinObservable.createJoinObservable(orders, customers, {
+			on = ordersCustomersOn,
+			joinType = "inner",
+		})
+
+		local results, completed, err = collectValues(join)
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.equal(2, #results)
+
+		local summary = {}
+		for _, pair in ipairs(results) do
+			local order = pair:get("orders")
+			local customer = pair:get("customers")
+			assert.is_not_nil(order)
+			assert.is_not_nil(customer)
+			table.insert(summary, {
+				orderId = order.orderId,
+				customerId = order.customerId,
+				customerName = customer.name,
+				orderKey = order.RxMeta and order.RxMeta.joinKey,
+				customerKey = customer.RxMeta and customer.RxMeta.joinKey,
+			})
+		end
+
+		table.sort(summary, function(a, b)
+			return a.orderId < b.orderId
+		end)
+
+		assert.are.same({
+			{
+				orderId = 101,
+				customerId = 1,
+				customerName = "Ada",
+				orderKey = 1,
+				customerKey = 1,
+			},
+			{
+				orderId = 102,
+				customerId = 2,
+				customerName = "Bela",
+				orderKey = 2,
+				customerKey = 2,
+			},
+		}, summary)
+	end)
+
+	it("evicts unmatched asymmetric rows without dropping schema metadata", function()
+		local orderSubject, orders = subjectWithSchema("orders")
+		local customerSubject, customers = subjectWithSchema("customers")
+
+		local join, expired = JoinObservable.createJoinObservable(orders, customers, {
+			on = ordersCustomersOn,
+			joinType = "left",
+			maxCacheSize = 1,
+		})
+
+		local emissions = {}
+		local joinSubscription = join:subscribe(function(result)
+			table.insert(emissions, result)
+		end)
+
+		local expiredPackets = {}
+		local expiredSubscription = expired:subscribe(function(packet)
+			table.insert(expiredPackets, packet)
+		end)
+
+		orderSubject:onNext({ orderId = 400, customerId = 10 })
+		orderSubject:onNext({ orderId = 401, customerId = 11 })
+		customerSubject:onNext({ id = 11, name = "Helen" })
+
+		orderSubject:onCompleted()
+		customerSubject:onCompleted()
+
+		joinSubscription:unsubscribe()
+		expiredSubscription:unsubscribe()
+
+		assert.are.equal(2, #emissions)
+
+		local evictedOrder = emissions[1]:get("orders")
+		assert.is_not_nil(evictedOrder)
+		assert.is_nil(emissions[1]:get("customers"))
+		assert.are.equal(400, evictedOrder.orderId)
+		assert.are.equal(10, evictedOrder.customerId)
+		assert.are.equal(10, evictedOrder.RxMeta and evictedOrder.RxMeta.joinKey)
+
+		local matchedOrder = emissions[2]:get("orders")
+		local matchedCustomer = emissions[2]:get("customers")
+		assert.is_not_nil(matchedOrder)
+		assert.is_not_nil(matchedCustomer)
+		assert.are.equal(401, matchedOrder.orderId)
+		assert.are.equal(11, matchedOrder.customerId)
+		assert.are.equal(11, matchedCustomer.id)
+
+		assert.is_true(#expiredPackets >= 1)
+		local expiredRecord = expiredEntry(expiredPackets[1])
+		assert.is_not_nil(expiredRecord)
+		assert.are.equal(400, expiredRecord.orderId)
+		assert.are.equal(10, expiredRecord.RxMeta and expiredRecord.RxMeta.joinKey)
+		assert.are.equal("evicted", expiredPackets[1].reason)
+		assert.are.equal("orders", expiredPackets[1].schema)
+	end)
+
 	it("surfaces expired records via the secondary observable", function()
 		local left = observableFromTable("left", {
 			{ schema = "left", id = 1 },
@@ -246,9 +365,9 @@ describe("Schema.wrap subject chaining", function()
 		assert.are.same(3, #expiredEvents)
 		local expiredIds = {}
 		for _, packet in ipairs(expiredEvents) do
-			local entry, alias = expiredEntry(packet)
+			local entry, schemaName = expiredEntry(packet)
 			if entry then
-				expiredIds[entry.id] = alias
+				expiredIds[entry.id] = schemaName
 			end
 		end
 		assert.are.same({
@@ -295,7 +414,7 @@ describe("Schema.wrap subject chaining", function()
 
 		local leftExpired = {}
 		for _, packet in ipairs(expiredEvents) do
-			if packet.alias == "left" then
+			if packet.schema == "left" then
 				table.insert(leftExpired, packet)
 			end
 		end
@@ -335,8 +454,8 @@ describe("Schema.wrap subject chaining", function()
 
 		assert.are.equal(2, #expiredEvents)
 		assert.are.same({ "left", "left" }, {
-			expiredEvents[1].alias,
-			expiredEvents[2].alias,
+			expiredEvents[1].schema,
+			expiredEvents[2].schema,
 		})
 		assert.are.same({ "evicted", "evicted" }, {
 			expiredEvents[1].reason,
@@ -872,7 +991,7 @@ describe("Schema.wrap subject chaining", function()
 		local rightExpired = {}
 		for _, packet in ipairs(expiredEvents) do
 			local entry = expiredEntry(packet)
-			if packet.alias == "left" then
+			if packet.schema == "left" then
 				table.insert(leftExpired, entry and entry.id or nil)
 			else
 				table.insert(rightExpired, entry and entry.id or nil)
@@ -894,7 +1013,7 @@ describe("JoinObservable.chain helper", function()
 		return Result.new():attach("orders", order)
 	end
 
-	it("forwards aliases lazily and cleans up subscriptions", function()
+	it("forwards schema streams lazily and cleans up subscriptions", function()
 		local upstreamSubject = rx.Subject.create()
 		local activeSubscriptions = 0
 
@@ -973,5 +1092,53 @@ describe("JoinObservable.chain helper", function()
 
 		upstreamSubject:onNext(makeResultWithOrder(3))
 		assert.are.same({ "orders_a", "orders_b" }, seenAliases)
+	end)
+
+	it("preserves join metadata when chaining asymmetric key selectors", function()
+		local orders = observableFromTable("orders", {
+			{ orderId = 501, customerId = 1 },
+			{ orderId = 502, customerId = 2 },
+		})
+
+		local customers = observableFromTable("customers", {
+			{ id = 1 },
+			{ id = 2 },
+		})
+
+		local join = JoinObservable.createJoinObservable(orders, customers, {
+			on = ordersCustomersOn,
+			joinType = "inner",
+		})
+
+		local forwarded = JoinObservable.chain(join, {
+			alias = "orders",
+			as = "forwarded_orders",
+			map = function(orderRecord)
+				return { invoiceId = orderRecord.orderId }
+			end,
+		})
+
+		local forwardedValues, completed, err = collectValues(forwarded)
+		assert.is_nil(err)
+		assert.is_true(completed)
+		assert.are.equal(2, #forwardedValues)
+
+		local summary = {}
+		for _, record in ipairs(forwardedValues) do
+			table.insert(summary, {
+				invoiceId = record.invoiceId,
+				schema = record.RxMeta and record.RxMeta.schema,
+				joinKey = record.RxMeta and record.RxMeta.joinKey,
+			})
+		end
+
+		table.sort(summary, function(a, b)
+			return a.invoiceId < b.invoiceId
+		end)
+
+		assert.are.same({
+			{ invoiceId = 501, schema = "forwarded_orders", joinKey = 1 },
+			{ invoiceId = 502, schema = "forwarded_orders", joinKey = 2 },
+		}, summary)
 	end)
 end)

@@ -37,3 +37,22 @@
 - Enforce merge contracts with hard assertions; failing to return an observable is programmer error.
 - Close `expired` when the main subscription unsubscribes to avoid dangling listeners.
 - Default `expirationWindow.mode = "time"` to a 60-second TTL over the `time` field; callers can override `ttl`, `field`, or `currentFn` as needed.
+
+## Day 3 – Schema-Aware Chaining
+
+### What we built
+- **Schema metadata everywhere:** Every stream entering `JoinObservable` now goes through `Schema.wrap("schemaName", observable)`, guaranteeing `record.RxMeta.schema`, versioning, and source times exist before we touch caches. This let us drop the legacy `left/right` pair objects entirely and emit `JoinResult`s keyed by schema name.
+- **JoinResult utilities:** Added `Result.clone`, `Result.selectSchemas`, and `result:attachFrom(other, schemaName, rename)` so we can persist composite records across joins without rebuilding tables. Payloads are shallow-copied (top-level table only), and metadata is cloned/renamed automatically.
+- **Explicit chaining helper:** `JoinObservable.chain(resultStream, { from = { { schema = "orders", renameTo = "...", map = fn }, ... } })` forwards one or more schema names from an upstream join into a new schema-tagged observable. It subscribes lazily, respects unsubscription, and optionally maps each payload (projector → renamed to `map`). This replaces the manual subject plumbing we started with.
+- **Multi-schema experiment:** `experiments/multi_join_chaining.lua` now chains customers → orders → payments using `chain`. We forward both the enriched order and the raw customer schema so the downstream join can access whichever representation it needs.
+- **Docs/tests:** `docs/low_level_API.md` documents `JoinResult` helpers and the `chain` syntax. Unit tests cover schema-name cloning/renaming, lazy subscription behavior, per-schema mapping, and multi-schema forwarding work correctly.
+
+### Key insights
+1. **Schema-driven joins > positional pairs:** Emitting schema-indexed records makes cascading joins far less brittle, especially when the same physical schema appears multiple times (self-joins). A simple schema-naming convention plus helpers provides the structure SQL’s `AS` clause gives us.
+2. **Chaining needs lifecycle discipline:** Wrapping the piping logic in `JoinObservable.chain` ensures backpressure and disposal behave like any other Rx operator. Subjects were easy to prototype but too fragile for real use.
+3. **Result utilities unlock higher-level APIs:** With `selectSchemas`/`attachFrom` in place, we can start designing richer chaining patterns or DSLs (e.g., multi-key `on` clauses) without touching the join core again.
+
+### Open questions / next steps
+- Extend `chain` to accept declarative `on` maps or multi-key declarations so downstream joins can reference schemas directly (`customers.id`, `orders.customerId`) without hand-written selectors.
+- Consider auto-generating schema name suffixes (configurable format) when callers omit `renameTo`, especially for self-joins.
+- Explore helper sugar (`Result.flatten`, metrics/logging hooks) once we have a few more real-world scenarios.

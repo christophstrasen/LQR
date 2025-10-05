@@ -27,12 +27,12 @@ local function printPair(label, result)
 end
 
 local function printExpired(label, packet)
-	local alias = packet.alias or "unknown"
-	local entry = packet.result and packet.result:get(alias)
-	print(("[%5.2f] [%s expired] alias=%s key=%s reason=%s entry=%s"):format(
+local schemaName = packet.schema or "unknown"
+local entry = packet.result and packet.result:get(schemaName)
+print(("[%5.2f] [%s expired] schema=%s key=%s reason=%s entry=%s"):format(
 		scheduler.currentTime,
 		label,
-		alias,
+		schemaName,
 		tostring(packet.key),
 		packet.reason or "n/a",
 		entry and ("id=" .. tostring(entry.id) .. ",ts=" .. tostring(entry.ts)) or "nil"

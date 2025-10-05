@@ -1,9 +1,9 @@
 # Multi-Schema Refactoring Plan
 
-Goal: move from positional `{ left, right }` join outputs to schema-indexed records so we can chain joins, preserve aliases, and evolve the `on` contract later. This plan assumes we can break the current API (no backward compatibility required).
+Goal: move from positional `{ left, right }` join outputs to schema-indexed records so we can chain joins, preserve schema names, and evolve the `on` contract later. This plan assumes we can break the current API (no backward compatibility required).
 
 ## Guiding Principles
-1. **Schema-first:** Every emitted record exposes a map of schema names/aliases → payloads plus metadata describing which schemas are present.
+1. **Schema-first:** Every emitted record exposes a map of schema names → payloads plus metadata describing which schemas are present.
 2. **Deterministic helpers:** Callers must never poke into internal tables; provide helpers (`JoinResult.get("schema")`, etc.) so future structural tweaks stay localized.
 3. **Stage work incrementally:** Touch the core once (introduce new record structure), then migrate strategies/examples/tests in waves to keep diffs reviewable.
 4. **Leave `on` alone for now:** Focus on the data container. Once schema-indexed records exist, we can revisit richer key selectors.
@@ -11,7 +11,7 @@ Goal: move from positional `{ left, right }` join outputs to schema-indexed reco
 ## Refactor Steps
 
 ### 1. Baseline inventory (DONE)
-- ✅ `rg "pair\.left"` sweep complete; all examples/experiments/tests now use `result:get("alias")`.
+- ✅ `rg "pair\.left"` sweep complete; all examples/experiments/tests now use `result:get("schemaName")`.
 - ✅ Strategies and expiration logic updated to work with `JoinResult`.
 - ✅ Helpers (`Schema.wrap`, tests) now expect schema name first and return schema-tagged observables.
 
@@ -35,13 +35,12 @@ Goal: move from positional `{ left, right }` join outputs to schema-indexed reco
 - We skipped transitional adapters because everything migrated in one pass.
 
 ### 6. Public surface migration (DONE)
-- ✅ All examples/experiments now bind to schema aliases via `result:get`.
+- ✅ All examples/experiments now bind to schema names via `result:get`.
 - ✅ `tests/unit/join_observable_spec.lua` reworked; added new specs for `JoinResult`/`Schema.wrap` chaining.
 - ✅ Docs updated (`docs/low_level_API.md`, `.aicontext/context.md`, this plan).
 
-### 7. Clean-up & helper ergonomics
-- ✅ `JoinResult` now exposes `clone`, `selectAliases`, and `attachFrom` (shallow copy of payload tables, fresh metadata per alias).
-- ✅ `JoinObservable.chain` wraps the Rx plumbing for forwarding aliases (now supporting multi-alias lists), handling lazy subscription and allowing optional per-alias map functions.
+- ✅ `JoinResult` now exposes `clone`, `selectSchemas`, and `attachFrom` (shallow copy of payload tables, fresh metadata per schema).
+- ✅ `JoinObservable.chain` wraps the Rx plumbing for forwarding schema names (now supporting multi-schema lists), handling lazy subscription and allowing optional per-schema map functions.
 - ✅ Docs/tests updated; `experiments/multi_join_chaining.lua` now exercises the chaining helper instead of manual subjects.
 - Remaining work:
   1. Evaluate whether we want helper sugar for `options.on` (per-schema field lists, multi-key joins).

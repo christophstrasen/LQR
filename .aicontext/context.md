@@ -21,6 +21,7 @@
 * **Classify your code comments** Into different categories. I see at least these two frequent categoroes "Explainers" that describe the implemented concepts, logic or intent and "Implementation Status" That highlights how complete something is, if we look at a stub, what should happen next etc.
 * **Code comments explain intent** When you leave comments, don't just describe what happens, but _why_ it happens and how it ties in with other systems. Briefly.
 * **Write tests and use them** when we refactor, change or expand our module work (not necessary when we just run experiments).
+* **prefer minimal-first solutions** When designing system extensions, do not put in optional and nice-to-have fluff.
 
 ## 2) Output Requirements
 - **never use diff output** But only copy-paste ready code and instructions
@@ -76,7 +77,7 @@ tbd
 - **Graceful Degradation:** Prefer tolerant behavior for untestable or world-variance cases. Try to fall back and emit a single debug log, and proceed. .
 - **Schema metadata is mandatory:** Any record entering `JoinObservable.createJoinObservable` must already carry `record.RxMeta.schema` (via `Schema.wrap`). Minimal fields: `schema` (string), optional `schemaVersion` (positive int), optional `sourceTime` (number). The join stamps `RxMeta.joinKey` itself.
 - **Chaining joins:** Prefer `JoinObservable.chain` + `JoinResult.selectAliases` over manual subjects when forwarding aliases to downstream joins. Treat intermediate payloads as immutable unless you intentionally mutate them right before emitting.
-- **Join outputs are schema-indexed:** Subscribers receive `JoinResult` objects—call `result:get("schemaName")` instead of relying on `pair.left/right`. Expiration packets expose `packet.alias` and `packet.result`.
+- **Join outputs are schema-indexed:** Subscribers receive `JoinResult` objects—call `result:get("schemaName")` instead of relying on `pair.left/right`. Expiration packets expose `packet.schema` and `packet.result`.
 
 ## 8) Design Principles
 - Favor throughput/low latency over strict determinism: the low-level join does not guarantee globally stable emission ordering. If a flow needs determinism, use custom merge/order operators on the way in instead of burdening the core path.
@@ -90,3 +91,13 @@ tbd
 - Local Lua runtime 5.1 ist installed and exists
 - Treat the workspace as sandboxed; only the repository under `~/projects/Lua-ReactiveX-exploration` is writable unless instructed otherwise.
 - Shell startup emits benign `gpg-agent` warnings; ignore them unless the user flags an issue.
+
+## 11) Project Glossary
+- **record**: Single emission flowing through Rx graphs. Always a Lua table carrying payload fields plus `record.RxMeta` metadata (`schema`, optional `schemaVersion`/`sourceTime`, and the join’s `joinKey` once computed).
+- **schema**: Logical contract describing the shape and intent of a record type (e.g., “orders”, “payments”). We enforce schema tagging by wrapping sources with `Schema.wrap`, which also validates metadata.
+- **schema name**: Human-readable label assigned via `Schema.wrap("name", observable)` or renamed later via `JoinResult.selectSchemas` / `JoinObservable.chain`. Joins and downstream consumers address records by this label (e.g., `result:get("customers")`).
+- **JoinResult**: Container emitted by `JoinObservable.createJoinObservable`. Behaves like a table keyed by schema name and exposes helpers such as `get`, `schemaNames`, `clone`, `selectSchemas`, and `attachFrom`.
+- **expired record**: Object emitted by the secondary observable returned from `createJoinObservable`. Shape: `{ schema, key, reason, result }`, where `result` is a `JoinResult` containing only the expired record.
+- **expiration window / retention policy**: Configuration that decides how long cached records stick around (`count`, `interval`, `time`, or `predicate` modes). Once a record ages out we emit the expirated record and optionally an unmatched result.
+- **chain**: Helper (`JoinObservable.chain`) that forwards one or more schema names from an upstream `JoinResult` stream into fresh schema-tagged observables so downstream joins can subscribe without manual Subjects.
+- **mergeSources**: Optional function in join options that replaces the default `left:merge(right)` behavior. Used for custom ordering/buffering before records hit the caches.

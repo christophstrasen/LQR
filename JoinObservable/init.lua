@@ -9,18 +9,80 @@ local warnf = warnings.warnf
 
 local JoinObservable = {}
 
-local function normalizeKeySelector(on)
-	if type(on) == "function" then
-		return on
+local function toFieldSelector(field, context)
+	if type(field) ~= "string" or field == "" then
+		error(("%s.field must be a non-empty string"):format(context))
 	end
-
-	local field = on or "id"
 	return function(entry)
 		return entry[field]
 	end
 end
 
-local function resolveAlias(meta, fallback)
+local function buildSelector(entry, context)
+	if entry == nil then
+		return nil
+	end
+
+	local entryType = type(entry)
+	if entryType == "string" then
+		return toFieldSelector(entry, context)
+	elseif entryType == "function" then
+		return entry
+	elseif entryType == "table" then
+		if entry.field ~= nil then
+			return toFieldSelector(entry.field, context)
+		elseif type(entry.selector) == "function" then
+			return entry.selector
+		end
+		error(("%s expects either 'field' (string) or 'selector' (function)"):format(context))
+	else
+		error(("%s must be a string, function, or table"):format(context))
+	end
+end
+
+local function normalizeKeySelector(on)
+    if type(on) == "function" then
+        return on
+    end
+
+    if type(on) == "table" then
+        local selectorsBySchema = {}
+        local selectorCount = 0
+
+        for schemaName, selectorConfig in pairs(on) do
+            assert(
+                type(schemaName) == "string" and schemaName ~= "",
+                "options.on keys must be non-empty schema names"
+            )
+            selectorsBySchema[schemaName] = buildSelector(
+                selectorConfig,
+                ("options.on['%s']"):format(schemaName)
+            )
+            selectorCount = selectorCount + 1
+        end
+
+        assert(selectorCount > 0, "options.on must declare at least one schema selector")
+
+        return function(entry, _side, schemaName)
+            local selector = schemaName and selectorsBySchema[schemaName]
+            if not selector then
+                error(
+                    ("No key selector configured for schema '%s'"):format(
+                        tostring(schemaName or "unknown")
+                    )
+                )
+            end
+            return selector(entry)
+        end
+    end
+
+    local field = on or "id"
+    return function(entry)
+        return entry[field]
+    end
+end
+
+local function resolveSchemaName(meta, fallback)
 	if meta and type(meta.schema) == "string" and meta.schema ~= "" then
 		return meta.schema
 	end
@@ -62,7 +124,7 @@ local function emitUnmatched(observer, strategy, side, record)
 		return
 	end
 
-	local result = Result.new():attach(record.alias, record.entry)
+	local result = Result.new():attach(record.schemaName, record.entry)
 	observer:onNext(result)
 end
 
@@ -92,9 +154,8 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		if not record or record.matched then
 			return
 		end
-		local packet = Result.new():attach(record.alias, record.entry)
+		local packet = Result.new():attach(record.schemaName, record.entry)
 		expiredSubject:onNext({
-			alias = record.alias,
 			schema = record.schemaName,
 			key = key,
 			reason = reason,
@@ -122,28 +183,25 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 
 		local function handleEntry(side, cache, otherCache, order, entry)
 			local meta = Schema.assertRecordHasMeta(entry, side)
-			local key = keySelector(entry)
+			local schemaName = resolveSchemaName(meta, side)
+			local key = keySelector(entry, side, schemaName)
 			if key == nil then
 				warnf("Dropped %s entry because join key resolved to nil", side)
 				return
 			end
 			meta.joinKey = key
-
-			local alias = resolveAlias(meta, side)
 			local record = cache[key]
 			if record then
 				record.entry = entry
 				record.matched = false
 				record.key = key
-				record.alias = alias
-				record.schemaName = meta.schema or alias
+				record.schemaName = meta.schema or schemaName
 			else
 				cache[key] = {
 					entry = entry,
 					matched = false,
 					key = key,
-					alias = alias,
-					schemaName = meta.schema or alias,
+					schemaName = meta.schema or schemaName,
 				}
 				record = cache[key]
 			end
@@ -211,9 +269,9 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	return observable, expiredSubject
 end
 
-local function copyMetaDefaults(targetRecord, fallbackMeta, alias)
+local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
 	targetRecord.RxMeta = targetRecord.RxMeta or {}
-	targetRecord.RxMeta.schema = alias
+	targetRecord.RxMeta.schema = schemaName
 -- Explainer: downstream joins rely on schemaVersion/joinKey/sourceTime even if
 -- the mapper replaces the payload, so we backfill from the original metadata.
 	if targetRecord.RxMeta.schemaVersion == nil then
@@ -227,7 +285,7 @@ local function copyMetaDefaults(targetRecord, fallbackMeta, alias)
 	end
 end
 
----Creates a derived observable by forwarding one alias from an upstream JoinResult stream.
+---Creates a derived observable by forwarding one schema from an upstream JoinResult stream.
 ---@param resultStream rx.Observable
 ---@param opts table
 ---@return rx.Observable
@@ -235,8 +293,8 @@ function JoinObservable.chain(resultStream, opts)
 	assert(resultStream and resultStream.subscribe, "resultStream must be an observable")
 
 	opts = opts or {}
-	local from = opts.alias or opts.from
-	assert(from, "opts.from (or opts.alias) is required")
+	local from = opts.schema or opts.alias or opts.from
+	assert(from, "opts.from (or opts.schema) is required")
 
 	local mappings = {}
 	if type(from) == "string" then
@@ -268,8 +326,8 @@ function JoinObservable.chain(resultStream, opts)
 				return
 			end
 
-			for _, mapping in ipairs(mappings) do
-				local selection = Result.selectAliases(result, { [mapping.schema] = mapping.renameTo })
+		for _, mapping in ipairs(mappings) do
+			local selection = Result.selectSchemas(result, { [mapping.schema] = mapping.renameTo })
 				local record = selection:get(mapping.renameTo)
 				if record then
 					local output = record

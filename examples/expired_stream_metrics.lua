@@ -33,18 +33,18 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(leftStream
 local metrics = {
 	total = 0,
 	reasons = {},
-	aliases = {},
+	schemaNames = {},
 }
 
 expiredStream:subscribe(function(packet)
-	local alias = packet.alias or "unknown"
+	local schemaName = packet.schema or "unknown"
 	metrics.total = metrics.total + 1
-	metrics.aliases[alias] = (metrics.aliases[alias] or 0) + 1
+	metrics.schemaNames[schemaName] = (metrics.schemaNames[schemaName] or 0) + 1
 	metrics.reasons[packet.reason] = (metrics.reasons[packet.reason] or 0) + 1
-	local entry = packet.result and packet.result:get(alias)
+	local entry = packet.result and packet.result:get(schemaName)
 	print(
-		("[EXPIRED] alias=%s id=%s reason=%s"):format(
-			alias,
+		("[EXPIRED] schema=%s id=%s reason=%s"):format(
+			schemaName,
 			entry and entry.id or "nil",
 			packet.reason
 		)
@@ -53,15 +53,15 @@ end, function(err)
 	io.stderr:write(("Expired stream error: %s\n"):format(err))
 end, function()
 	print(
-		("[METRICS] Expired total=%d aliases=%s reasons=%s"):format(
+		("[METRICS] Expired total=%d schemas=%s reasons=%s"):format(
 			metrics.total,
 			(function()
-				local aliasParts = {}
-				for alias, count in pairs(metrics.aliases) do
-					table.insert(aliasParts, alias .. "=" .. count)
+				local schemaParts = {}
+				for name, count in pairs(metrics.schemaNames) do
+					table.insert(schemaParts, name .. "=" .. count)
 				end
-				table.sort(aliasParts)
-				return table.concat(aliasParts, ",")
+				table.sort(schemaParts)
+				return table.concat(schemaParts, ",")
 			end)(),
 			table.concat(
 				(function()

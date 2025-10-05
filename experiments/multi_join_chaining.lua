@@ -26,10 +26,12 @@ local payments = wrapTable("payments", {
 	{ id = 5002, orderId = 1004, amount = 80 },
 })
 
+
 local customerOrderJoin = JoinObservable.createJoinObservable(customers, orders, {
-	on = function(record)
-		return record.customerId or record.id
-	end,
+	on = {
+		customers = "id",
+		orders = "customerId",
+	},
 	joinType = "left",
 })
 
@@ -71,9 +73,11 @@ end, function()
 end)
 
 local orderPaymentJoin = JoinObservable.createJoinObservable(enrichedOrdersStream, payments, {
-	on = function(record)
-		return record.orderId or record.id
-	end,
+	on = {
+		orders_renamed = "orderId",
+		customers = "id",
+		payments = "orderId",
+	},
 	joinType = "left",
 })
 

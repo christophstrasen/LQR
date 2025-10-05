@@ -5,10 +5,10 @@ local Strategies = {}
 local function emitResult(observer, leftRecord, rightRecord)
 	local packet = Result.new()
 	if leftRecord then
-		packet:attach(leftRecord.alias, leftRecord.entry)
+		packet:attach(leftRecord.schemaName, leftRecord.entry)
 	end
 	if rightRecord then
-		packet:attach(rightRecord.alias, rightRecord.entry)
+		packet:attach(rightRecord.schemaName, rightRecord.entry)
 	end
 	observer:onNext(packet)
 end
