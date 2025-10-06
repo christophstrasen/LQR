@@ -1,6 +1,3 @@
-package.path = package.path .. ";../?.lua;../?/init.lua"
-package.cpath = package.cpath .. ";../?.so"
-
 require("bootstrap")
 
 local DataSources = require("viz.sources")
