@@ -7,15 +7,17 @@ local DataSources = require("viz.sources")
 local PreRender = require("pre_render")
 local rx = require("reactivex")
 
-local gridConfig = DataSources.grid or {}
+local windowConfig = DataSources.window or {}
+local gridConfig = windowConfig.grid or {}
 local GRID_COLUMNS = gridConfig.columns or 32
 local GRID_ROWS = gridConfig.rows or 32
 local CELL_SIZE = gridConfig.cellSize or 26
 local CELL_PADDING = gridConfig.padding or 3
 local DEFAULT_COLOR = { 0.2, 0.2, 0.2, 1 }
-local FADE_DURATION_SECONDS = DataSources.fadeDurationSeconds or 10
+local FADE_DURATION_SECONDS = windowConfig.fadeSeconds or 10
 local INNER_INSET = 4
 
+local layerStatesByName = {}
 local cells = { inner = {}, outer = {} }
 local hover = nil
 local innerState = nil
@@ -36,8 +38,8 @@ local function normalizeColor(color)
 end
 
 local function normalizeLayer(layer)
-	if layer == "outer" then
-		return "outer"
+	if type(layer) == "string" and layer ~= "" then
+		return layer
 	end
 	return "inner"
 end
@@ -92,9 +94,10 @@ function StreamGrid.clear(layer)
 	if layer then
 		layer = normalizeLayer(layer)
 		cells[layer] = {}
-	else
-		cells.inner = {}
-		cells.outer = {}
+		return
+	end
+	for name in pairs(cells) do
+		cells[name] = {}
 	end
 end
 
@@ -143,28 +146,28 @@ local function summarizeRecord(record)
 	return "{" .. table.concat(fragments, ", ") .. "}"
 end
 
+local function copyTable(source)
+	if type(source) ~= "table" then
+		return {}
+	end
+	local copy = {}
+	for key, value in pairs(source) do
+		copy[key] = value
+	end
+	return copy
+end
+
 local function populateLayer(layer, state)
 	if not state then
 		return
 	end
 	StreamGrid.clear(layer)
 	state:forEachInOrder(function(entry, col, row)
-		local sourceMeta = entry.meta
-		local meta = {
-			id = entry.id,
-			layer = layer,
-			alpha = entry.alpha,
-			sources = entry.sources,
-			match = sourceMeta and sourceMeta.match or nil,
-			expired = sourceMeta and sourceMeta.expired or nil,
-			schema = sourceMeta and sourceMeta.schema or nil,
-			customer = sourceMeta and sourceMeta.customer or nil,
-			order = sourceMeta and sourceMeta.order or nil,
-			record = sourceMeta and (sourceMeta.record or (not sourceMeta.customer and not sourceMeta.order and sourceMeta)) or nil,
-		}
-		if not meta.schema and meta.record and meta.record.schema then
-			meta.schema = meta.record.schema
-		end
+		local meta = copyTable(entry.meta)
+		meta.id = meta.id or entry.id
+		meta.layer = layer
+		meta.alpha = entry.alpha
+		meta.sources = entry.sources
 		local cell = StreamGrid.setCell(layer, col, row, {
 			color = mixWithBackground(entry.color, entry.alpha),
 			meta = meta,
@@ -180,31 +183,38 @@ function love.load()
 	local height = GRID_ROWS * CELL_SIZE + 40
 	love.window.setMode(width, height, { resizable = false })
 	love.graphics.setFont(love.graphics.newFont(14))
-	innerState, outerState = PreRender.buildDemoStates({
+	local states
+	innerState, outerState, states = PreRender.buildDemoStates({
 		columns = GRID_COLUMNS,
 		rows = GRID_ROWS,
 		fadeDuration = FADE_DURATION_SECONDS,
 	})
-	populateLayer("inner", innerState)
-	populateLayer("outer", outerState)
+	layerStatesByName = states or {}
+	for name, state in pairs(layerStatesByName) do
+		cells[name] = cells[name] or {}
+		populateLayer(name, state)
+	end
 	needsRefresh = false
 end
 
 function love.update(dt)
-	if innerState then
-		innerState:advance(dt)
-		needsRefresh = true
-	end
-	if outerState then
-		outerState:advance(dt)
-		needsRefresh = true
-	end
+	local advanced = false
 	if dt and dt > 0 then
+		for _, state in pairs(layerStatesByName or {}) do
+			if state and state.advance then
+				state:advance(dt)
+				advanced = true
+			end
+		end
 		rx.scheduler.update(dt)
 	end
+	if advanced then
+		needsRefresh = true
+	end
 	if needsRefresh then
-		populateLayer("inner", innerState)
-		populateLayer("outer", outerState)
+		for name, state in pairs(layerStatesByName or {}) do
+			populateLayer(name, state)
+		end
 		needsRefresh = false
 	end
 end
@@ -257,24 +267,34 @@ function love.draw()
 		local label = string.format("Cell (%d,%d)", hover.col, hover.row)
 		if meta then
 			local parts = {}
-			if meta.match then
-				parts[#parts + 1] = "Match"
-			elseif meta.expired then
-				parts[#parts + 1] = "Expire"
+			if meta.label then
+				parts[#parts + 1] = tostring(meta.label)
 			end
-			if meta.schema then
-				parts[#parts + 1] = "schema=" .. tostring(meta.schema)
+			local hoverInfo = meta.hover
+			local function appendPair(key, value)
+				if value ~= nil then
+					if type(value) == "table" then
+						value = summarizeRecord(value)
+					elseif type(value) == "boolean" then
+						value = value and "true" or "false"
+					else
+						value = tostring(value)
+					end
+					parts[#parts + 1] = string.format("%s=%s", key, value)
+				end
 			end
-			if meta.customer then
-				parts[#parts + 1] = "customer=" .. summarizeRecord(meta.customer)
+			if type(hoverInfo) == "table" then
+				for key, value in pairs(hoverInfo) do
+					appendPair(key, value)
+				end
+			else
+				for key, value in pairs(meta) do
+					if key ~= "label" and key ~= "hover" and key ~= "layer" and key ~= "alpha" and key ~= "sources" then
+						appendPair(key, value)
+					end
+				end
 			end
-			if meta.order then
-				parts[#parts + 1] = "order=" .. summarizeRecord(meta.order)
-			end
-			if meta.record then
-				parts[#parts + 1] = "record=" .. summarizeRecord(meta.record)
-			end
-			parts[#parts + 1] = "id=" .. tostring(meta.id)
+			appendPair("id", meta.id)
 			if #parts > 0 then
 				label = label .. ": " .. table.concat(parts, " ")
 			end

@@ -1,70 +1,58 @@
 local rx = require("reactivex")
-local Schema = require("JoinObservable.schema")
-local JoinObservable = require("JoinObservable")
-
-local Observable = rx.Observable or rx
-
+local VizConfig = require("viz.sources")
+local windowConfig = VizConfig.window or {}
 local PreRender = {}
 
 math.randomseed(os.time())
 
-local DEFAULT_FADE_DURATION = 10 -- seconds to decay alpha from 100 to 0
-
-local DataSources = require("viz.sources")
-local DEFAULT_COLORS = {}
-for key, value in pairs(DataSources.palette) do
-	DEFAULT_COLORS[key] = value
+local DEFAULT_FADE_DURATION = windowConfig.fadeSeconds or 10 -- seconds to decay alpha from 100 to 0
+local function collectPalette(config)
+	local palette = {}
+	if not config then
+		return palette
+	end
+	local window = config.window or {}
+	local layers = window.layers or {}
+	for _, layer in pairs(layers) do
+		for _, stream in ipairs(layer.streams or {}) do
+			if stream.name and stream.color then
+				palette[stream.name] = stream.color
+			end
+		end
+	end
+	return palette
 end
-local DEFAULT_GRID = DataSources.grid or {}
 
-local function streamWithRandomDelay(records, opts)
-	opts = opts or {}
-	local minDelay = opts.minDelay or 0
-	local maxDelay = math.max(opts.maxDelay or minDelay, minDelay)
-
-	return Observable.create(function(observer)
-		local index = 1
-		local cancelled = false
-
-		local function emitNext()
-			if cancelled then
-				return
-			end
-
-			local record = records[index]
-			if not record then
-				observer:onCompleted()
-				return
-			end
-
-			observer:onNext(record)
-			index = index + 1
-			local nextRecord = records[index]
-			if not nextRecord then
-				observer:onCompleted()
-				return
-			end
-
-			local delay = minDelay
-			if maxDelay > minDelay then
-				delay = minDelay + math.random() * (maxDelay - minDelay)
-			end
-
-			rx.scheduler.schedule(emitNext, delay)
-		end
-
-		local initialDelay = minDelay
-		if maxDelay > minDelay then
-			initialDelay = minDelay + math.random() * (maxDelay - minDelay)
-		end
-		rx.scheduler.schedule(emitNext, initialDelay)
-
-		return function()
-			cancelled = true
-		end
-	end)
+local DEFAULT_COLORS = collectPalette(VizConfig)
+if not next(DEFAULT_COLORS) then
+	DEFAULT_COLORS.default = { 0.2, 0.2, 0.2, 1 }
 end
-PreRender.streamWithRandomDelay = streamWithRandomDelay
+local DEFAULT_GRID = windowConfig.grid or {}
+
+local function globalStartOffset()
+	local grid = windowConfig.grid
+	if grid and grid.startOffset ~= nil then
+		return grid.startOffset
+	end
+	if windowConfig.startOffset ~= nil then
+		return windowConfig.startOffset
+	end
+	if windowConfig.minId ~= nil then
+		return windowConfig.minId
+	end
+	return nil
+end
+
+local function cloneTable(source)
+	if not source then
+		return {}
+	end
+	local copy = {}
+	for key, value in pairs(source) do
+		copy[key] = value
+	end
+	return copy
+end
 
 local function cloneColor(color)
 	return { color[1], color[2], color[3], color[4] or 1 }
@@ -249,153 +237,363 @@ function PreRender.rasterIdMapper(minId, wrap)
 	end
 end
 
-local function makeCustomers()
-	local delays = DataSources.streamDelays and DataSources.streamDelays.customers or nil
-	return Schema.wrap("customers", PreRender.streamWithRandomDelay(DataSources.customers, delays), { idField = "id" })
+local function readPath(container, segments)
+	if not container then
+		return nil
+	end
+	local value = container
+	for index = 1, #segments do
+		if type(value) ~= "table" then
+			return nil
+		end
+		value = value[segments[index]]
+		if value == nil then
+			return nil
+		end
+	end
+	return value
 end
 
-local function makeOrders()
-	local delays = DataSources.streamDelays and DataSources.streamDelays.orders or nil
-	return Schema.wrap("orders", PreRender.streamWithRandomDelay(DataSources.orders, delays), { idField = "orderId" })
+local function ensureTable(value)
+	if type(value) == "table" then
+		return value
+	end
+	if value == nil then
+		return {}
+	end
+	return { value = value }
+end
+
+local function resolveSchemaSource(value, context, schema)
+	if not schema then
+		return context or value
+	end
+	local function attempt(container)
+		if type(container) ~= "table" then
+			return nil
+		end
+		if container.schemas and container.schemas[schema] ~= nil then
+			return container.schemas[schema]
+		end
+		if container[schema] ~= nil then
+			return container[schema]
+		end
+		local getter = container.get
+		if type(getter) == "function" then
+			local ok, result = pcall(getter, container, schema)
+			if ok and result ~= nil then
+				return result
+			end
+		end
+		return nil
+	end
+	return attempt(context) or attempt(value) or context or value
+end
+
+local function buildResolver(definition, fallback)
+	definition = definition or fallback
+	if definition == nil then
+		return function()
+			return nil
+		end
+	end
+	local defType = type(definition)
+	if defType == "function" then
+		return function(value, context)
+			return definition(value, context)
+		end
+	elseif defType == "string" then
+		local path = {}
+		for segment in definition:gmatch("[^%.]+") do
+			path[#path + 1] = segment
+		end
+		return function(value, context)
+			local ctx = ensureTable(context)
+			local result = readPath(ctx, path)
+			if result ~= nil then
+				return result
+			end
+			return readPath(ensureTable(value), path)
+		end
+	elseif defType == "table" then
+		if definition.constant ~= nil then
+			return function()
+				return definition.constant
+			end
+		elseif definition.field ~= nil then
+			return buildResolver(definition.field)
+		end
+	elseif definition == true then
+		return function(value, context)
+			if value ~= nil then
+				return value
+			end
+			return context
+		end
+	end
+	return function()
+		return nil
+	end
 end
 
 local function cloneOptions(opts)
-	if not opts then
-		return {}
+	return cloneTable(opts)
+end
+
+local function resolveMapperConfig(value)
+	if type(value) == "function" then
+		return value
 	end
-	local copy = {}
-	for key, value in pairs(opts) do
-		copy[key] = value
+	if type(value) == "table" then
+		local mapperType = value.type or "raster"
+		if mapperType == "raster" or value.minId or value.wrap ~= nil then
+			local minId = value.minId or windowConfig.minId or 0
+			local wrap = value.wrap
+			if wrap == nil then
+				wrap = true
+			end
+			return PreRender.rasterIdMapper(minId, wrap)
+		end
 	end
-	return copy
+	return nil
+end
+
+local function resolveDefaultIdMapper(opts)
+	opts = opts or {}
+	if opts.idMapper then
+		if type(opts.idMapper) == "function" then
+			return opts.idMapper
+		end
+		local mapper = resolveMapperConfig(opts.idMapper)
+		if mapper then
+			return mapper
+		end
+	end
+	local mapper = resolveMapperConfig(windowConfig.idMapper)
+	if mapper then
+		return mapper
+	end
+	local startOffset = globalStartOffset()
+	return PreRender.rasterIdMapper(startOffset or 0, true)
+end
+
+local function buildLayerStates(baseOpts)
+	local layerStates = {}
+	local layersConfig = (VizConfig.window and VizConfig.window.layers) or {}
+	local defaultIdMapper = baseOpts.idMapper
+	for name, layerConfig in pairs(layersConfig) do
+		local stateOpts = cloneOptions(baseOpts)
+		stateOpts.columns = layerConfig.columns or stateOpts.columns
+		stateOpts.rows = layerConfig.rows or stateOpts.rows
+		stateOpts.fadeDuration = layerConfig.fadeDurationSeconds or layerConfig.fadeSeconds or stateOpts.fadeDuration
+		local startOffset = layerConfig.startOffset
+		if startOffset == nil then
+			startOffset = globalStartOffset()
+		end
+		if startOffset ~= nil then
+			stateOpts.idMapper = PreRender.rasterIdMapper(startOffset, true)
+		else
+			stateOpts.idMapper = resolveMapperConfig(layerConfig.idMapper) or defaultIdMapper
+		end
+		stateOpts.palette = baseOpts.palette
+		layerStates[name] = PreRenderState.new(stateOpts)
+	end
+	local requiredLayers = VizConfig.layerOrder or (windowConfig.layerOrder) or { "inner", "outer" }
+	for _, name in ipairs(requiredLayers) do
+		if not layerStates[name] then
+			local fallbackOpts = cloneOptions(baseOpts)
+			fallbackOpts.idMapper = defaultIdMapper
+			layerStates[name] = PreRenderState.new(fallbackOpts)
+		end
+	end
+	return layerStates
+end
+
+local function buildHoverResolvers(hoverFields)
+	local resolvers = {}
+	if not hoverFields then
+		return resolvers
+	end
+	for _, entry in ipairs(hoverFields) do
+		local key
+		local definition
+		local schema
+		if type(entry) == "string" then
+			key = entry
+			definition = entry
+		elseif type(entry) == "table" then
+			key = entry.key or entry.name or entry.field or entry[1]
+			schema = entry.schema
+			if entry.fn then
+				definition = entry.fn
+			elseif entry.field then
+				definition = entry.field
+			elseif entry.constant ~= nil then
+				definition = { constant = entry.constant }
+			elseif entry.record then
+				definition = true
+			elseif entry.value ~= nil then
+				definition = entry.value
+			elseif schema then
+				definition = true
+			else
+				definition = entry
+			end
+		end
+		if key and definition then
+			resolvers[#resolvers + 1] = {
+				key = key,
+				schema = schema,
+				resolver = buildResolver(definition),
+			}
+		end
+	end
+	return resolvers
+end
+
+local function buildFieldResolvers(map)
+	local resolvers = {}
+	if not map then
+		return resolvers
+	end
+	for key, definition in pairs(map) do
+		local schema
+		local resolvedDef = definition
+		if type(definition) == "table" and definition.schema then
+			schema = definition.schema
+			local copy = cloneTable(definition)
+			copy.schema = nil
+			if copy.fn then
+				resolvedDef = copy.fn
+			elseif copy.field then
+				resolvedDef = copy.field
+			elseif copy.constant ~= nil then
+				resolvedDef = { constant = copy.constant }
+			elseif copy.record then
+				resolvedDef = true
+			elseif copy.value ~= nil then
+				resolvedDef = copy.value
+			else
+				resolvedDef = true
+			end
+		end
+		if resolvedDef == nil then
+			resolvedDef = true
+		end
+		resolvers[key] = {
+			schema = schema,
+			resolver = buildResolver(resolvedDef),
+		}
+	end
+	return resolvers
+end
+
+local function buildStreamExtractor(descriptor)
+	local transform = descriptor.transform
+	local trackDefinition = descriptor.track_field or descriptor.trackField or descriptor.track or "id"
+	local trackSchema = descriptor.track_schema or descriptor.trackSchema
+	local idResolver = buildResolver(trackDefinition)
+	local labelDefinition = descriptor.label_field or descriptor.label or descriptor.labelField
+	local labelSchema = descriptor.label_schema or descriptor.labelSchema
+	local labelResolver = labelDefinition and buildResolver(labelDefinition) or nil
+	local hoverResolvers = buildHoverResolvers(descriptor.hoverFields)
+	local metaResolvers = buildFieldResolvers(descriptor.meta)
+
+	return function(value)
+		local context = value
+		if transform then
+			local transformed = transform(value)
+			if transformed ~= nil then
+				context = transformed
+			end
+		end
+		local idSource = resolveSchemaSource(value, context, trackSchema)
+		local id = idResolver(idSource, context)
+		if id == nil then
+			return nil
+		end
+		local meta = { id = id }
+		if labelResolver then
+			local labelSource = resolveSchemaSource(value, context, labelSchema)
+			meta.label = labelResolver(labelSource, context)
+		end
+		for key, resolverInfo in pairs(metaResolvers) do
+			local source = resolveSchemaSource(value, context, resolverInfo.schema)
+			meta[key] = resolverInfo.resolver(source, context)
+		end
+		if #hoverResolvers > 0 then
+			local hover = {}
+			for _, entry in ipairs(hoverResolvers) do
+				local source = resolveSchemaSource(value, context, entry.schema)
+				hover[entry.key] = entry.resolver(source, context)
+			end
+			meta.hover = hover
+		end
+		return id, meta
+	end
+end
+
+local function attachObservable(layerStates, spec, observable)
+	if not observable or not spec or not spec.paletteKey then
+		return
+	end
+	local layerName = spec.layer or "inner"
+	local state = layerStates[layerName]
+	if not state then
+		return
+	end
+	local extractor = spec.extract or buildStreamExtractor(spec)
+	state:attachSource({
+		observable = observable,
+		paletteKey = spec.paletteKey,
+		extract = extractor,
+	})
+	if spec.decayAfter then
+		state:decayAll(spec.decayAfter)
+	end
+end
+
+local function attachConfiguredStreams(layerStates)
+	local layers = windowConfig.layers or {}
+	for layerName, layer in pairs(layers) do
+		for _, descriptor in ipairs(layer.streams or {}) do
+			if descriptor.observable then
+				attachObservable(layerStates, {
+					layer = layerName,
+					paletteKey = descriptor.name or descriptor.paletteKey or "default",
+					extract = descriptor.extract or buildStreamExtractor(descriptor),
+					decayAfter = descriptor.decayAfter,
+				}, descriptor.observable)
+			end
+		end
+	end
+end
+
+local function buildConfiguredStates(opts)
+	opts = cloneOptions(opts or {})
+	local grid = windowConfig.grid or {}
+	opts.columns = opts.columns or grid.columns or 32
+	opts.rows = opts.rows or grid.rows or 32
+	opts.palette = opts.palette or cloneOptions(DEFAULT_COLORS)
+	opts.fadeDuration = opts.fadeDuration or windowConfig.fadeSeconds or DEFAULT_FADE_DURATION
+	opts.idMapper = resolveDefaultIdMapper(opts)
+	local layerStates = buildLayerStates(opts)
+	attachConfiguredStreams(layerStates)
+	return layerStates
+end
+
+function PreRender.buildConfiguredStates(opts)
+	return buildConfiguredStates(opts)
 end
 
 function PreRender.buildDemoStates(opts)
-	opts = opts or {}
-	opts.columns = opts.columns or DEFAULT_GRID.columns or 32
-	opts.rows = opts.rows or DEFAULT_GRID.rows or 32
-	if not opts.idMapper then
-		opts.idMapper = PreRender.rasterIdMapper(DataSources.minCustomerId or 0, true)
-	end
-	local innerOpts = cloneOptions(opts)
-	local outerOpts = cloneOptions(opts)
-	local innerState = PreRenderState.new(innerOpts)
-	local outerState = PreRenderState.new(outerOpts)
-
-	local customers = makeCustomers()
-	local orders = makeOrders()
-
-	innerState:attachSource({
-		observable = customers,
-		paletteKey = "customers",
-		extract = function(record)
-			if not record then
-				return nil
-			end
-			return record.id, { label = ("Customer %s"):format(record.name or record.id) }
-		end,
-	})
-
-	innerState:decayAll(opts and opts.decayBetween or 40)
-
-	innerState:attachSource({
-		observable = orders,
-		paletteKey = "orders",
-		extract = function(record)
-			if not record or not record.customerId then
-				return nil
-			end
-			local label = string.format("Order %s → %s", record.orderId, record.customerId)
-			return record.customerId, { label = label }
-		end,
-	})
-
-	innerState:decayAll(opts and opts.decayBetween or 40)
-
-	local join, expired = JoinObservable.createJoinObservable(customers, orders, {
-		on = {
-			customers = "id",
-			orders = "customerId",
-		},
-		joinType = "left",
-		expirationWindow = DataSources.expirationWindow or { mode = "count", maxItems = 5 },
-	})
-
-	outerState:attachSource({
-		observable = join,
-		paletteKey = "joined",
-		extract = function(result)
-			local customer = result:get("customers")
-			local order = result:get("orders")
-			local id = customer and customer.id or order and order.customerId or nil
-			if not id then
-				return nil
-			end
-			local label
-			if customer and order then
-				label = string.format("%s + order %s", customer.name, order.orderId)
-			elseif customer then
-				label = string.format("%s (no order)", customer.name)
-			else
-				label = string.format("order %s (no customer)", order.orderId)
-			end
-			return id, { label = label }
-		end,
-	})
-
-	if expired then
-		outerState:attachSource({
-			observable = expired,
-			paletteKey = "expired",
-			extract = function(packet)
-				if not packet then
-					return nil
-				end
-				local schemaName = packet.schema
-				local result = packet.result
-				if not result then
-					return nil
-				end
-				local record
-				if schemaName then
-					record = result:get(schemaName)
-				end
-				if not record then
-					local names = result:schemaNames()
-					for _, name in ipairs(names) do
-						record = result:get(name)
-						if record then
-							break
-						end
-					end
-				end
-				if not record then
-					return nil
-				end
-				local id
-				if schemaName == "orders" and record.customerId then
-					id = record.customerId
-				else
-					id = record.id or (record.RxMeta and record.RxMeta.id)
-				end
-				if not id then
-					return nil
-				end
-				return id, {
-					expired = true,
-					schema = schemaName or "expired",
-					record = record,
-				}
-			end,
-		})
-	end
-
-	return innerState, outerState
+	local states = buildConfiguredStates(opts)
+	return states.inner, states.outer, states
 end
 
 function PreRender.buildDemoState(opts)
-	local innerState = PreRender.buildDemoStates(opts)
-	return innerState
+	local states = PreRender.buildConfiguredStates(opts)
+	return states.inner
 end
 
 return PreRender
