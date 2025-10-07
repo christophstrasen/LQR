@@ -1,5 +1,7 @@
 local rx = require("reactivex")
-local VizConfig = require("viz.sources")
+local ScenarioLoader = require("viz.scenario_loader")
+local Observables = require("viz.observables")
+local VizConfig = ScenarioLoader.getRecipe(Observables)
 local windowConfig = VizConfig.window or {}
 local PreRender = {}
 
@@ -488,14 +490,54 @@ local function buildFieldResolvers(map)
 	return resolvers
 end
 
+local function buildTrackResolvers(descriptor)
+	local trackers = descriptor.tracks or descriptor.trackers
+	if type(trackers) == "table" and #trackers > 0 then
+		local resolvers = {}
+		for _, track in ipairs(trackers) do
+			if track then
+				local schema = track.schema
+				local definition
+				if type(track) == "table" then
+					if track.field ~= nil then
+						definition = track.field
+					elseif track.selector ~= nil then
+						definition = track.selector
+					elseif track.constant ~= nil then
+						definition = { constant = track.constant }
+					elseif track.value ~= nil then
+						definition = { constant = track.value }
+					else
+						local copy = cloneTable(track)
+						copy.schema = nil
+						if next(copy) ~= nil then
+							definition = copy
+						end
+					end
+				else
+					definition = track
+				end
+				resolvers[#resolvers + 1] = {
+					schema = schema,
+					resolver = buildResolver(definition or "id"),
+				}
+			end
+		end
+		if #resolvers > 0 then
+			return resolvers
+		end
+	end
+	return {
+		{
+			schema = descriptor.track_schema or descriptor.trackSchema,
+			resolver = buildResolver(descriptor.track_field or descriptor.trackField or descriptor.track or "id"),
+		},
+	}
+end
+
 local function buildStreamExtractor(descriptor)
 	local transform = descriptor.transform
-	local trackDefinition = descriptor.track_field or descriptor.trackField or descriptor.track or "id"
-	local trackSchema = descriptor.track_schema or descriptor.trackSchema
-	local idResolver = buildResolver(trackDefinition)
-	local labelDefinition = descriptor.label_field or descriptor.label or descriptor.labelField
-	local labelSchema = descriptor.label_schema or descriptor.labelSchema
-	local labelResolver = labelDefinition and buildResolver(labelDefinition) or nil
+	local trackResolvers = buildTrackResolvers(descriptor)
 	local hoverResolvers = buildHoverResolvers(descriptor.hoverFields)
 	local metaResolvers = buildFieldResolvers(descriptor.meta)
 
@@ -507,16 +549,18 @@ local function buildStreamExtractor(descriptor)
 				context = transformed
 			end
 		end
-		local idSource = resolveSchemaSource(value, context, trackSchema)
-		local id = idResolver(idSource, context)
+		local id
+		for _, tracker in ipairs(trackResolvers) do
+			local idSource = resolveSchemaSource(value, context, tracker.schema)
+			id = tracker.resolver(idSource, context)
+			if id ~= nil then
+				break
+			end
+		end
 		if id == nil then
 			return nil
 		end
 		local meta = { id = id }
-		if labelResolver then
-			local labelSource = resolveSchemaSource(value, context, labelSchema)
-			meta.label = labelResolver(labelSource, context)
-		end
 		for key, resolverInfo in pairs(metaResolvers) do
 			local source = resolveSchemaSource(value, context, resolverInfo.schema)
 			meta[key] = resolverInfo.resolver(source, context)

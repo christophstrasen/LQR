@@ -7,7 +7,9 @@ require("bootstrap")
 local PreRender = require("viz.pre_render")
 local Delay = require("viz.observable_delay")
 local rx = require("reactivex")
-local Sources = require("viz.sources")
+local ScenarioLoader = require("viz.scenario_loader")
+local Observables = require("viz.observables")
+local Sources = ScenarioLoader.getRecipe(Observables)
 
 local windowConfig = Sources.window
 local layersConfig = windowConfig.layers or {}
