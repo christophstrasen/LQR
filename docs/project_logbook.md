@@ -79,3 +79,18 @@
 - Document best practices for `idSelector` error handling (e.g., metrics hooks) so dropped records remain observable in production.
 - Stream real join output (not just synthetic tables) into the visualization to validate lifetimes under real backpressure.
 - Add keyboard/GUI controls (pause, speed sliders, schema filters) so we can inspect heavy joins without editing code.
+
+
+## Day 5 – Visualization Pipeline Polish
+
+### Highlights
+- **Config-driven everything:** `viz/source_recipes.lua` now owns grid/fade settings and per-layer stream descriptors (color, observable, track fields, hover metadata). The renderer and pre-render logic simply ingest this table—no more bespoke wiring.
+- **Observable helpers:** New `viz/observables.lua` and `viz/observable_delay.lua` build the demo streams, normalize join/expired records, and inject randomized delays without patching upstream `lua-reactivex`.
+- **Flexible layouts:** Added `startOffset` at the grid and layer level so scenarios can offset ID placement without touching code. `viz/pre_render.lua` automatically derives the right mapper.
+- **Lean pre-render core:** Removed legacy extractors and redundant helpers; a single schema-aware builder now handles track/label/hover/meta selection for every stream.
+- **Testing + hygiene:** Extended `tests/unit/pre_render_spec.lua` to cover delay behavior and start offsets, ensuring viz regressions get caught in pre-commit/CI. Vendor edits to `lua-reactivex` were reverted, keeping the upstream dependency clean.
+
+### Next steps
+1. Document the stream descriptor schema (fields, optional `track_schema`, hover syntax) and consider loading it from scenario files.
+2. Add more headless specs for hover payload rendering and expired-stream shaping to keep the visualization safe to refactor.
+3. Surface multiple scenarios/configs via CLI flags or a toggle now that the pipeline is fully data driven.

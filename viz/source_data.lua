@@ -12,20 +12,6 @@ Sources.streamDelays = {
 	orders = { minDelay = 0.01, maxDelay = 0.2 },
 }
 
-Sources.expirationWindow = {
-	mode = "count",
-	maxItems = 50,
-}
-
-Sources.fadeDurationSeconds = 10
-Sources.decayBetweenStreams = 40
-Sources.grid = {
-	columns = 20,
-	rows = 20,
-	cellSize = 36,
-	padding = 5,
-}
-
 Sources.customers = {
 	{ id = 101, name = "Ada" },
 	{ id = 102, name = "Ben" },

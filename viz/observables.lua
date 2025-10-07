@@ -37,14 +37,22 @@ end
 
 local function buildStream(records, schemaName, idField, delayOpts)
 	local stream = emitRecords(records)
+	stream = Schema.wrap(schemaName, stream, { idField = idField or "id" })
 	if delayOpts then
 		stream = Delay.withDelay(stream, delayOpts)
 	end
-	return Schema.wrap(schemaName, stream, { idField = idField or "id" })
+	return stream
 end
 
 Observables.customers = buildStream(Data.customers, "customers", "id", Data.streamDelays.customers)
 Observables.orders = buildStream(Data.orders, "orders", "orderId", Data.streamDelays.orders)
+
+local expirationWindow = {
+	mode = "time",
+	ttl = 60,
+	field = "sourceTime",
+	currentFn = os.time,
+}
 
 local join, expired = JoinObservable.createJoinObservable(Observables.customers, Observables.orders, {
 	on = {
@@ -52,7 +60,7 @@ local join, expired = JoinObservable.createJoinObservable(Observables.customers,
 		orders = "customerId",
 	},
 	joinType = "left",
-	expirationWindow = Data.expirationWindow,
+	expirationWindow = expirationWindow,
 })
 
 local function shapeJoinRecord(result)

@@ -17,6 +17,18 @@ function RandomDelay.withDelay(source, opts)
 		local cancelled = false
 		local subscription
 		local nextDue = rx.scheduler.get().currentTime or 0
+		local function ensureSourceTime(value)
+			if type(value) ~= "table" then
+				return
+			end
+			local meta = value.RxMeta
+			if type(meta) ~= "table" then
+				return
+			end
+			if meta.sourceTime == nil then
+				meta.sourceTime = os.time()
+			end
+		end
 
 		local function scheduleCall(callback, value, useDelay)
 			local now = rx.scheduler.get().currentTime or 0
@@ -40,6 +52,7 @@ function RandomDelay.withDelay(source, opts)
 
 		subscription = source:subscribe(
 			function(value)
+				ensureSourceTime(value)
 				scheduleCall(function(v)
 					observer:onNext(v)
 				end, value, true)
