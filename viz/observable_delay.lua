@@ -1,4 +1,7 @@
 local rx = require("reactivex")
+local TimeUtils = require("viz.time_utils")
+
+local DEBUG_TIMING = os.getenv("VIZ_DEBUG_TIMING") == "1"
 
 local RandomDelay = {}
 
@@ -19,16 +22,16 @@ function RandomDelay.withDelay(source, opts)
 		local nextDue = rx.scheduler.get().currentTime or 0
 		local function ensureSourceTime(value)
 			if type(value) ~= "table" then
-				return
-			end
-			local meta = value.RxMeta
-			if type(meta) ~= "table" then
-				return
-			end
-			if meta.sourceTime == nil then
-				meta.sourceTime = os.time()
-			end
+			return
 		end
+		local meta = value.RxMeta
+		if type(meta) ~= "table" then
+			return
+		end
+	if meta.sourceTime == nil then
+		meta.sourceTime = TimeUtils.nowEpochSeconds()
+	end
+end
 
 		local function scheduleCall(callback, value, useDelay)
 			local now = rx.scheduler.get().currentTime or 0
@@ -45,6 +48,15 @@ function RandomDelay.withDelay(source, opts)
 			local relativeDelay = math.max(0, nextDue - now)
 			rx.scheduler.schedule(function()
 				if not cancelled then
+					if value then
+						ensureSourceTime(value)
+ 						if DEBUG_TIMING and value.RxMeta then
+ 							local schema = value.RxMeta.schema or "?"
+ 							local id = value.RxMeta.id or value.id or "?"
+ 							local ts = value.RxMeta.sourceTime or -1
+ 							print(string.format("[timing] emit schema=%s id=%s ts=%.3f", schema, tostring(id), ts))
+ 						end
+					end
 					callback(value)
 				end
 			end, relativeDelay)
@@ -52,7 +64,6 @@ function RandomDelay.withDelay(source, opts)
 
 		subscription = source:subscribe(
 			function(value)
-				ensureSourceTime(value)
 				scheduleCall(function(v)
 					observer:onNext(v)
 				end, value, true)

@@ -565,6 +565,9 @@ local function buildStreamExtractor(descriptor)
 			local source = resolveSchemaSource(value, context, resolverInfo.schema)
 			meta[key] = resolverInfo.resolver(source, context)
 		end
+		if value and value.RxMeta then
+			meta.sourceTime = value.RxMeta.sourceTime
+		end
 		if #hoverResolvers > 0 then
 			local hover = {}
 			for _, entry in ipairs(hoverResolvers) do

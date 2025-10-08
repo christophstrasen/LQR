@@ -15,6 +15,9 @@ local CELL_PADDING = gridConfig.padding or 3
 local DEFAULT_COLOR = { 0.2, 0.2, 0.2, 1 }
 local FADE_DURATION_SECONDS = windowConfig.fadeSeconds or 10
 local INNER_INSET = 4
+local HOVER_PANEL_HEIGHT = 120
+local WINDOW_WIDTH = GRID_COLUMNS * CELL_SIZE
+local WINDOW_HEIGHT = GRID_ROWS * CELL_SIZE + HOVER_PANEL_HEIGHT
 
 local layerStatesByName = {}
 local cells = { inner = {}, outer = {} }
@@ -178,9 +181,7 @@ local function populateLayer(layer, state)
 end
 
 function love.load()
-	local width = GRID_COLUMNS * CELL_SIZE
-	local height = GRID_ROWS * CELL_SIZE + 40
-	love.window.setMode(width, height, { resizable = false })
+	love.window.setMode(WINDOW_WIDTH, WINDOW_HEIGHT, { resizable = false })
 	love.graphics.setFont(love.graphics.newFont(14))
 	local states
 	innerState, outerState, states = PreRender.buildDemoStates({
@@ -295,12 +296,25 @@ function love.draw()
 			end
 			appendPair("id", meta.id)
 			if #parts > 0 then
-				label = label .. ": " .. table.concat(parts, " ")
+				label = label .. "\n" .. table.concat(parts, "\n")
+			end
+			if meta.sourceTime then
+				local fractional = meta.sourceTime
+				local seconds = math.floor(fractional)
+				local millis = math.floor((fractional - seconds) * 1000)
+				local timestamp = os.date("%Y-%m-%d %H:%M:%S", seconds)
+				local ts = string.format("timestamp=%s.%03d", timestamp, millis)
+				parts[#parts + 1] = ts
+				label = label .. "\n" .. ts
 			end
 		end
+		local panelY = GRID_ROWS * CELL_SIZE
+		love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
+		love.graphics.rectangle("fill", 0, panelY, WINDOW_WIDTH, HOVER_PANEL_HEIGHT)
 		love.graphics.setColor(1, 1, 1, 1)
-		local textX = 10
-		local textY = GRID_ROWS * CELL_SIZE + 12
-		love.graphics.print(label, textX, textY)
+		local textX = 12
+		local textY = panelY + 12
+		local textWidth = WINDOW_WIDTH - textX * 2
+		love.graphics.printf(label, textX, textY, textWidth)
 	end
 end

@@ -13,8 +13,8 @@ local windowConfig = {
     },
     layerOrder = { "inner", "outer" },
     layers = {
-        inner = { fadeSeconds = 10 },
-        outer = { fadeSeconds = 10 },
+        inner = { fadeSeconds = 6 },
+        outer = { fadeSeconds = 12 },
     },
     colors = {
         joined = { 0, 1, 0, 1.0 },
@@ -37,7 +37,7 @@ local joins = {
         joinType = "left",
         expirationWindow = {
             mode = "time",
-            ttl = 60,
+            ttl = 4,
             field = "sourceTime",
             currentFn = os.time,
         },
