@@ -111,6 +111,8 @@ local function buildJoinResultMapper(joinConfig)
 	end
 end
 
+local DEBUG_TIMING = os.getenv("VIZ_DEBUG_TIMING") == "1"
+
 local function buildExpiredMapper()
 	return function(record)
 		if not record then
@@ -137,13 +139,26 @@ local function buildExpiredMapper()
 		if not payload then
 			return nil
 		end
-		return {
+		local shaped = {
 			schema = schemaName,
 			record = payload,
 			reason = record.reason,
 			expired = true,
 			schemas = { [schemaName] = payload },
 		}
+		if DEBUG_TIMING then
+			local payloadMeta = payload.RxMeta or {}
+			local id = payloadMeta.id or payload.id or record.key
+			local ts = payloadMeta.sourceTime or 0
+			print(string.format(
+				"[timing] expired schema=%s id=%s ts=%.3f reason=%s",
+				schemaName,
+				tostring(id or "?"),
+				ts,
+				tostring(record.reason)
+			))
+		end
+		return shaped
 	end
 end
 

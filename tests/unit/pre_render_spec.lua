@@ -101,7 +101,7 @@ end)
 describe("Observable delay helper", function()
 	it("spaces emissions by at least the configured delay", function()
 		local base = rx.Observable.fromTable({ "first", "second" })
-		local delayed = Delay.withDelay(base, { minDelay = 0.5, maxDelay = 0.5 })
+		local delayed = Delay.withDelay(base, { minDelay = 0.5, maxDelay = 0.5, delayMode = "ordered" })
 		local emissions = {}
 
 		delayed:subscribe(function(value)
