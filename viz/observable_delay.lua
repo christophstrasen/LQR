@@ -36,13 +36,14 @@ function RandomDelay.withDelay(source, opts)
 	opts = opts or {}
 	local delayMode = (opts.delayMode or opts.mode or "jittered"):lower()
 	local minDelay, maxDelay = resolveDelayBounds(opts)
+	local jitterRange = math.max(0, maxDelay - minDelay)
 
 	return rx.Observable.create(function(observer)
 		local cancelled = false
 		local subscription
 		local scheduler = rx.scheduler
 		local latestDue
-		local orderedTail
+		local delayedTimeline
 
 		local function currentTime()
 			local currentScheduler = scheduler.get()
@@ -50,7 +51,7 @@ function RandomDelay.withDelay(source, opts)
 		end
 
 		latestDue = currentTime()
-		orderedTail = latestDue
+		delayedTimeline = latestDue
 
 		local function computeDue(useDelay)
 			local now = currentTime()
@@ -61,17 +62,16 @@ function RandomDelay.withDelay(source, opts)
 				return due
 			end
 
-			local due
-			if delayMode == "ordered" then
-				orderedTail = math.max(orderedTail, now) + sampleDelay(minDelay, maxDelay)
-				due = orderedTail
-			else
-				due = now + sampleDelay(minDelay, maxDelay)
+			delayedTimeline = math.max(delayedTimeline, now)
+			local baseDelay = sampleDelay(minDelay, maxDelay)
+			delayedTimeline = delayedTimeline + baseDelay
+			local due = delayedTimeline
 
-				-- Extremely unlikely, but guard against duplicate timestamps so instrumentation
-				-- still shows progress.
-				if due <= latestDue then
-					due = latestDue + 1e-4
+			if delayMode ~= "ordered" and jitterRange > 0 then
+				local jitter = (math.random() - 0.5) * jitterRange
+				due = due + jitter
+				if due <= now then
+					due = now + math.max(jitterRange * 0.1, 1e-3)
 				end
 			end
 
