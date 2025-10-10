@@ -120,7 +120,12 @@ function PreRenderState:advance(dt)
 end
 
 local function mixColors(entry, templateColor)
+	-- Explainer: even if the existing entry is at full intensity, we want to show overlap,
+	-- so cap the weight to allow a 50/50 mix on back-to-back events.
 	local existingWeight = clampAlpha(entry.alpha or 0) / 100
+	if existingWeight >= 1 then
+		existingWeight = 0.5
+	end
 	local newWeight = 1 - existingWeight
 	if existingWeight <= 0 then
 		return cloneColor(templateColor)
