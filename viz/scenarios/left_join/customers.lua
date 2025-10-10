@@ -13,7 +13,7 @@ return {
 	{ id = 112, name = "Liam" },
 	{ id = 113, name = "Mira" },
 	{ id = 114, name = "Noah" },
-	{ id = 115, name = "Opal" },
+
 	{ id = 116, name = "Pia" },
 	{ id = 117, name = "Quin" },
 	{ id = 118, name = "Ravi" },

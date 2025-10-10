@@ -14,10 +14,12 @@ local CELL_SIZE = gridConfig.cellSize or 26
 local CELL_PADDING = gridConfig.padding or 3
 local DEFAULT_COLOR = { 0.2, 0.2, 0.2, 1 }
 local FADE_DURATION_SECONDS = windowConfig.fadeSeconds or 10
+local HEADER_HEIGHT = 40
+local GRID_TOP = HEADER_HEIGHT
 local INNER_INSET = 4
 local HOVER_PANEL_HEIGHT = 120
 local WINDOW_WIDTH = GRID_COLUMNS * CELL_SIZE
-local WINDOW_HEIGHT = GRID_ROWS * CELL_SIZE + HOVER_PANEL_HEIGHT
+local WINDOW_HEIGHT = HEADER_HEIGHT + GRID_ROWS * CELL_SIZE + HOVER_PANEL_HEIGHT
 
 local layerStatesByName = {}
 local cells = { inner = {}, outer = {} }
@@ -106,8 +108,11 @@ end
 _G.StreamGrid = StreamGrid
 
 local function cellAtPixel(x, y)
+	if y < GRID_TOP then
+		return nil, nil
+	end
 	local col = math.floor(x / CELL_SIZE) + 1
-	local row = math.floor(y / CELL_SIZE) + 1
+	local row = math.floor((y - GRID_TOP) / CELL_SIZE) + 1
 	if col < 1 or col > GRID_COLUMNS or row < 1 or row > GRID_ROWS then
 		return nil, nil
 	end
@@ -231,14 +236,52 @@ end
 function love.draw()
 	love.graphics.clear(0.1, 0.1, 0.1)
 
+	local headerText = windowConfig.headerText
+	if not headerText then
+		local joins = ScenarioLoader.data and ScenarioLoader.data.joins
+		local join = joins and joins[1] or (ScenarioLoader.data and ScenarioLoader.data.join)
+		if join then
+			local sources = join.sources or {}
+			local leftSchema = join.left or sources.left or "left"
+			local rightSchema = join.right or sources.right or "right"
+			local on = join.on or {}
+			local function describeKey(schemaName)
+				local selector = on[schemaName]
+				if type(selector) == "string" then
+					return selector
+				elseif type(selector) == "table" then
+					return selector.field or (selector.selector and "<fn>") or tostring(selector)
+				elseif type(selector) == "function" then
+					return "<fn>"
+				end
+				return "id"
+			end
+			headerText = string.format(
+				"%s join on %s.%s, %s.%s",
+				(join.joinType or "inner"),
+				leftSchema,
+				describeKey(leftSchema),
+				rightSchema,
+				describeKey(rightSchema)
+			)
+		end
+	end
+
+	if headerText then
+		love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
+		love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, HEADER_HEIGHT)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.printf(headerText, 12, 10, WINDOW_WIDTH - 24)
+	end
+
 	for col = 1, GRID_COLUMNS do
 		for row = 1, GRID_ROWS do
 			local outerCell = StreamGrid.get("outer", col, row)
 			local innerCell = StreamGrid.get("inner", col, row)
 			local outerColor = outerCell and outerCell.color or DEFAULT_COLOR
 			local innerColor = innerCell and innerCell.color or nil
-			local x = (col - 1) * CELL_SIZE + CELL_PADDING
-			local y = (row - 1) * CELL_SIZE + CELL_PADDING
+				local x = (col - 1) * CELL_SIZE + CELL_PADDING
+				local y = GRID_TOP + (row - 1) * CELL_SIZE + CELL_PADDING
 			local outerSize = CELL_SIZE - CELL_PADDING * 2
 			local innerSize = outerSize - INNER_INSET * 2
 			if innerSize < 2 then
@@ -308,7 +351,7 @@ function love.draw()
 				label = label .. "\n" .. ts
 			end
 		end
-		local panelY = GRID_ROWS * CELL_SIZE
+		local panelY = GRID_TOP + GRID_ROWS * CELL_SIZE
 		love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
 		love.graphics.rectangle("fill", 0, panelY, WINDOW_WIDTH, HOVER_PANEL_HEIGHT)
 		love.graphics.setColor(1, 1, 1, 1)
