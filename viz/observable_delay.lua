@@ -1,7 +1,7 @@
 local rx = require("reactivex")
 local TimeUtils = require("viz.time_utils")
 
-local DEBUG_TIMING = os.getenv("VIZ_DEBUG_TIMING") == "1"
+local DEBUG_TIMING = os.getenv("DEBUG_TIMING") == "1" or os.getenv("DEBUG") == "1"
 
 local RandomDelay = {}
 

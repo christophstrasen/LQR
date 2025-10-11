@@ -845,6 +845,7 @@ end)
 					return currentTime
 				end,
 			},
+			flushOnComplete = false,
 		})
 
 		local pairs = {}
@@ -948,6 +949,7 @@ end)
 					return currentTime
 				end,
 			},
+			flushOnComplete = false,
 		})
 
 		local pairs = {}

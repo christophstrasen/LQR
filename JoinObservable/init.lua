@@ -72,34 +72,66 @@ local function normalizeKeySelector(on)
 	end
 end
 
-local function resolveSchemaName(meta, fallback)
-	if meta and type(meta.schema) == "string" and meta.schema ~= "" then
-		return meta.schema
-	end
-	return fallback or "unknown"
-end
-
-local function touchKey(order, key)
-	for i = 1, #order do
-		if order[i] == key then
-			table.remove(order, i)
-			break
-		end
-	end
-	table.insert(order, key)
-end
-
 local function defaultMerge(leftObservable, rightObservable)
-	return leftObservable:merge(rightObservable)
+	return rx.Observable.create(function(observer)
+		local leftCompleted, rightCompleted = false, false
+		local leftSub, rightSub
+
+		local function tryComplete()
+			if leftCompleted and rightCompleted then
+				observer:onCompleted()
+			end
+		end
+
+		leftSub = leftObservable:subscribe(function(value)
+			observer:onNext(value)
+		end, function(err)
+			observer:onError(err)
+			if rightSub then
+				rightSub:unsubscribe()
+			end
+		end, function()
+			leftCompleted = true
+			tryComplete()
+		end)
+
+		rightSub = rightObservable:subscribe(function(value)
+			observer:onNext(value)
+		end, function(err)
+			observer:onError(err)
+			if leftSub then
+				leftSub:unsubscribe()
+			end
+		end, function()
+			rightCompleted = true
+			tryComplete()
+		end)
+
+		return function()
+			if leftSub then
+				leftSub:unsubscribe()
+			end
+			if rightSub then
+				rightSub:unsubscribe()
+			end
+		end
+	end)
 end
 
 local function tagStream(stream, side)
-	return stream:map(function(entry)
+	local mapped = stream:map(function(entry)
 		return {
 			side = side,
 			entry = entry,
 		}
 	end)
+	-- Only add lifecycle logging if available in this Rx build.
+	if mapped.doOnCompleted then
+		mapped = mapped:doOnCompleted(function()
+			warnf("[JoinObservable] %s upstream completed", side)
+		end)
+	end
+	return mapped
 end
 
 function JoinObservable.createJoinObservable(leftStream, rightStream, options)
@@ -112,6 +144,19 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local keySelector = normalizeKeySelector(options.on)
 	local expirationConfig = Expiration.normalize(options)
 	local mergeSources = options.merge or defaultMerge
+	local flushOnComplete = options.flushOnComplete
+	local flushOnDispose = options.flushOnDispose
+	local gcIntervalSeconds = options.gcIntervalSeconds or options.gc_interval_seconds
+	local gcScheduleFn = options.gcScheduleFn or options.gc_schedule_fn
+	local debugLifecycle = os.getenv("DEBUG") == "1"
+	if flushOnDispose == nil then
+		-- Default: emit cached unmatched/expired rows when the downstream cancels,
+		-- but only for joins that care about unmatched rows.
+		flushOnDispose = strategy.emitUnmatchedLeft or strategy.emitUnmatchedRight
+	end
+	if flushOnComplete == nil then
+		flushOnComplete = true
+	end
 
 	local expiredSubject = rx.Subject.create()
 	local expiredClosed = false
@@ -157,7 +202,10 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 
 	local observable = rx.Observable.create(function(observer)
 		local leftCache, rightCache = {}, {}
-		local leftOrder, rightOrder = {}, {}
+		local leftOrder = expirationConfig.left.mode == "count" and {} or nil
+		local rightOrder = expirationConfig.right.mode == "count" and {} or nil
+		local gcSubscription
+		local gcTicking = false
 		local enforceRetention = {
 			left = Expiration.createEnforcer(expirationConfig.left, publishExpiration, function(side, record)
 				emitUnmatched(observer, strategy, side, record)
@@ -165,69 +213,148 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			right = Expiration.createEnforcer(expirationConfig.right, publishExpiration, function(side, record)
 				emitUnmatched(observer, strategy, side, record)
 			end),
-		}
+			}
 
-		local function handleMatch(leftRecord, rightRecord)
-			leftRecord.matched = true
-			rightRecord.matched = true
-			strategy.onMatch(observer, leftRecord, rightRecord)
-		end
-
-		local function upsertCacheEntry(cache, key, entry, schemaName)
-			local record = cache[key]
-			if record then
-				record.entry = entry
-				record.matched = false
-				record.key = key
-				record.schemaName = schemaName
-			else
-				record = {
-					entry = entry,
-					matched = false,
-					key = key,
-					schemaName = schemaName,
-				}
-				cache[key] = record
-			end
-			return record
-		end
-
-		local function handleEntry(side, cache, otherCache, order, entry)
-			local meta = Schema.assertRecordHasMeta(entry, side)
-			local schemaName = resolveSchemaName(meta, side)
-			local key = keySelector(entry, side, schemaName)
-			if key == nil then
-				warnf("Dropped %s entry because join key resolved to nil", side)
-				return
-			end
-			meta.joinKey = key
-			local record = upsertCacheEntry(cache, key, entry, meta.schema or schemaName)
-
-			touchKey(order, key)
-
-			local other = otherCache[key]
-			if other then
-				if side == "left" then
-					handleMatch(record, other)
-				else
-					handleMatch(other, record)
+			local function flushCache(cache, side, reason)
+				for key, record in pairs(cache) do
+					cache[key] = nil
+					publishExpiration(side, key, record, reason)
+					emitUnmatched(observer, strategy, side, record)
 				end
 			end
 
-			enforceRetention[side](cache, order, side)
-		end
-
-		local function flushCache(cache, side, reason)
-			for key, record in pairs(cache) do
-				cache[key] = nil
-				publishExpiration(side, key, record, reason)
-				emitUnmatched(observer, strategy, side, record)
+			local function handleMatch(leftRecord, rightRecord)
+				leftRecord.matched = true
+				rightRecord.matched = true
+				strategy.onMatch(observer, leftRecord, rightRecord)
 			end
-		end
 
-		local leftTagged = tagStream(leftStream, "left")
-		local rightTagged = tagStream(rightStream, "right")
+			local closed = false
+
+			local function flushBoth(reason)
+				if closed then
+					return
+				end
+				closed = true
+				flushCache(leftCache, "left", reason)
+				flushCache(rightCache, "right", reason)
+			end
+
+			local function upsertCacheEntry(cache, key, entry, schemaName)
+				local record = cache[key]
+				if record then
+					record.entry = entry
+					record.matched = false
+					record.key = key
+					record.schemaName = schemaName
+				else
+					record = {
+						entry = entry,
+						matched = false,
+						key = key,
+						schemaName = schemaName,
+					}
+					cache[key] = record
+				end
+				return record
+			end
+
+			local function runPeriodicGC()
+				if not gcIntervalSeconds or gcIntervalSeconds <= 0 then
+					return
+				end
+
+				local scheduleFn = gcScheduleFn
+				if not scheduleFn then
+					local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
+					if scheduler and tostring(scheduler) == "TimeoutScheduler" and scheduler.schedule then
+						scheduleFn = function(delaySeconds, fn)
+							return scheduler:schedule(fn, (delaySeconds or 0) * 1000)
+						end
+						if debugLifecycle then
+							warnf("[JoinObservable] gcIntervalSeconds using TimeoutScheduler")
+						end
+					end
+				end
+
+				if not scheduleFn then
+					if debugLifecycle then
+						warnf("[JoinObservable] gcIntervalSeconds configured but no scheduler available")
+					end
+					return
+				elseif debugLifecycle then
+					warnf("[JoinObservable] gcIntervalSeconds using custom scheduler")
+				end
+
+				local function tick()
+					if gcTicking then
+						return
+					end
+					gcTicking = true
+					enforceRetention.left(leftCache, leftOrder, "left")
+					enforceRetention.right(rightCache, rightOrder, "right")
+					gcSubscription = scheduleFn(gcIntervalSeconds, function()
+						gcTicking = false
+						tick()
+					end)
+					if not gcSubscription then
+						gcTicking = false
+					end
+				end
+
+				gcSubscription = scheduleFn(gcIntervalSeconds, tick)
+			end
+
+			local function handleEntry(side, cache, otherCache, order, entry)
+				local meta = Schema.assertRecordHasMeta(entry, side)
+				local schemaName = meta.schema
+				local ok, key = pcall(keySelector, entry, side, schemaName)
+				if not ok then
+					warnf("Dropped %s entry because key selector errored: %s", side, tostring(key))
+					return
+				end
+				if key == nil then
+					warnf("Dropped %s entry because join key resolved to nil", side)
+					return
+				end
+				meta.joinKey = key
+				local record = upsertCacheEntry(cache, key, entry, schemaName)
+
+				if order then
+					for i = 1, #order do
+						if order[i] == key then
+							table.remove(order, i)
+							break
+						end
+					end
+					table.insert(order, key)
+				end
+
+				local other = otherCache[key]
+				if other then
+					if side == "left" then
+						handleMatch(record, other)
+					else
+						handleMatch(other, record)
+					end
+				end
+
+					enforceRetention[side](cache, order, side)
+				end
+
+			local leftTagged = tagStream(leftStream, "left")
+			local rightTagged = tagStream(rightStream, "right")
 		local merged = mergeSources(leftTagged, rightTagged)
+		if merged.doOnCompleted then
+			merged = merged:doOnCompleted(function()
+				warnf("[JoinObservable] merged stream completed")
+			end)
+		end
+		if merged.doOnError then
+			merged = merged:doOnError(function(err)
+				warnf("[JoinObservable] merged stream error %s", tostring(err))
+			end)
+		end
 		assert(merged and merged.subscribe, "mergeSources must return an observable")
 
 		local subscription
@@ -245,21 +372,36 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			elseif side == "right" then
 				handleEntry("right", rightCache, leftCache, rightOrder, entry)
 			end
-		end, function(err)
-			observer:onError(err)
-			closeExpiredWith("onError", err)
-		end, function()
-			flushCache(leftCache, "left", "completed")
-			flushCache(rightCache, "right", "completed")
-			observer:onCompleted()
-			closeExpiredWith("onCompleted")
-		end)
+			end, function(err)
+				observer:onError(err)
+				closeExpiredWith("onError", err)
+			end, function()
+				if flushOnComplete then
+					flushBoth("completed")
+				end
+				observer:onCompleted()
+				closeExpiredWith("onCompleted")
+				if debugLifecycle then
+					warnf("[JoinObservable] completed join stream")
+				end
+			end)
+		runPeriodicGC()
 
 		return function()
 			if subscription then
 				subscription:unsubscribe()
 			end
+			if flushOnDispose then
+				-- Emit best-effort leftovers before shutting down on manual disposal.
+				flushBoth("disposed")
+			end
 			closeExpiredWith("onCompleted")
+			if debugLifecycle then
+				warnf("[JoinObservable] disposed join stream")
+			end
+			if gcSubscription and gcSubscription.unsubscribe then
+				gcSubscription:unsubscribe()
+			end
 		end
 	end)
 
@@ -326,17 +468,21 @@ function JoinObservable.chain(resultStream, opts)
 			for _, mapping in ipairs(mappings) do
 				local selection = Result.selectSchemas(result, { [mapping.schema] = mapping.renameTo })
 				local record = selection:get(mapping.renameTo)
-				if record then
-					local output = record
-					if mapping.map then
-						local ok, transformed = pcall(mapping.map, record, result)
-						if not ok then
+					if record then
+						local output = record
+						if mapping.map then
+							local ok, transformed = pcall(mapping.map, record, result)
+							if not ok then
 							observer:onError(transformed)
 							return
 						end
 						if transformed ~= nil then
 							output = transformed
 						end
+					end
+					if type(output) ~= "table" then
+						observer:onError("JoinObservable.chain expects mapper to return a table")
+						return
 					end
 					copyMetaDefaults(output, record.RxMeta, mapping.renameTo)
 					observer:onNext(output)

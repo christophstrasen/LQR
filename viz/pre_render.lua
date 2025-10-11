@@ -8,6 +8,8 @@ local PreRender = {}
 math.randomseed(os.time())
 
 local DEFAULT_FADE_DURATION = windowConfig.fadeSeconds or 10 -- seconds to decay alpha from 100 to 0
+local DEBUG_BASE = os.getenv("DEBUG") == "1"
+local DEBUG_SUBS = os.getenv("DEBUG_SUBS") == "1" or DEBUG_BASE
 local function collectPalette(config)
 	local palette = {}
 	if not config then
@@ -90,6 +92,7 @@ function PreRenderState.new(opts)
 		order = {},
 		entries = {},
 		subscriptions = {},
+		counters = {},
 	}, PreRenderState)
 	return state
 end
@@ -146,6 +149,7 @@ function PreRenderState:ingest(id, paletteKey, info)
 	if not template then
 		return nil
 	end
+	self.counters[paletteKey] = (self.counters[paletteKey] or 0) + 1
 
 	local entry = self.entries[id]
 	if not entry then
@@ -167,6 +171,10 @@ function PreRenderState:ingest(id, paletteKey, info)
 		end
 	end
 	return entry
+end
+
+function PreRenderState:getCount(paletteKey)
+	return self.counters[paletteKey] or 0
 end
 
 function PreRenderState:indexToCoordinate(index)
@@ -205,14 +213,25 @@ function PreRenderState:attachSource(opts)
 	assert(opts.paletteKey, "opts.paletteKey is required")
 	assert(type(opts.extract) == "function", "opts.extract must be a function")
 
+	if DEBUG_SUBS then
+		print(string.format("[viz-sub] subscribe paletteKey=%s layer=%s", opts.paletteKey, tostring(opts.layer or "?")))
+	end
 	local subscription = opts.observable:subscribe(function(value)
 		local id, info = opts.extract(value)
 		if id then
 			self:ingest(id, opts.paletteKey, info)
 		end
 	end)
-	self.subscriptions[#self.subscriptions + 1] = subscription
-	return subscription
+		self.subscriptions[#self.subscriptions + 1] = subscription
+		local function unsubscribe()
+			if DEBUG_SUBS then
+				print(string.format("[viz-sub] unsubscribe paletteKey=%s layer=%s", opts.paletteKey, tostring(opts.layer or "?")))
+			end
+			if subscription and subscription.unsubscribe then
+				subscription:unsubscribe()
+			end
+		end
+	return { unsubscribe = unsubscribe }
 end
 
 function PreRenderState:teardown()

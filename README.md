@@ -32,3 +32,11 @@ pre-commit run --all-files
 ## Continuous Integration
 
 GitHub Actions runs `busted tests/unit` on pushes and pull requests targeting `main` (see `.github/workflows/ci.yml`).
+
+## JoinObservable defaults
+
+- Joins support count-, interval/time-, and predicate-based expiration windows.
+- By default, unmatched rows are flushed on completion with `reason="completed"`. Set `flushOnComplete=false` when creating a join to suppress the final flush if you need legacy behavior.
+- Optional GC helpers:
+  - `gcIntervalSeconds` will run a periodic expiration sweep if a scheduler is available (either provide `gcScheduleFn(delaySeconds, fn)` or run under a TimeoutScheduler/luvit timers).
+  - `gcScheduleFn` lets hosts plug in their timer API; otherwise the join falls back to opportunistic GC when new records arrive.

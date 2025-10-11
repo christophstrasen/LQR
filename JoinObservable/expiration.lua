@@ -84,6 +84,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 	if expirationConfig.mode == "count" then
 		local maxItems = expirationConfig.maxItems
 		return function(cache, order, side)
+			order = order or {}
 			while #order > maxItems do
 				local oldestKey = table.remove(order, 1)
 				local record = cache[oldestKey]
@@ -99,26 +100,23 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		local reason = expirationConfig.reason
 		return function(cache, order, side)
 			local now = currentFn()
-			local index = 1
-			while index <= #order do
-				local key = order[index]
-				local record = cache[key]
-				if not record then
-					table.remove(order, index)
-				else
-					local entry = record.entry
-					local meta = entry and entry.RxMeta
-					local value = meta and meta.sourceTime or (entry and entry[field])
-					if type(value) ~= "number" then
-						warnf("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
-						index = index + 1
-					elseif now - value > offset then
-						table.remove(order, index)
-						cache[key] = nil
-						publishExpirationFn(side, key, record, reason)
-						emitUnmatchedFn(side, record)
-					else
-						index = index + 1
+			for key, record in pairs(cache) do
+				local entry = record.entry
+				local meta = entry and entry.RxMeta
+				local value = meta and meta.sourceTime or (entry and entry[field])
+				if type(value) ~= "number" then
+					warnf("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
+				elseif now - value > offset then
+					cache[key] = nil
+					publishExpirationFn(side, key, record, reason)
+					emitUnmatchedFn(side, record)
+					if order then
+						for i = #order, 1, -1 do
+							if order[i] == key then
+								table.remove(order, i)
+								break
+							end
+						end
 					end
 				end
 			end
@@ -131,28 +129,26 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 			local ctx = {
 				now = currentFn,
 			}
-			local index = 1
-			while index <= #order do
-				local key = order[index]
-				local record = cache[key]
-				if not record then
-					table.remove(order, index)
+			for key, record in pairs(cache) do
+				local keep = true
+				local ok, result = pcall(predicate, record.entry, side, ctx)
+				if not ok then
+					warnf("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
 				else
-					local keep = true
-					local ok, result = pcall(predicate, record.entry, side, ctx)
-					if not ok then
-						warnf("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
-					else
-						keep = not not result
-					end
+					keep = not not result
+				end
 
-					if keep then
-						index = index + 1
-					else
-						table.remove(order, index)
-						cache[key] = nil
-						publishExpirationFn(side, key, record, reason)
-						emitUnmatchedFn(side, record)
+				if not keep then
+					cache[key] = nil
+					publishExpirationFn(side, key, record, reason)
+					emitUnmatchedFn(side, record)
+					if order then
+						for i = #order, 1, -1 do
+							if order[i] == key then
+								table.remove(order, i)
+								break
+							end
+						end
 					end
 				end
 			end

@@ -14,7 +14,7 @@ local CELL_SIZE = gridConfig.cellSize or 26
 local CELL_PADDING = gridConfig.padding or 3
 local DEFAULT_COLOR = { 0.2, 0.2, 0.2, 1 }
 local FADE_DURATION_SECONDS = windowConfig.fadeSeconds or 10
-local HEADER_HEIGHT = 40
+local HEADER_HEIGHT = 200
 local GRID_TOP = HEADER_HEIGHT
 local INNER_INSET = 4
 local HOVER_PANEL_HEIGHT = 120
@@ -256,8 +256,24 @@ function love.draw()
 				end
 				return "id"
 			end
+			local startOffset = gridConfig.startOffset or windowConfig.startOffset or windowConfig.minId
+			local rangeText = ""
+			if startOffset ~= nil then
+				local totalCells = GRID_COLUMNS * GRID_ROWS
+				local rangeEnd = startOffset + totalCells - 1
+				rangeText = string.format(
+					"Showing records on id range %s-%s (grid %dx%d). ",
+					tostring(startOffset),
+					tostring(rangeEnd),
+					GRID_COLUMNS,
+					GRID_ROWS
+				)
+			else
+				rangeText = string.format("Showing records on grid %dx%d. ", GRID_COLUMNS, GRID_ROWS)
+			end
 			headerText = string.format(
-				"%s join on %s.%s, %s.%s",
+				"%s%s join on %s.%s, %s.%s",
+				rangeText,
 				(join.joinType or "inner"),
 				leftSchema,
 				describeKey(leftSchema),
@@ -267,12 +283,87 @@ function love.draw()
 		end
 	end
 
+	love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
+	love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, HEADER_HEIGHT)
+	love.graphics.setColor(1, 1, 1, 1)
 	if headerText then
-		love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
-		love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, HEADER_HEIGHT)
-		love.graphics.setColor(1, 1, 1, 1)
 		love.graphics.printf(headerText, 12, 10, WINDOW_WIDTH - 24)
 	end
+
+	local function drawLegendRow(y, color, label, count, opts)
+		opts = opts or {}
+		local layoutSize = math.max(16, CELL_SIZE - CELL_PADDING * 2)
+		local innerSize = layoutSize - INNER_INSET * 2
+		if innerSize < 2 then
+			innerSize = math.max(1, layoutSize * 0.6)
+		end
+		local rectSize = layoutSize
+		local x = 12
+		local textX = x + rectSize + 8
+		local countText = count ~= nil and string.format("%dx", count) or "n/a"
+		love.graphics.printf(countText, x, y, 60, "left")
+		x = x + 50
+		textX = x + rectSize + 8
+		if color then
+			if opts.outerBox then
+				love.graphics.setColor(color)
+				love.graphics.rectangle("fill", x, y, rectSize, rectSize)
+				local insetOffset = (rectSize - innerSize) / 2
+				love.graphics.setColor(DEFAULT_COLOR)
+				love.graphics.rectangle("fill", x + insetOffset, y + insetOffset, innerSize, innerSize)
+			else
+				local insetOffset = (rectSize - innerSize) / 2
+				love.graphics.setColor(color)
+				love.graphics.rectangle("fill", x + insetOffset, y + insetOffset, innerSize, innerSize)
+			end
+			love.graphics.setColor(1, 1, 1, 1)
+		end
+		love.graphics.printf(label, textX, y, WINDOW_WIDTH - textX - 12, "left")
+	end
+
+	local palette = (innerState or {}).palette or windowConfig.colors or {}
+	local innerStreams = (windowConfig.layers and windowConfig.layers.inner and windowConfig.layers.inner.streams) or {}
+	local yOffset = 52
+	for _, stream in ipairs(innerStreams) do
+		local name = stream.name or stream.paletteKey
+		if name then
+			local trackField = stream.track_field
+				or stream.trackField
+				or (stream.tracks and stream.tracks[1] and stream.tracks[1].field)
+				or "id"
+			local label = string.format("%s.%s", name, trackField)
+			local count = innerState and innerState.getCount and innerState:getCount(name) or 0
+			drawLegendRow(yOffset, palette[name], label, count)
+			yOffset = yOffset + 28
+		end
+	end
+
+	local outerPalette = windowConfig.colors or palette
+	local joinedColor = outerPalette.joined or DEFAULT_COLOR
+	local expiredColor = outerPalette.expired or DEFAULT_COLOR
+
+	local joinedCount = outerState and outerState.getCount and outerState:getCount("joined") or 0
+	local expiredCount = outerState and outerState.getCount and outerState:getCount("expired") or 0
+
+	drawLegendRow(yOffset, joinedColor, "Joined", joinedCount, { outerBox = true })
+	yOffset = yOffset + 28
+	drawLegendRow(yOffset, expiredColor, "Expired", expiredCount, { outerBox = true })
+	yOffset = yOffset + 28
+
+	local mixed = {
+		(joinedColor[1] + expiredColor[1]) / 2,
+		(joinedColor[2] + expiredColor[2]) / 2,
+		(joinedColor[3] + expiredColor[3]) / 2,
+		1,
+	}
+	drawLegendRow(
+		yOffset,
+		mixed,
+		"Join when expired. Color indicates mix when joined and expired arrive close together.",
+		nil,
+		{ outerBox = true }
+	)
+	yOffset = yOffset + 28
 
 	for col = 1, GRID_COLUMNS do
 		for row = 1, GRID_ROWS do
@@ -280,8 +371,8 @@ function love.draw()
 			local innerCell = StreamGrid.get("inner", col, row)
 			local outerColor = outerCell and outerCell.color or DEFAULT_COLOR
 			local innerColor = innerCell and innerCell.color or nil
-				local x = (col - 1) * CELL_SIZE + CELL_PADDING
-				local y = GRID_TOP + (row - 1) * CELL_SIZE + CELL_PADDING
+			local x = (col - 1) * CELL_SIZE + CELL_PADDING
+			local y = GRID_TOP + (row - 1) * CELL_SIZE + CELL_PADDING
 			local outerSize = CELL_SIZE - CELL_PADDING * 2
 			local innerSize = outerSize - INNER_INSET * 2
 			if innerSize < 2 then
