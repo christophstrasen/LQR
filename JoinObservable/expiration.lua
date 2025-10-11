@@ -1,3 +1,4 @@
+-- Expiration utilities that prune cached join rows based on count/interval/predicate rules.
 local warnings = require("JoinObservable.warnings")
 
 local warnf = warnings.warnf
@@ -126,6 +127,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		local currentFn = expirationConfig.currentFn
 		local reason = expirationConfig.reason
 		return function(cache, order, side)
+			-- @TODO: clarify whether ctx.now should be the numeric timestamp (currentFn()) instead of the function.
 			local ctx = {
 				now = currentFn,
 			}

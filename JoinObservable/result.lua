@@ -1,3 +1,4 @@
+-- Wrapper for joined rows that tracks schema metadata alongside payloads.
 ---@class JoinResult
 ---@field RxMeta table
 local Result = {}

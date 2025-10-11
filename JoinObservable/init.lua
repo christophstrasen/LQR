@@ -1,3 +1,4 @@
+-- Core join implementation that pairs two schema-tagged streams and emits joined results.
 local rx = require("reactivex")
 local Schema = require("JoinObservable.schema")
 local Result = require("JoinObservable.result")
@@ -119,6 +120,7 @@ local function defaultMerge(leftObservable, rightObservable)
 end
 
 local function tagStream(stream, side)
+	-- Attach the side label so downstream logic can route to the correct cache.
 	local mapped = stream:map(function(entry)
 		return {
 			side = side,
@@ -135,6 +137,8 @@ local function tagStream(stream, side)
 end
 
 function JoinObservable.createJoinObservable(leftStream, rightStream, options)
+	-- High-level flow: buffer left/right rows keyed by join key, emit matches immediately,
+	-- and periodically evict stale/unmatched rows according to the configured strategy.
 	assert(leftStream, "leftStream is required")
 	assert(rightStream, "rightStream is required")
 
@@ -162,6 +166,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local expiredClosed = false
 
 	local function singleSchemaResult(record)
+		-- Wrap a single cache record into a Result to reuse the standard emit path.
 		return Result.new():attach(record.schemaName, record.entry)
 	end
 
@@ -206,6 +211,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		local rightOrder = expirationConfig.right.mode == "count" and {} or nil
 		local gcSubscription
 		local gcTicking = false
+		-- Retention enforcers gate cache growth and drive expiration/onUnmatched emissions.
 		local enforceRetention = {
 			left = Expiration.createEnforcer(expirationConfig.left, publishExpiration, function(side, record)
 				emitUnmatched(observer, strategy, side, record)
@@ -236,6 +242,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 					return
 				end
 				closed = true
+				-- When completion/disposal hits, emit everything still buffered for visibility.
 				flushCache(leftCache, "left", reason)
 				flushCache(rightCache, "right", reason)
 			end
@@ -264,6 +271,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 					return
 				end
 
+				-- @TODO: gcScheduleFn detection is implicit; consider exposing scheduler on options to avoid brittle runtime checks.
 				local scheduleFn = gcScheduleFn
 				if not scheduleFn then
 					local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
@@ -339,8 +347,9 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 					end
 				end
 
-					enforceRetention[side](cache, order, side)
-				end
+				-- Evict stale rows each time we insert to avoid unbounded growth.
+				enforceRetention[side](cache, order, side)
+			end
 
 			local leftTagged = tagStream(leftStream, "left")
 			local rightTagged = tagStream(rightStream, "right")

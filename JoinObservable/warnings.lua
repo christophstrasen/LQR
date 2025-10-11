@@ -1,3 +1,4 @@
+-- Thin wrapper that funnels JoinObservable warnings through an overrideable handler.
 local io = require("io")
 
 local Warnings = {}

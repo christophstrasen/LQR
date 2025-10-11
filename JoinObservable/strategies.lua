@@ -1,3 +1,4 @@
+-- Join strategy table describing how to emit matches/unmatched rows for each join type.
 local Result = require("JoinObservable.result")
 
 local Strategies = {}

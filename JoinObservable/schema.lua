@@ -1,3 +1,4 @@
+-- Helpers for tagging upstream records with RxMeta schema metadata before joining.
 ---@class rx.Subscription
 ---@field unsubscribe fun(self:rx.Subscription)
 
@@ -197,11 +198,12 @@ end
 			meta.idField = idField or (idSelector and idLabel) or meta.idField or "custom"
 		else
 			meta.idField = meta.idField or idField or (idSelector and idLabel) or meta.idField or "unknown"
-		end
-
-		return record
 	end
 
+	return record
+end
+
+-- @TODO: indentation on the return chain is hard to read; consider reformatting without altering semantics.
 return observable
 		:map(processRecord)
 		:filter(function(record)
