@@ -83,4 +83,75 @@ describe("JoinObservable periodic GC", function()
 
 		assert.are.same({ "expired_interval" }, reasons)
 	end)
+
+	it("can defer per-insert GC when gcOnInsert=false and rely on periodic GC instead", function()
+		local scheduledTick
+		local function scheduleFn(_delay, fn)
+			scheduledTick = fn
+			return { unsubscribe = function() end }
+		end
+
+		local leftSubject = rx.Subject.create()
+		local rightSubject = rx.Subject.create()
+		local left = Schema.wrap("left", leftSubject, { idField = "id" })
+		local right = Schema.wrap("right", rightSubject, { idField = "id" })
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			gcOnInsert = false,
+			expirationWindow = {
+				mode = "count",
+				maxItems = 1,
+			},
+			gcIntervalSeconds = 0.1,
+			gcScheduleFn = scheduleFn,
+			flushOnComplete = true,
+		})
+
+		local pairs = {}
+		join:subscribe(function(result)
+			local left = result:get("left")
+			local right = result:get("right")
+			pairs[#pairs + 1] = {
+				left = left and left.id or nil,
+				right = right and right.id or nil,
+			}
+		end)
+
+		local expiredPackets = {}
+		expired:subscribe(function(packet)
+			expiredPackets[#expiredPackets + 1] = packet
+		end)
+
+		leftSubject:onNext({ id = 1 })
+		leftSubject:onNext({ id = 2 })
+
+		-- Without per-insert GC, nothing is expired yet.
+		assert.are.same({}, pairs)
+		assert.are.same({}, expiredPackets)
+
+		-- Trigger periodic GC once; oldest entry should be evicted.
+		assert.is_not_nil(scheduledTick)
+		scheduledTick()
+
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
+
+		local expiredIds = {}
+		local expiredReasons = {}
+		for _, packet in ipairs(expiredPackets) do
+			local entry = packet.result and packet.result:get(packet.schema)
+			expiredIds[#expiredIds + 1] = entry and entry.id or nil
+			expiredReasons[#expiredReasons + 1] = packet.reason
+		end
+
+		assert.are.same({ 1, 2 }, expiredIds)
+		assert.are.same({ "evicted", "completed" }, expiredReasons)
+
+		assert.are.same({
+			{ left = 1, right = nil },
+			{ left = 2, right = nil },
+		}, pairs)
+	end)
 end)

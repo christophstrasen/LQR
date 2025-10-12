@@ -146,6 +146,27 @@ Each record emitted via `expiredStream` has the shape:
 
 Matched records are never expired. Unmatched records emit at most once per side: once a record expires (or the streams complete), we emit a single `{ left = record, right = nil }` or `{ left = nil, right = record }` value and remove it from the cache.
 
+### Periodic GC (`gcIntervalSeconds`, `gcScheduleFn`)
+
+Cache eviction normally runs when new records arrive. If you need time-based expiration to fire even when traffic stops, set `gcIntervalSeconds` to periodically sweep both caches. The join will:
+
+- Use `gcScheduleFn(delaySeconds, fn)` if provided. This should schedule `fn` after `delaySeconds` (seconds). If it returns an object with `unsubscribe`, we will call it when the join is disposed.
+- Otherwise, try to auto-detect a scheduler from `rx.scheduler.get()` that exposes `:schedule(fn, delayMs)` (e.g., `TimeoutScheduler`).
+- If no scheduler is available, the join logs a warning and disables periodic GC; only opportunistic sweeps on new arrivals will run.
+
+Tip: when hosting inside an environment with its own timer API (luv/ngx/etc), pass a thin adapter such as:
+
+```lua
+gcScheduleFn = function(delaySeconds, fn)
+  local handle = myTimers.setTimeout(fn, delaySeconds * 1000)
+  return { unsubscribe = function() myTimers.clearTimeout(handle) end }
+end
+```
+
+### Per-insert GC toggle (`gcOnInsert`)
+
+By default the join runs retention checks on every insert (`gcOnInsert = true`). Set `gcOnInsert = false` to skip per-insert sweeps and rely on periodic GC (or opportunistic checks on completion/disposal). This reduces CPU at the cost of higher peak memory and delayed expirations/unmatched emissions between GC ticks—use only when you provide a periodic scheduler and can tolerate the latency.
+
 ## Warning & Lifecycle Hooks
 
 ### `JoinObservable.setWarningHandler(handler)`

@@ -150,9 +150,13 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local mergeSources = options.merge or defaultMerge
 	local flushOnComplete = options.flushOnComplete
 	local flushOnDispose = options.flushOnDispose
+	local gcOnInsert = options.gcOnInsert
 	local gcIntervalSeconds = options.gcIntervalSeconds or options.gc_interval_seconds
 	local gcScheduleFn = options.gcScheduleFn or options.gc_schedule_fn
 	local debugLifecycle = os.getenv("DEBUG") == "1"
+	if gcOnInsert == nil then
+		gcOnInsert = true
+	end
 	if flushOnDispose == nil then
 		-- Default: emit cached unmatched/expired rows when the downstream cancels,
 		-- but only for joins that care about unmatched rows.
@@ -272,6 +276,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				end
 
 				-- Auto-detect scheduler or use provided gcScheduleFn for periodic GC.
+				-- @TODO: add instrumentation for GC cost and auto-tune gcOnInsert/gcIntervalSeconds based on load.
 				local scheduleFn = gcScheduleFn
 				if not scheduleFn then
 					local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
@@ -347,7 +352,9 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				end
 
 				-- Evict stale rows each time we insert to avoid unbounded growth.
-				enforceRetention[side](cache, order, side)
+				if gcOnInsert then
+					enforceRetention[side](cache, order, side)
+				end
 			end
 
 			local leftTagged = tagStream(leftStream, "left")
