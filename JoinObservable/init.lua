@@ -271,7 +271,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 					return
 				end
 
-				-- @TODO: gcScheduleFn detection is implicit; consider exposing scheduler on options to avoid brittle runtime checks.
+				-- Auto-detect scheduler or use provided gcScheduleFn for periodic GC.
 				local scheduleFn = gcScheduleFn
 				if not scheduleFn then
 					local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
@@ -286,9 +286,8 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				end
 
 				if not scheduleFn then
-					if debugLifecycle then
-						warnf("[JoinObservable] gcIntervalSeconds configured but no scheduler available")
-					end
+					-- Warn loudly since GC was requested but cannot run.
+					warnf("[JoinObservable] gcIntervalSeconds configured but no scheduler available; GC disabled")
 					return
 				elseif debugLifecycle then
 					warnf("[JoinObservable] gcIntervalSeconds using custom scheduler")

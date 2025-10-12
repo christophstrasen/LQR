@@ -203,12 +203,12 @@ end
 	return record
 end
 
--- @TODO: indentation on the return chain is hard to read; consider reformatting without altering semantics.
-return observable
-		:map(processRecord)
-		:filter(function(record)
-			return record ~= nil
-		end)
+	---@diagnostic disable-next-line
+	return observable
+			:map(processRecord)
+			:filter(function(record)
+				return record ~= nil
+			end)
 end
 
 return Schema
