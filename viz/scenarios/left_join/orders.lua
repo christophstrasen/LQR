@@ -239,4 +239,8 @@ return {
 	{ orderId = 2238, customerId = 342, total = 200 },
 	{ orderId = 2239, customerId = 368, total = 215 },
 	{ orderId = 2240, customerId = 394, total = 255 },
+	{ orderId = 2241, customerId = 420, total = 155 },
+	{ orderId = 2242, customerId = 422, total = 235 },
+	{ orderId = 2243, customerId = 424, total = 135 },
+	{ orderId = 2244, customerId = 426, total = 133 },
 }

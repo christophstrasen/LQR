@@ -94,3 +94,26 @@
 1. Document the stream descriptor schema (fields, optional `track_schema`, hover syntax) and consider loading it from scenario files.
 2. Add more headless specs for hover payload rendering and expired-stream shaping to keep the visualization safe to refactor.
 3. Surface multiple scenarios/configs via CLI flags or a toggle now that the pipeline is fully data driven.
+
+## Day 6 – GC Controls & Docs
+
+### Highlights
+- **GC knobs:** Added `gcOnInsert` (default true) so retention sweeps can be skipped on insert and left to periodic GC. Joined this with `gcIntervalSeconds`/`gcScheduleFn`; debug logging now uses a dedicated `debugf` instead of warning the world.
+- **Scheduler clarity:** Low-level docs now spell out the need for a scheduler to run periodic GC and describe the per-insert toggle. GC code warns when no scheduler is available but keeps per-insert retention as the safety net.
+- **Testing:** New GC spec exercises `gcOnInsert=false` with a scheduled sweep and keeps interval-based GC coverage. 
+
+### Takeaways
+1. **GC is policy + plumbing:** Retention policy lives in `expirationWindow`; GC controls (interval, scheduler, sweeps on insert) are execution concerns and stay at join level.
+2. **Per-insert sweeps are safety-first:** With small caches they’re cheap; periodic GC exists for idle periods but shouldn’t be the only guard unless the host is sure about memory headroom.
+3. **Lifecycle correctness:** Cleaned up completion/disposal so both join and expired streams close reliably, flushing leftovers; added TODO to measure GC cost and auto-tune onInsert/interval based on load.
+
+## Day 7 – Viz GC UX & Scheduler Fixes
+
+### Highlights
+- **Periodic GC in viz:** Left-join scenario now passes a `gcScheduleFn` powered by the Love2D scheduler; fixed delay units (seconds, not ms) so ticks actually fire. Enabled `gcOnInsert=false` in the demo to showcase periodic sweeps.
+- **GC status header:** Viz header now shows GC mode (interval + scheduler requirement, insert sweeps on/off, or insert-only). Legend/grid were shifted to accommodate the extra lines.
+- **Debug visibility:** Core GC logs switched to DEBUG-only stderr; periodic ticks and per-insert sweeps are visible without spamming warnings.
+
+### Takeaways
+1. **UI mirroring runtime state helps:** Seeing GC mode in the viz immediately flags misconfigurations (missing scheduler, insert-only mode).
+2. **Scheduler ergonomics:** Passing host-specific schedulers (`gcScheduleFn`) is the least brittle way to demonstrate periodic GC across environments; auto-detect remains best-effort only.

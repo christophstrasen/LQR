@@ -54,7 +54,7 @@ local joins = {
 			customers = "id",
 			orders = "customerId",
 		},
-		joinType = "left",
+		joinType = "inner",
 		expirationWindow = {
 			mode = "time",
 			ttl = 4,
@@ -62,7 +62,7 @@ local joins = {
 			currentFn = os.time,
 		},
 		gcIntervalSeconds = 2,
-		gcOnInsert = false,
+		gcOnInsert = true,
 		gcScheduleFn = loveScheduler,
 	},
 }

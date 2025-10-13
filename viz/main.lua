@@ -3,6 +3,7 @@ require("bootstrap")
 local ScenarioLoader = require("viz.scenario_loader")
 local Observables = require("viz.observables")
 local DataSources = ScenarioLoader.getRecipe(Observables)
+local ConfigUtils = require("viz.config_utils")
 local PreRender = require("pre_render")
 local rx = require("reactivex")
 
@@ -14,7 +15,7 @@ local CELL_SIZE = gridConfig.cellSize or 26
 local CELL_PADDING = gridConfig.padding or 3
 local DEFAULT_COLOR = { 0.2, 0.2, 0.2, 1 }
 local FADE_DURATION_SECONDS = windowConfig.fadeSeconds or 10
-local HEADER_HEIGHT = 200
+local HEADER_HEIGHT = 260
 local GRID_TOP = HEADER_HEIGHT
 local INNER_INSET = 4
 local HOVER_PANEL_HEIGHT = 120
@@ -27,6 +28,28 @@ local hover = nil
 local innerState = nil
 local outerState = nil
 local needsRefresh = true
+
+local function gcLabel()
+	local primaryJoin = ConfigUtils.primaryJoinConfig(ScenarioLoader.data)
+	if not primaryJoin then
+		return nil
+	end
+	local interval = primaryJoin.gcIntervalSeconds
+	local onInsert = primaryJoin.gcOnInsert
+
+	if interval and interval > 0 then
+		if onInsert == false then
+			return string.format("GC: interval=%.2fs (requires scheduler)", interval)
+		end
+		return string.format("GC: interval=%.2fs (requires scheduler) + per insert", interval)
+	end
+
+	if onInsert == false then
+		return "GC: onComplete only"
+	end
+
+	return "GC: per insert"
+end
 
 local function clampComponent(value)
 	return math.max(0, math.min(1, value or 0))
@@ -237,6 +260,7 @@ function love.draw()
 	love.graphics.clear(0.1, 0.1, 0.1)
 
 	local headerText = windowConfig.headerText
+	local joinLine = nil
 	if not headerText then
 		local joins = ScenarioLoader.data and ScenarioLoader.data.joins
 		local join = joins and joins[1] or (ScenarioLoader.data and ScenarioLoader.data.join)
@@ -271,9 +295,9 @@ function love.draw()
 			else
 				rangeText = string.format("Showing records on grid %dx%d. ", GRID_COLUMNS, GRID_ROWS)
 			end
-			headerText = string.format(
-				"%s%s join on %s.%s, %s.%s",
-				rangeText,
+			headerText = rangeText
+			joinLine = string.format(
+				"%s join on %s.%s, %s.%s",
 				(join.joinType or "inner"),
 				leftSchema,
 				describeKey(leftSchema),
@@ -286,8 +310,19 @@ function love.draw()
 	love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
 	love.graphics.rectangle("fill", 0, 0, WINDOW_WIDTH, HEADER_HEIGHT)
 	love.graphics.setColor(1, 1, 1, 1)
+	local headerYOffset = 10
 	if headerText then
-		love.graphics.printf(headerText, 12, 10, WINDOW_WIDTH - 24)
+		love.graphics.printf(headerText, 12, headerYOffset, WINDOW_WIDTH - 24, "left")
+		headerYOffset = headerYOffset + 22
+	end
+	if joinLine then
+		love.graphics.printf(joinLine, 12, headerYOffset, WINDOW_WIDTH - 24, "left")
+		headerYOffset = headerYOffset + 22
+	end
+	local gcText = gcLabel()
+	if gcText then
+		love.graphics.printf(gcText, 12, headerYOffset, WINDOW_WIDTH - 24, "left")
+		headerYOffset = headerYOffset + 22
 	end
 
 	local function drawLegendRow(y, color, label, count, opts)
@@ -323,7 +358,7 @@ function love.draw()
 
 	local palette = (innerState or {}).palette or windowConfig.colors or {}
 	local innerStreams = (windowConfig.layers and windowConfig.layers.inner and windowConfig.layers.inner.streams) or {}
-	local yOffset = 52
+	local yOffset = math.max(52, headerYOffset + 20)
 	for _, stream in ipairs(innerStreams) do
 		local name = stream.name or stream.paletteKey
 		if name then
@@ -442,7 +477,7 @@ function love.draw()
 				label = label .. "\n" .. ts
 			end
 		end
-		local panelY = GRID_TOP + GRID_ROWS * CELL_SIZE
+	local panelY = GRID_TOP + GRID_ROWS * CELL_SIZE
 		love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
 		love.graphics.rectangle("fill", 0, panelY, WINDOW_WIDTH, HOVER_PANEL_HEIGHT)
 		love.graphics.setColor(1, 1, 1, 1)

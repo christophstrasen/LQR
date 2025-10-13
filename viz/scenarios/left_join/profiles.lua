@@ -20,7 +20,7 @@ Profiles.customers = {
 		schema = "customers",
 		idField = "id",
 		color = { 0.23, 0.45, 0.95, 1.0 },
-		delay = { minDelay = 0.001, maxDelay = 0.1, mode = "ordered" },
+		delay = { minDelay = 0.0041, maxDelay = 0.05, mode = "ordered" },
 		records = customers,
 	},
 }
@@ -43,7 +43,7 @@ Profiles.orders = {
 		schema = "orders",
 		idField = "orderId",
 		color = { 0.95, 0.83, 0.25, 1.0 },
-		delay = { minDelay = 0.01, maxDelay = 0.2, mode = "jittered" },
+		delay = { minDelay = 0.031, maxDelay = 0.08, mode = "jittered" },
 		records = orders,
 	},
 }
