@@ -130,7 +130,7 @@ local function tagStream(stream, side)
 	-- Only add lifecycle logging if available in this Rx build.
 	if mapped.doOnCompleted then
 		mapped = mapped:doOnCompleted(function()
-			warnf("[JoinObservable] %s upstream completed", side)
+			debugf("%s upstream completed", side)
 		end)
 	end
 	return mapped
@@ -154,6 +154,15 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	local gcIntervalSeconds = options.gcIntervalSeconds or options.gc_interval_seconds
 	local gcScheduleFn = options.gcScheduleFn or options.gc_schedule_fn
 	local debugLifecycle = os.getenv("DEBUG") == "1"
+	local function debugf(fmt, ...)
+		if not debugLifecycle then
+			return
+		end
+		local ok, msg = pcall(string.format, fmt, ...)
+		if ok then
+			io.stderr:write("[JoinObservable debug] " .. msg .. "\n")
+		end
+	end
 	if gcOnInsert == nil then
 		gcOnInsert = true
 	end
@@ -284,9 +293,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 						scheduleFn = function(delaySeconds, fn)
 							return scheduler:schedule(fn, (delaySeconds or 0) * 1000)
 						end
-						if debugLifecycle then
-							warnf("[JoinObservable] gcIntervalSeconds using TimeoutScheduler")
-						end
+						debugf("gcIntervalSeconds using TimeoutScheduler")
 					end
 				end
 
@@ -294,8 +301,8 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 					-- Warn loudly since GC was requested but cannot run.
 					warnf("[JoinObservable] gcIntervalSeconds configured but no scheduler available; GC disabled")
 					return
-				elseif debugLifecycle then
-					warnf("[JoinObservable] gcIntervalSeconds using custom scheduler")
+				else
+					debugf("gcIntervalSeconds using custom scheduler")
 				end
 
 				local function tick()
@@ -303,6 +310,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 						return
 					end
 					gcTicking = true
+					debugf("periodic GC tick (interval=%ss)", tostring(gcIntervalSeconds))
 					enforceRetention.left(leftCache, leftOrder, "left")
 					enforceRetention.right(rightCache, rightOrder, "right")
 					gcSubscription = scheduleFn(gcIntervalSeconds, function()
@@ -353,6 +361,7 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 
 				-- Evict stale rows each time we insert to avoid unbounded growth.
 				if gcOnInsert then
+					debugf("per-insert GC sweep (%s)", side)
 					enforceRetention[side](cache, order, side)
 				end
 			end
@@ -360,16 +369,16 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			local leftTagged = tagStream(leftStream, "left")
 			local rightTagged = tagStream(rightStream, "right")
 		local merged = mergeSources(leftTagged, rightTagged)
-		if merged.doOnCompleted then
-			merged = merged:doOnCompleted(function()
-				warnf("[JoinObservable] merged stream completed")
-			end)
-		end
-		if merged.doOnError then
-			merged = merged:doOnError(function(err)
-				warnf("[JoinObservable] merged stream error %s", tostring(err))
-			end)
-		end
+	if merged.doOnCompleted then
+		merged = merged:doOnCompleted(function()
+			debugf("merged stream completed")
+		end)
+	end
+	if merged.doOnError then
+		merged = merged:doOnError(function(err)
+			debugf("merged stream error %s", tostring(err))
+		end)
+	end
 		assert(merged and merged.subscribe, "mergeSources must return an observable")
 
 		local subscription
@@ -391,34 +400,30 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				observer:onError(err)
 				closeExpiredWith("onError", err)
 			end, function()
-				if flushOnComplete then
-					flushBoth("completed")
-				end
-				observer:onCompleted()
-				closeExpiredWith("onCompleted")
-				if debugLifecycle then
-					warnf("[JoinObservable] completed join stream")
-				end
-			end)
-		runPeriodicGC()
+		if flushOnComplete then
+			flushBoth("completed")
+		end
+		observer:onCompleted()
+		closeExpiredWith("onCompleted")
+		debugf("completed join stream")
+	end)
+	runPeriodicGC()
 
 		return function()
 			if subscription then
 				subscription:unsubscribe()
 			end
-			if flushOnDispose then
-				-- Emit best-effort leftovers before shutting down on manual disposal.
-				flushBoth("disposed")
-			end
-			closeExpiredWith("onCompleted")
-			if debugLifecycle then
-				warnf("[JoinObservable] disposed join stream")
-			end
-			if gcSubscription and gcSubscription.unsubscribe then
-				gcSubscription:unsubscribe()
-			end
+		if flushOnDispose then
+			-- Emit best-effort leftovers before shutting down on manual disposal.
+			flushBoth("disposed")
 		end
-	end)
+		closeExpiredWith("onCompleted")
+		debugf("disposed join stream")
+		if gcSubscription and gcSubscription.unsubscribe then
+			gcSubscription:unsubscribe()
+		end
+	end
+end)
 
 	return observable, expiredSubject
 end

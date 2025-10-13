@@ -1,3 +1,4 @@
+local rx = require("reactivex")
 local Profiles = require("viz.scenarios.left_join.profiles")
 local ConfigUtils = require("viz.config_utils")
 
@@ -24,6 +25,25 @@ local windowConfig = {
 
 local streams = Profiles.streams
 
+local function loveScheduler(delaySeconds, fn)
+	if os.getenv("DEBUG") == "1" then
+		print(string.format("[viz] scheduling GC tick in %.3fs", delaySeconds or 0))
+	end
+	local sub = rx.scheduler.schedule(function()
+		if os.getenv("DEBUG") == "1" then
+			print("[viz] executing scheduled GC tick")
+		end
+		fn()
+	end, delaySeconds or 0)
+	return sub or {
+		unsubscribe = function()
+			if sub and sub.unsubscribe then
+				sub:unsubscribe()
+			end
+		end,
+	}
+end
+
 local joins = {
 	{
 		name = "customersWithOrders",
@@ -41,6 +61,9 @@ local joins = {
 			field = "sourceTime",
 			currentFn = os.time,
 		},
+		gcIntervalSeconds = 2,
+		gcOnInsert = false,
+		gcScheduleFn = loveScheduler,
 	},
 }
 

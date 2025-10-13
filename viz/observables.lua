@@ -296,6 +296,9 @@ for index, joinConfig in ipairs(resolveJoinConfigs()) do
 			},
 			joinType = joinConfig.joinType or "left",
 			expirationWindow = joinExpiration,
+			gcIntervalSeconds = joinConfig.gcIntervalSeconds,
+			gcScheduleFn = joinConfig.gcScheduleFn,
+			gcOnInsert = joinConfig.gcOnInsert,
 		})
 
 		-- Share join/expired streams so all consumers observe the same run.
