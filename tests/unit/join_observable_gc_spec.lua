@@ -154,4 +154,35 @@ describe("JoinObservable periodic GC", function()
 			{ left = 2, right = nil },
 		}, pairs)
 	end)
+
+	it("cancels periodic GC when scheduler returns a callable handle", function()
+		local canceled = 0
+		local function scheduleFn(_delay, fn)
+			-- Ignore the tick; return a canceler function instead of an object.
+			return function()
+				canceled = canceled + 1
+			end
+		end
+
+		local leftSubject = rx.Subject.create()
+		local rightSubject = rx.Subject.create()
+		local left = Schema.wrap("left", leftSubject, { idField = "id" })
+		local right = Schema.wrap("right", rightSubject, { idField = "id" })
+
+		local join = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			gcIntervalSeconds = 0.1,
+			gcScheduleFn = scheduleFn,
+		})
+
+		local subscription = join:subscribe(function() end)
+		assert.are.equal(0, canceled)
+
+		subscription:unsubscribe()
+		assert.are.equal(1, canceled)
+
+		-- No double-cancel on repeated unsubscription.
+		subscription:unsubscribe()
+		assert.are.equal(1, canceled)
+	end)
 end)

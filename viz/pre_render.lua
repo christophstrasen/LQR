@@ -185,7 +185,7 @@ end
 
 function PreRenderState:coordinateForEntry(entry, index)
 	if self.idMapper then
-		local col, row = self.idMapper(entry.id, self)
+		local col, row = self.idMapper(entry.id, self, index)
 		if col and row then
 			return col, row
 		end
@@ -416,10 +416,13 @@ local function buildLayerStates(baseOpts)
 		if startOffset == nil then
 			startOffset = globalStartOffset()
 		end
-		if startOffset ~= nil then
+		local explicitMapper = resolveMapperConfig(layerConfig.idMapper) or defaultIdMapper
+		if layerConfig.idMapper or windowConfig.idMapper then
+			stateOpts.idMapper = explicitMapper
+		elseif startOffset ~= nil then
 			stateOpts.idMapper = PreRender.rasterIdMapper(startOffset, true)
 		else
-			stateOpts.idMapper = resolveMapperConfig(layerConfig.idMapper) or defaultIdMapper
+			stateOpts.idMapper = explicitMapper
 		end
 		stateOpts.palette = baseOpts.palette
 		layerStates[name] = PreRenderState.new(stateOpts)

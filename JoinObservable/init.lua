@@ -119,7 +119,8 @@ local function defaultMerge(leftObservable, rightObservable)
 	end)
 end
 
-local function tagStream(stream, side)
+local function tagStream(stream, side, debugf)
+	debugf = debugf or function() end
 	-- Attach the side label so downstream logic can route to the correct cache.
 	local mapped = stream:map(function(entry)
 		return {
@@ -279,6 +280,21 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				return record
 			end
 
+			local gcSubscription
+			local function cancelGc()
+				if not gcSubscription then
+					return
+				end
+				if type(gcSubscription) == "function" then
+					gcSubscription()
+				elseif gcSubscription.unsubscribe then
+					gcSubscription:unsubscribe()
+				elseif gcSubscription.dispose then
+					gcSubscription:dispose()
+				end
+				gcSubscription = nil
+			end
+
 			local function runPeriodicGC()
 				if not gcIntervalSeconds or gcIntervalSeconds <= 0 then
 					return
@@ -366,8 +382,8 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 				end
 			end
 
-			local leftTagged = tagStream(leftStream, "left")
-			local rightTagged = tagStream(rightStream, "right")
+			local leftTagged = tagStream(leftStream, "left", debugf)
+			local rightTagged = tagStream(rightStream, "right", debugf)
 		local merged = mergeSources(leftTagged, rightTagged)
 	if merged.doOnCompleted then
 		merged = merged:doOnCompleted(function()
@@ -382,11 +398,11 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		assert(merged and merged.subscribe, "mergeSources must return an observable")
 
 		local subscription
-		subscription = merged:subscribe(function(record)
-			if type(record) ~= "table" then
-				warnf("Ignoring record emitted as %s (expected table)", type(record))
-				return
-			end
+			subscription = merged:subscribe(function(record)
+				if type(record) ~= "table" then
+					warnf("Ignoring record emitted as %s (expected table)", type(record))
+					return
+				end
 
 			local side = record.side
 			local entry = record.entry
@@ -394,14 +410,15 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			if side == "left" then
 				handleEntry("left", leftCache, rightCache, leftOrder, entry)
 			elseif side == "right" then
-				handleEntry("right", rightCache, leftCache, rightOrder, entry)
-			end
-			end, function(err)
-				observer:onError(err)
-				closeExpiredWith("onError", err)
-			end, function()
-		if flushOnComplete then
-			flushBoth("completed")
+					handleEntry("right", rightCache, leftCache, rightOrder, entry)
+				end
+				end, function(err)
+					flushBoth("error")
+					observer:onError(err)
+					closeExpiredWith("onError", err)
+				end, function()
+			if flushOnComplete then
+				flushBoth("completed")
 		end
 		observer:onCompleted()
 		closeExpiredWith("onCompleted")
@@ -409,23 +426,45 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	end)
 	runPeriodicGC()
 
-		return function()
-			if subscription then
-				subscription:unsubscribe()
-			end
+			return function()
+				if subscription then
+					subscription:unsubscribe()
+				end
 		if flushOnDispose then
 			-- Emit best-effort leftovers before shutting down on manual disposal.
 			flushBoth("disposed")
+			end
+			closeExpiredWith("onCompleted")
+			debugf("disposed join stream")
+		cancelGc()
 		end
-		closeExpiredWith("onCompleted")
-		debugf("disposed join stream")
-		if gcSubscription and gcSubscription.unsubscribe then
-			gcSubscription:unsubscribe()
-		end
-	end
-end)
+	end)
 
 	return observable, expiredSubject
+end
+
+local function cloneSchemaMeta(meta, overrideSchema)
+	if type(meta) ~= "table" then
+		return { schema = overrideSchema }
+	end
+
+	return {
+		schema = overrideSchema or meta.schema,
+		schemaVersion = meta.schemaVersion,
+		sourceTime = meta.sourceTime,
+		joinKey = meta.joinKey,
+	}
+end
+
+local function shallowCopyRecord(record, targetSchema)
+	local copy = {}
+	for key, value in pairs(record) do
+		if key ~= "RxMeta" then
+			copy[key] = value
+		end
+	end
+	copy.RxMeta = cloneSchemaMeta(record.RxMeta, targetSchema)
+	return copy
 end
 
 local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
@@ -479,21 +518,41 @@ function JoinObservable.chain(resultStream, opts)
 		-- Explainer: wrapping in `Observable.create` gives us lazy subscription
 		-- semantics, so we avoid dangling Subjects and respect downstream disposal.
 		local subscription
+		local function fail(err)
+			if subscription then
+				subscription:unsubscribe()
+				subscription = nil
+			end
+			observer:onError(err)
+		end
+
 		subscription = resultStream:subscribe(function(result)
 			if getmetatable(result) ~= Result then
-				observer:onError("JoinObservable.chain expects upstream JoinResult values")
+				fail("JoinObservable.chain expects upstream JoinResult values")
 				return
 			end
 
+			local recordCache, metaCache = {}, {}
+			local function resolveSource(schema)
+				if recordCache[schema] == nil then
+					local source = result:get(schema)
+					recordCache[schema] = source or false
+					metaCache[schema] = source and (source.RxMeta or nil) or nil
+				end
+				local cached = recordCache[schema]
+				return cached ~= false and cached or nil, metaCache[schema]
+			end
+
 			for _, mapping in ipairs(mappings) do
-				local selection = Result.selectSchemas(result, { [mapping.schema] = mapping.renameTo })
-				local record = selection:get(mapping.renameTo)
-					if record then
-						local output = record
-						if mapping.map then
-							local ok, transformed = pcall(mapping.map, record, result)
-							if not ok then
-							observer:onError(transformed)
+				local sourceRecord, sourceMeta = resolveSource(mapping.schema)
+				if sourceRecord then
+					-- Each branch gets its own copy to keep mapper mutations isolated.
+					local recordCopy = shallowCopyRecord(sourceRecord, mapping.renameTo)
+					local output = recordCopy
+					if mapping.map then
+						local ok, transformed = pcall(mapping.map, recordCopy, result)
+						if not ok then
+							fail(transformed)
 							return
 						end
 						if transformed ~= nil then
@@ -501,10 +560,10 @@ function JoinObservable.chain(resultStream, opts)
 						end
 					end
 					if type(output) ~= "table" then
-						observer:onError("JoinObservable.chain expects mapper to return a table")
+						fail("JoinObservable.chain expects mapper to return a table")
 						return
 					end
-					copyMetaDefaults(output, record.RxMeta, mapping.renameTo)
+					copyMetaDefaults(output, sourceMeta, mapping.renameTo)
 					observer:onNext(output)
 				end
 			end

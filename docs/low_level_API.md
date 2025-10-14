@@ -150,7 +150,7 @@ Matched records are never expired. Unmatched records emit at most once per side:
 
 Cache eviction normally runs when new records arrive. If you need time-based expiration to fire even when traffic stops, set `gcIntervalSeconds` to periodically sweep both caches. The join will:
 
-- Use `gcScheduleFn(delaySeconds, fn)` if provided. This should schedule `fn` after `delaySeconds` (seconds). If it returns an object with `unsubscribe`, we will call it when the join is disposed.
+- Use `gcScheduleFn(delaySeconds, fn)` if provided. This should schedule `fn` after `delaySeconds` (seconds). If it returns an object with `unsubscribe`/`dispose` **or** a plain cancel function, we will call it when the join is disposed.
 - Otherwise, try to auto-detect a scheduler from `rx.scheduler.get()` that exposes `:schedule(fn, delayMs)` (e.g., `TimeoutScheduler`).
 - If no scheduler is available, the join logs a warning and disables periodic GC; only opportunistic sweeps on new arrivals will run.
 
@@ -159,7 +159,9 @@ Tip: when hosting inside an environment with its own timer API (luv/ngx/etc), pa
 ```lua
 gcScheduleFn = function(delaySeconds, fn)
   local handle = myTimers.setTimeout(fn, delaySeconds * 1000)
-  return { unsubscribe = function() myTimers.clearTimeout(handle) end }
+  return function()
+    myTimers.clearTimeout(handle)
+  end
 end
 ```
 

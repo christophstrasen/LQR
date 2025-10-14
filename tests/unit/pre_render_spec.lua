@@ -130,13 +130,17 @@ describe("Grid start offsets", function()
 	it("applies the global grid start offset when layers do not override it", function()
 		windowConfig.grid = windowConfig.grid or {}
 		windowConfig.grid.startOffset = 90
+		windowConfig.startOffset = 90
+		windowConfig.idMapper = nil
 		if layersConfig.inner then
 			layersConfig.inner.startOffset = nil
 			layersConfig.inner.streams = {}
+			layersConfig.inner.idMapper = nil
 		end
 		if layersConfig.outer then
 			layersConfig.outer.startOffset = nil
 			layersConfig.outer.streams = {}
+			layersConfig.outer.idMapper = nil
 		end
 
 		local states = buildEmptyStates()
@@ -158,13 +162,17 @@ describe("Grid start offsets", function()
 	it("prefers per-layer start offsets over the global configuration", function()
 		windowConfig.grid = windowConfig.grid or {}
 		windowConfig.grid.startOffset = 0
+		windowConfig.startOffset = 0
+		windowConfig.idMapper = nil
 		if layersConfig.inner then
 			layersConfig.inner.startOffset = 10
 			layersConfig.inner.streams = {}
+			layersConfig.inner.idMapper = nil
 		end
 		if layersConfig.outer then
 			layersConfig.outer.startOffset = nil
 			layersConfig.outer.streams = {}
+			layersConfig.outer.idMapper = nil
 		end
 
 		local states = buildEmptyStates()

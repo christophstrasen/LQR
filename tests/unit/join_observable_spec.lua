@@ -1155,6 +1155,113 @@ describe("JoinObservable.chain helper", function()
 		assert.are.same({ "orders_a", "orders_b" }, seenSchemas)
 	end)
 
+	it("keeps fan-out outputs independent and respects mapping order", function()
+		local upstreamSubject = rx.Subject.create()
+		local chained = JoinObservable.chain(upstreamSubject, {
+			from = {
+				{ schema = "orders", renameTo = "orders_first" },
+				{ schema = "orders", renameTo = "orders_second" },
+			},
+		})
+
+		local outputs = {}
+		chained:subscribe(function(record)
+			table.insert(outputs, record)
+		end, function(err)
+			error(err)
+		end)
+
+		local upstreamResult = makeResultWithOrder(11)
+		local upstreamOrder = upstreamResult:get("orders")
+		upstreamSubject:onNext(upstreamResult)
+
+		assert.are.equal(2, #outputs)
+		assert.are.same({ "orders_first", "orders_second" }, {
+			outputs[1].RxMeta.schema,
+			outputs[2].RxMeta.schema,
+		})
+
+		-- Mutating one output should not affect the other or upstream.
+		outputs[1].id = 999
+		assert.are.equal(11, outputs[2].id)
+		assert.are.equal(11, upstreamOrder.id)
+		assert.is_nil(upstreamOrder.tag)
+	end)
+
+	it("isolates mapper mutations across fan-out branches", function()
+		local upstreamSubject = rx.Subject.create()
+		local chained = JoinObservable.chain(upstreamSubject, {
+			from = {
+				{
+					schema = "orders",
+					renameTo = "orders_mapped",
+					map = function(orderRecord)
+						orderRecord.tag = (orderRecord.tag or 0) + 1
+						return orderRecord
+					end,
+				},
+				{ schema = "orders", renameTo = "orders_plain" },
+			},
+		})
+
+		local mapped, plain
+		chained:subscribe(function(record)
+			if record.RxMeta.schema == "orders_mapped" then
+				mapped = record
+			elseif record.RxMeta.schema == "orders_plain" then
+				plain = record
+			end
+		end, function(err)
+			error(err)
+		end)
+
+		upstreamSubject:onNext(makeResultWithOrder(12))
+
+		assert.is_not_nil(mapped)
+		assert.is_not_nil(plain)
+		assert.are_equal(1, mapped.tag)
+		assert.is_nil(plain.tag)
+		assert.are_not.equal(mapped, plain)
+	end)
+
+	it("disposes the upstream when a mapper errors", function()
+		local upstreamSubject = rx.Subject.create()
+		local activeSubscriptions = 0
+
+		local upstream = rx.Observable.create(function(observer)
+			activeSubscriptions = activeSubscriptions + 1
+			local sub = upstreamSubject:subscribe(observer)
+			return function()
+				activeSubscriptions = activeSubscriptions - 1
+				sub:unsubscribe()
+			end
+		end)
+
+		local chained = JoinObservable.chain(upstream, {
+			schema = "orders",
+			map = function()
+				error("mapper failed")
+			end,
+		})
+
+		local errMessage
+		local subscription = chained:subscribe(function()
+			error("should not emit")
+		end, function(err)
+			errMessage = err
+		end)
+
+		assert.are.equal(1, activeSubscriptions)
+		upstreamSubject:onNext(makeResultWithOrder(9))
+
+		assert.matches("mapper failed", errMessage, 1, true)
+		assert.are.equal(0, activeSubscriptions)
+
+		-- Further emissions should be ignored because the upstream is torn down.
+		upstreamSubject:onNext(makeResultWithOrder(10))
+		subscription:unsubscribe()
+	end)
+
 	it("preserves join metadata when chaining asymmetric key selectors", function()
 	local orders = SchemaHelpers.observableFromTable("orders", {
 		{ orderId = 501, customerId = 1 },

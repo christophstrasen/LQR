@@ -39,4 +39,4 @@ GitHub Actions runs `busted tests/unit` on pushes and pull requests targeting `m
 - By default, unmatched rows are flushed on completion with `reason="completed"`. Set `flushOnComplete=false` when creating a join to suppress the final flush if you need legacy behavior.
 - Optional GC helpers:
   - `gcIntervalSeconds` will run a periodic expiration sweep if a scheduler is available (either provide `gcScheduleFn(delaySeconds, fn)` or run under a TimeoutScheduler/luvit timers).
-  - `gcScheduleFn` lets hosts plug in their timer API; otherwise the join falls back to opportunistic GC when new records arrive.
+  - `gcScheduleFn` lets hosts plug in their timer API; otherwise the join falls back to opportunistic GC when new records arrive. The scheduler can return either an object with `unsubscribe`/`dispose` or a plain cancel function; it will be invoked when the join is disposed.

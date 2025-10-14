@@ -74,33 +74,37 @@ end
 function Result.selectSchemas(source, schemaMap)
 	assert(getmetatable(source) == Result, "source must be a JoinResult")
 
-	local mapping = {}
+	local mappingEntries = {}
 	if not schemaMap then
 		for schema in pairs(source.RxMeta.schemaMap) do
-			mapping[schema] = schema
+			table.insert(mappingEntries, { from = schema, to = schema })
 		end
 	else
 		local handled = false
-		for key, value in pairs(schemaMap) do
+		-- Preserve order for array-style schema lists.
+		for _, value in ipairs(schemaMap) do
 			handled = true
-			if type(key) == "number" then
-				mapping[value] = value
-			else
-				mapping[key] = value
+			table.insert(mappingEntries, { from = value, to = value })
+		end
+		-- Also honor map-style entries.
+		for key, value in pairs(schemaMap) do
+			if type(key) ~= "number" then
+				handled = true
+				table.insert(mappingEntries, { from = key, to = value })
 			end
 		end
 		if not handled then
 			for schema in pairs(source.RxMeta.schemaMap) do
-				mapping[schema] = schema
+				table.insert(mappingEntries, { from = schema, to = schema })
 			end
 		end
 	end
 
 	local selection = Result.new()
-	for fromSchema, toSchema in pairs(mapping) do
+	for _, entry in ipairs(mappingEntries) do
 		-- Explainer: attachFrom keeps metadata aligned with the schema so downstream
 		-- joins can read `result:get(schemaName)` without worrying about its origin.
-		selection:attachFrom(source, fromSchema, toSchema)
+		selection:attachFrom(source, entry.from, entry.to)
 	end
 	return selection
 end

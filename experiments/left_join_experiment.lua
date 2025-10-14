@@ -91,7 +91,7 @@ local joinStream = JoinObservable.createJoinObservable(customersStream, ordersSt
 		customers = "id",
 		orders = "customerId",
 	},
-	joinType = "left",
+	joinType = "anti_left",
 	expirationWindow = {
 		-- Time-based retention like the viz scenario; TTL is generous so nothing
 		-- evaporates during the demo run, but the window is driven by sourceTime.

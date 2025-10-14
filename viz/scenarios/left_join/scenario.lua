@@ -10,18 +10,45 @@ local windowConfig = {
 		rows = 20,
 		cellSize = 36,
 		padding = 5,
-		startOffset = 90,
+		startOffset = 100,
 	},
 	layerOrder = { "inner", "outer" },
 	layers = {
-		inner = { fadeSeconds = 6 },
-		outer = { fadeSeconds = 12 },
+		inner = { fadeMultiplier = 2 },
+		outer = { fadeMultiplier = 3 },
 	},
 	colors = {
 		joined = { 0, 1, 0, 1.0 },
 		expired = { 1, 0, 0, 1.0 },
 	},
 }
+
+local function fadeSecondsFromTTL(ttl, multiplier)
+	if not ttl then
+		return nil
+	end
+	return ttl * (multiplier or 1)
+end
+
+local function columnMajorIdMapper(id, state)
+	if type(id) ~= "number" then
+		return nil, nil
+	end
+	-- Anchor at startOffset and fill down a column before moving right.
+	local startOffset = windowConfig.startOffset or windowConfig.grid.startOffset or 0
+	local offset = math.max(0, math.floor(id - startOffset))
+	local row = (offset % state.rows) + 1
+	local col = math.floor(offset / state.rows) + 1
+	if col > state.columns then
+		col = ((col - 1) % state.columns) + 1
+	end
+	return col, row
+end
+
+windowConfig.idMapper = columnMajorIdMapper
+windowConfig.layers.inner.idMapper = columnMajorIdMapper
+windowConfig.layers.outer.idMapper = columnMajorIdMapper
+windowConfig.startOffset = 100
 
 local streams = Profiles.streams
 
@@ -54,7 +81,7 @@ local joins = {
 			customers = "id",
 			orders = "customerId",
 		},
-		joinType = "anti_right",
+		joinType = "inner",
 		expirationWindow = {
 			mode = "time",
 			ttl = 4,
@@ -66,6 +93,14 @@ local joins = {
 		gcScheduleFn = loveScheduler,
 	},
 }
+
+local ttl = joins[1].expirationWindow and joins[1].expirationWindow.ttl
+local innerMultiplier = windowConfig.layers.inner.fadeMultiplier or 1
+local outerMultiplier = windowConfig.layers.outer.fadeMultiplier or 1
+windowConfig.layers.inner.fadeSeconds = fadeSecondsFromTTL(ttl, innerMultiplier)
+	or windowConfig.layers.inner.fadeSeconds
+windowConfig.layers.outer.fadeSeconds = fadeSecondsFromTTL(ttl, outerMultiplier)
+	or windowConfig.layers.outer.fadeSeconds
 
 local data = {
 	window = windowConfig,
@@ -82,10 +117,12 @@ function Scenario.buildRecipe(observables)
 	return {
 		window = {
 			grid = windowConfig.grid or {},
+			idMapper = windowConfig.idMapper,
+			startOffset = windowConfig.startOffset,
 			layerOrder = windowConfig.layerOrder or { "inner", "outer" },
 			layers = {
 				inner = {
-					fadeSeconds = 4.5,
+					fadeSeconds = windowConfig.layers.inner.fadeSeconds,
 					streams = {
 						{
 							name = Profiles.customers.name,
@@ -106,7 +143,7 @@ function Scenario.buildRecipe(observables)
 					},
 				},
 				outer = {
-					fadeSeconds = 20,
+					fadeSeconds = windowConfig.layers.outer.fadeSeconds,
 					streams = {
 						{
 							name = "joined",
