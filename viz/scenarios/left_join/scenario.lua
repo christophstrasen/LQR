@@ -54,7 +54,7 @@ local joins = {
 			customers = "id",
 			orders = "customerId",
 		},
-		joinType = "inner",
+		joinType = "anti_right",
 		expirationWindow = {
 			mode = "time",
 			ttl = 4,

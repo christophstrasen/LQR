@@ -4,8 +4,19 @@ local JoinObservable = require("JoinObservable")
 local Schema = require("JoinObservable.schema")
 local rx = require("reactivex")
 
-local customers = require("viz.scenarios.left_join.customers")
-local orders = require("viz.scenarios.left_join.orders")
+local customers = {
+	{ id = 101, name = "Ada" },
+	{ id = 102, name = "Ben" },
+	{ id = 103, name = "Cara" },
+	{ id = 104, name = "Drew" },
+}
+
+local orders = {
+	{ orderId = 2001, customerId = 101, total = 200 },
+	{ orderId = 2002, customerId = 999, total = 125 }, -- no matching customer
+	{ orderId = 2003, customerId = 103, total = 80 },
+	{ orderId = 2004, customerId = 888, total = 280 }, -- no matching customer
+}
 
 local function prepareRecords(source, opts)
 	opts = opts or {}
@@ -49,7 +60,6 @@ local function throttle(records, opts)
 	end
 
 	if not hasDelay then
-		-- Fast path: no throttling requested.
 		return rx.Observable.fromTable(records, ipairs, true)
 	end
 
@@ -74,9 +84,8 @@ local function createStream(schemaName, source, opts)
 	return Schema.wrap(schemaName, throttle(prepared, opts.throttle), wrapOpts)
 end
 
--- Use simple ascending timestamps so ordering is deterministic in this experiment.
 local customersStream = createStream("customers", customers, {
-	step = 10,
+	step = 8,
 	throttle = { minDelay = 0.005, maxDelay = 0.015, mode = "ordered" },
 })
 
@@ -91,10 +100,8 @@ local joinStream = JoinObservable.createJoinObservable(customersStream, ordersSt
 		customers = "id",
 		orders = "customerId",
 	},
-	joinType = "left",
+	joinType = "outer",
 	expirationWindow = {
-		-- Time-based retention like the viz scenario; TTL is generous so nothing
-		-- evaporates during the demo run, but the window is driven by sourceTime.
 		mode = "time",
 		ttl = 4,
 		field = "sourceTime",
@@ -102,14 +109,14 @@ local joinStream = JoinObservable.createJoinObservable(customersStream, ordersSt
 	},
 })
 
-print("[LEFT JOIN] customers ~ orders (ordered timestamps)")
+print("[OUTER JOIN] customers ~ orders (ordered timestamps)")
 joinStream:subscribe(function(result)
 	local customer = result:get("customers")
 	local order = result:get("orders")
 
 	if customer and order then
 		print(
-			("[JOINED] customer=%s (id=%s, t=%s) orderId=%s total=%s"):format(
+			("[MATCHED] customer=%s (id=%s, t=%s) orderId=%s total=%s"):format(
 				customer.name,
 				customer.id,
 				tostring(customer.sourceTime or (customer.RxMeta and customer.RxMeta.sourceTime)),
@@ -119,15 +126,24 @@ joinStream:subscribe(function(result)
 		)
 	elseif customer then
 		print(
-			("[UNMATCHED] customer=%s (id=%s, t=%s) no orders"):format(
+			("[UNMATCHED LEFT] customer=%s (id=%s, t=%s) no orders"):format(
 				customer.name,
 				customer.id,
 				tostring(customer.sourceTime or (customer.RxMeta and customer.RxMeta.sourceTime))
+			)
+		)
+	elseif order then
+		print(
+			("[UNMATCHED RIGHT] orderId=%s (customerId=%s, t=%s) total=%s no customer"):format(
+				order.orderId or order.id,
+				order.customerId,
+				tostring(order.sourceTime or (order.RxMeta and order.RxMeta.sourceTime)),
+				order.total
 			)
 		)
 	end
 end, function(err)
 	io.stderr:write(("[ERROR] %s\n"):format(tostring(err)))
 end, function()
-	print("[COMPLETE] join finished")
+	print("[COMPLETE] outer join finished")
 end)
