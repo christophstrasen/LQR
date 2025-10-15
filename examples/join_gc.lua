@@ -1,7 +1,7 @@
 require("bootstrap")
 
 local rx = require("reactivex")
-local JoinObservable = require("JoinObservable")
+local JoinObservable = require("JoinObservable.init")
 local Schema = require("JoinObservable.schema")
 local uv = require("luv")
 

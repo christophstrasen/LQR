@@ -5,7 +5,7 @@ package.cpath = "./?.so;" .. package.cpath
 require("bootstrap")
 
 local rx = require("reactivex")
-local JoinObservable = require("JoinObservable")
+local JoinObservable = require("JoinObservable.init")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local Result = require("JoinObservable.result")
 
@@ -1308,5 +1308,57 @@ describe("JoinObservable.chain helper", function()
 			{ invoiceId = 501, schema = "forwarded_orders", joinKey = 1 },
 			{ invoiceId = 502, schema = "forwarded_orders", joinKey = 2 },
 		}, summary)
+	end)
+
+	it("warns and skips mappings for missing schemas", function()
+		local upstreamSubject = rx.Subject.create()
+		local warnings = {}
+		local chained = JoinObservable.chain(upstreamSubject, {
+			from = {
+				{ schema = "orders" },
+				{ schema = "missing_schema" },
+			},
+		})
+
+		JoinObservable.withWarningHandler(function(msg)
+			table.insert(warnings, msg)
+		end, function()
+			local seen = {}
+			chained:subscribe(function(record)
+				table.insert(seen, record.RxMeta.schema)
+			end, function(err)
+				error(err)
+			end)
+
+			upstreamSubject:onNext(makeResultWithOrder(14))
+			assert.are.same({ "orders" }, seen)
+		end)
+
+		assert.is_true(#warnings >= 1)
+		assert.matches("missing_schema", warnings[1], 1, true)
+	end)
+
+	it("backfills RxMeta when mapper returns a bare table", function()
+		local upstreamSubject = rx.Subject.create()
+		local chained = JoinObservable.chain(upstreamSubject, {
+			schema = "orders",
+			map = function()
+				return { invoiceId = 15 }
+			end,
+		})
+
+		local seen
+		chained:subscribe(function(record)
+			seen = record
+		end, function(err)
+			error(err)
+		end)
+
+		upstreamSubject:onNext(makeResultWithOrder(15))
+
+		assert.is_not_nil(seen)
+		assert.are.equal("orders", seen.RxMeta.schema)
+		assert.are.equal("15", tostring(seen.RxMeta.joinKey))
+		assert.are.equal(15, seen.invoiceId)
 	end)
 end)

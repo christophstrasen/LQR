@@ -117,3 +117,16 @@
 ### Takeaways
 1. **UI mirroring runtime state helps:** Seeing GC mode in the viz immediately flags misconfigurations (missing scheduler, insert-only mode).
 2. **Scheduler ergonomics:** Passing host-specific schedulers (`gcScheduleFn`) is the least brittle way to demonstrate periodic GC across environments; auto-detect remains best-effort only.
+
+## Day 8 – Join strictness, caching perf, and Rx sharing
+
+### Highlights
+- **Join robustness:** `JoinObservable` now flushes caches on merge errors, cancels periodic GC on all terminal paths, backfills RxMeta for mapper outputs, and warns when chain mappings reference missing schemas. `withWarningHandler` scopes handler changes safely.
+- **Chain efficiency:** `JoinObservable.chain` caches per-schema lookups and clones once per mapping, reducing allocations for fan-out scenarios while keeping mapper isolation intact. Tests cover mapper error disposal, fan-out isolation, and missing-schema warnings.
+- **Rx fork expansion:** Added `publish`, `refCount`, and `share` to the vendored lua-reactivex (mirroring RxJS semantics), with Lust-based tests wired into the upstream test runner. Guidance added to low-level docs on using `publish():refCount()`/`share()` to fan out cold streams without duplicate upstream work.
+- **Module clarity:** Split the join engine into `JoinObservable.core` and the chain helper into `JoinObservable.chain`; call sites now import `JoinObservable.init` explicitly (no shim). Fixed viz/examples to use the new entry point.
+
+### Takeaways
+1. **Lifecycle discipline:** Flushing caches and cancelling timers on all terminal signals avoids hidden state and stray work after errors/completion.
+2. **Hot vs cold clarity:** Shared streams should use explicit multicast helpers; we added them to the fork and documented when to apply them in our join pipelines.
+3. **Metadata fidelity:** Mapper outputs now retain schema metadata even when returning bare tables, keeping downstream joins predictable.

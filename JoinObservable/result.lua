@@ -6,7 +6,7 @@ Result.__index = Result
 
 local function cloneSchemaMeta(meta, overrideSchema)
 	if type(meta) ~= "table" then
-		return {}
+		return { schema = overrideSchema }
 	end
 
 	-- Explainer: schema metadata drives downstream schema tracking, so we shallow-copy it
@@ -143,8 +143,7 @@ function Result:attachFrom(source, schemaName, newSchemaName)
 	end
 
 	local targetSchemaName = newSchemaName or schemaName
-	local copy = shallowCopyRecord(record) or {}
-	copy.RxMeta = cloneSchemaMeta(meta, targetSchemaName)
+	local copy = Result.shallowCopyRecord(record, targetSchemaName) or {}
 
 	-- Explainer: attach() adds the renamed payload just like a native match result,
 	-- ensuring observers see a consistent schema map even when data is forwarded.

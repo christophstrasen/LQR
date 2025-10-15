@@ -40,6 +40,18 @@ function Warnings.setWarningHandler(handler)
 	return previous
 end
 
+-- Runs a function with a temporary warning handler, restoring the previous handler even on error.
+function Warnings.withWarningHandler(handler, fn)
+	assert(type(fn) == "function", "withWarningHandler expects a function")
+	local previous = Warnings.setWarningHandler(handler)
+	local ok, result, extra = pcall(fn)
+	Warnings.setWarningHandler(previous)
+	if not ok then
+		error(result)
+	end
+	return result, extra
+end
+
 Warnings.defaultWarningHandler = defaultWarningHandler
 
 return Warnings

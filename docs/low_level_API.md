@@ -185,6 +185,8 @@ Replaces the warning sink. Pass `nil` to restore the default stderr logger. Warn
 - Errors from the merged stream propagate to both `joinStream` and `expiredStream`.
 - Completing the merged stream flushes both caches (emitting unmatched rows and `reason = "completed"` records) and completes both observables.
 - Unsubscribing from `joinStream` closes `expiredStream` (ensuring no dangling subscribers).
+- To fan out a cold observable (e.g., a `JoinObservable.chain` result) without resubscribing the upstream, use `:publish():refCount()` or the sugar `:share()` to make it hot/shared. This avoids double side effects when multiple downstream subscribers need the same stream.
+- `JoinObservable.chain` mappers run once per mapping per upstream `JoinResult`; mapper errors are terminal and dispose the upstream subscription. Preserve or copy `RxMeta` fields in mappers if you replace payloads.
 
 ## Behavioral Guarantees
 

@@ -1,6 +1,6 @@
 local rx = require("reactivex")
 local Schema = require("JoinObservable.schema")
-local JoinObservable = require("JoinObservable")
+local JoinObservable = require("JoinObservable.init")
 
 local ScenarioLoader = require("viz.scenario_loader")
 local Data = ScenarioLoader.data
