@@ -398,11 +398,11 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 		assert(merged and merged.subscribe, "mergeSources must return an observable")
 
 		local subscription
-			subscription = merged:subscribe(function(record)
-				if type(record) ~= "table" then
-					warnf("Ignoring record emitted as %s (expected table)", type(record))
-					return
-				end
+		subscription = merged:subscribe(function(record)
+			if type(record) ~= "table" then
+				warnf("Ignoring record emitted as %s (expected table)", type(record))
+				return
+			end
 
 			local side = record.side
 			local entry = record.entry
@@ -410,19 +410,21 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 			if side == "left" then
 				handleEntry("left", leftCache, rightCache, leftOrder, entry)
 			elseif side == "right" then
-					handleEntry("right", rightCache, leftCache, rightOrder, entry)
-				end
-				end, function(err)
-					flushBoth("error")
-					observer:onError(err)
-					closeExpiredWith("onError", err)
-				end, function()
-			if flushOnComplete then
-				flushBoth("completed")
+				handleEntry("right", rightCache, leftCache, rightOrder, entry)
+			end
+			end, function(err)
+				flushBoth("error")
+				cancelGc()
+				observer:onError(err)
+				closeExpiredWith("onError", err)
+			end, function()
+		if flushOnComplete then
+			flushBoth("completed")
 		end
 		observer:onCompleted()
 		closeExpiredWith("onCompleted")
 		debugf("completed join stream")
+		cancelGc()
 	end)
 	runPeriodicGC()
 
@@ -441,30 +443,6 @@ function JoinObservable.createJoinObservable(leftStream, rightStream, options)
 	end)
 
 	return observable, expiredSubject
-end
-
-local function cloneSchemaMeta(meta, overrideSchema)
-	if type(meta) ~= "table" then
-		return { schema = overrideSchema }
-	end
-
-	return {
-		schema = overrideSchema or meta.schema,
-		schemaVersion = meta.schemaVersion,
-		sourceTime = meta.sourceTime,
-		joinKey = meta.joinKey,
-	}
-end
-
-local function shallowCopyRecord(record, targetSchema)
-	local copy = {}
-	for key, value in pairs(record) do
-		if key ~= "RxMeta" then
-			copy[key] = value
-		end
-	end
-	copy.RxMeta = cloneSchemaMeta(record.RxMeta, targetSchema)
-	return copy
 end
 
 local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
@@ -547,7 +525,7 @@ function JoinObservable.chain(resultStream, opts)
 				local sourceRecord, sourceMeta = resolveSource(mapping.schema)
 				if sourceRecord then
 					-- Each branch gets its own copy to keep mapper mutations isolated.
-					local recordCopy = shallowCopyRecord(sourceRecord, mapping.renameTo)
+					local recordCopy = Result.shallowCopyRecord(sourceRecord, mapping.renameTo)
 					local output = recordCopy
 					if mapping.map then
 						local ok, transformed = pcall(mapping.map, recordCopy, result)

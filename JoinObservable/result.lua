@@ -34,6 +34,14 @@ local function shallowCopyRecord(record)
 	end
 	return copy
 end
+Result.shallowCopyRecord = function(record, targetSchema)
+	local copy = shallowCopyRecord(record)
+	if not copy then
+		return copy
+	end
+	copy.RxMeta = cloneSchemaMeta(record.RxMeta, targetSchema)
+	return copy
+end
 
 function Result.new()
 	return setmetatable({
