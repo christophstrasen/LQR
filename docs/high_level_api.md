@@ -13,7 +13,7 @@ and Rx-native.
   API raises a clear configuration error.
 
 ## Core verbs
-- `Join.from(sourceObservable)` → returns a JoinObservable bound to the source schema.
+- `Query.from(sourceObservable)` → returns a JoinObservable-bound query (schema-aware).
 - `:innerJoin(other)` / `:leftJoin(other)` → chain more sources (raw observables or join outputs).
 - `:onField("fieldName")` → use the same field name for all schemas currently in play.
 - `:onId()` → use `RxMeta.id` for all schemas.
@@ -25,6 +25,12 @@ and Rx-native.
 - Rx-native ops (`filter`, `map`, `merge`, `throttle`, etc.) remain available on the underlying
   observable.
 
+### Selection-only queries
+- The builder works even without additional `innerJoin/leftJoin` calls. You can `Query.from(source)`
+  and immediately `selectSchemas` (or apply Rx operators) to treat it as a simple projection/query
+  with schema awareness. Future non-join queries can live on the same surface without changing the
+  mental model.
+
 ## Chaining without manual fan-out
 - Join verbs accept either raw schema-tagged observables **or** JoinResult observables directly.
 - Internally we auto-fan-out the schemas referenced by the key selector and selection step, so users
@@ -34,7 +40,7 @@ and Rx-native.
 ## Example flow
 ```lua
 local joined =
-  Join.from(customers)                    -- schema "customers"
+  Query.from(customers)                   -- schema "customers"
     :leftJoin(orders)                     -- schema "orders"
     :onField("customerId")                -- same field name across both schemas
     :window{ time = 4, field = "sourceTime" }
@@ -69,8 +75,8 @@ local subscription = joined:subscribe(...) -- standard Rx subscription
   (often triggered by expiration). Not the same as “never seen.”
 
 ## Implementation plan (draft)
-- **Join facade surface**
-  - Implement `Join.from/innerJoin/leftJoin/onField/onId/onSchemas/window/selectSchemas/describe/into`
+- **Query facade surface**
+  - Implement `Query.from/innerJoin/leftJoin/onField/onId/onSchemas/window/selectSchemas/describe/into`
     as a thin layer over existing join internals.
   - `onField`/`onId`/`onSchemas` resolve to a normalized key map per schema; missing fields at
     runtime emit warnings (not hard errors). `onSchemas` coverage gaps are config errors up front.
@@ -93,7 +99,7 @@ local subscription = joined:subscribe(...) -- standard Rx subscription
   - `into(tbl)` appends each emission (`tbl[#tbl+1] = emission`) and returns the observable for
     further chaining or subscribe.
 - **Scheduler**
-  - Global default scheduler; allow test override (e.g., `Join.setScheduler(testSched)` or per-join
+  - Global default scheduler; allow test override (e.g., `Query.setScheduler(testSched)` or per-query
     override) so expiration tests can use a synthetic clock.
 - **Error handling**
   - Warn-and-continue on selector field misses; rely on underlying Rx for pcall-wrapping subscribe
