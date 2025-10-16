@@ -45,7 +45,7 @@ Let me know if any constraints need relaxing or if new ones (performance budgets
 
 Please clarify these before we codify the API.
 
-## Lua-ReactiveX-Compatible Example - VERY WORK IN PROGRESS
+## Lua-ReactiveX-Compatible Example - QUITE OUTDATED
 
 Below is a condensed version of “Use Case 2 + 3” from `proposed_api.lua`, rewritten so every step is an Rx Observable while still feeling DSL-friendly.
 
