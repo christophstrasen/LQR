@@ -55,4 +55,53 @@ describe("Query high-level example", function()
 		assert.are.same({ 1, 2 }, expiredIds)
 		assert.are.same({ "evicted", "completed" }, reasons)
 	end)
+
+	it("handles stacked left joins with matches and unmatched carry-over", function()
+		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+		local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
+		local refundsSubject, refunds = SchemaHelpers.subjectWithSchema("refunds", { idField = "id" })
+
+		local query = Query.from(customers, "customers")
+			:leftJoin(orders, "orders")
+			:onSchemas({ customers = "id", orders = "customerId" })
+			:leftJoin(refunds, "refunds")
+			:onSchemas({ orders = "id", refunds = "orderId" })
+			:window({ count = 2 }) -- keep a small buffer so flush emits on completion
+
+		local results, expiredPackets = {}, {}
+		query:subscribe(function(result)
+			results[#results + 1] = result
+		end)
+		query:expired():subscribe(function(packet)
+			expiredPackets[#expiredPackets + 1] = packet
+		end)
+
+		-- Customer with two orders, only one refunded.
+		customersSubject:onNext({ id = 1, name = "Ada" })
+		ordersSubject:onNext({ id = 101, customerId = 1 })
+		refundsSubject:onNext({ id = 201, orderId = 101 }) -- matches order 101
+		ordersSubject:onNext({ id = 102, customerId = 1 }) -- no refund
+
+		customersSubject:onCompleted()
+		ordersSubject:onCompleted()
+		refundsSubject:onCompleted()
+
+		-- Expect one full match (customer+order+refund) and one unmatched order (carrying customer).
+		assert.are.equal(2, #results)
+		local match = results[1]
+		assert.are.equal(1, match:get("customers").id)
+		assert.are.equal(101, match:get("orders").id)
+		assert.are.equal(201, match:get("refunds").id)
+
+		local unmatched = results[2]
+		assert.are.equal(1, unmatched:get("customers").id)
+		assert.are.equal(102, unmatched:get("orders").id)
+		assert.is_nil(unmatched:get("refunds"))
+
+		-- Expired packets include the unmatched order on completion.
+		assert.are.equal(1, #expiredPackets)
+		local expiredEntry = expiredPackets[1].result:get(expiredPackets[1].schema)
+		assert.are.equal(102, expiredEntry.id)
+		assert.are.equal("completed", expiredPackets[1].reason)
+	end)
 end)
