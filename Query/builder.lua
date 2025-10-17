@@ -8,6 +8,7 @@
 ---@field private _built table|nil
 ---@field private _defaultWindowCount number
 ---@field private _scheduler any
+---@field private _vizHook fun(context:table):table|nil
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
@@ -444,6 +445,7 @@ function QueryBuilder:_clone()
 	copy._schemaNames = self._schemaNames and cloneArray(self._schemaNames) or nil
 	copy._defaultWindowCount = self._defaultWindowCount
 	copy._scheduler = self._scheduler
+	copy._vizHook = self._vizHook
 	return copy
 end
 
@@ -482,6 +484,28 @@ local function deriveSchemasFromSelection(selection)
 	return targets
 end
 
+local function collectPrimarySchemas(builder, set)
+	set = set or {}
+	if builder._rootSchemas then
+		for _, name in ipairs(builder._rootSchemas) do
+			if name then
+				set[name] = true
+			end
+		end
+	end
+	for _, step in ipairs(builder._steps) do
+		local source = step.source
+		if getmetatable(source) == QueryBuilder then
+			collectPrimarySchemas(source, set)
+		elseif step.sourceSchema then
+			set[step.sourceSchema] = true
+		elseif type(source) == "table" and source.schemaName then
+			set[source.schemaName] = true
+		end
+	end
+	return set
+end
+
 local function resolveObservable(source)
 	if getmetatable(source) == QueryBuilder then
 		local built = source:_build()
@@ -504,6 +528,7 @@ local function newBuilder(source, opts)
 	builder._steps = {}
 	builder._defaultWindowCount = DEFAULT_WINDOW_COUNT
 	builder._scheduler = schedulerOverride
+	builder._vizHook = nil
 	return builder
 end
 
@@ -535,6 +560,18 @@ end
 ---@return QueryBuilder
 function QueryBuilder:leftJoin(source, opts)
 	return self:_addStep("left", source, opts)
+end
+
+---Attaches a visualization hook (optional, no-op in normal runs).
+---@param vizHook fun(context:table):table|nil
+---@return QueryBuilder
+function QueryBuilder:withVisualizationHook(vizHook)
+	if vizHook ~= nil then
+		assert(type(vizHook) == "function", "withVisualizationHook expects a function or nil")
+	end
+	local nextBuilder = self:_clone()
+	nextBuilder._vizHook = vizHook
+	return nextBuilder
 end
 
 ---Configures the key selector to use a single field for all schemas.
@@ -598,6 +635,18 @@ function QueryBuilder:selectSchemas(selection)
 	return nextBuilder
 end
 
+---Returns the set of primary schemas (non-join sources) seen anywhere in the builder tree.
+---@return table
+function QueryBuilder:primarySchemas()
+	local set = collectPrimarySchemas(self, {})
+	local names = {}
+	for name in pairs(set) do
+		names[#names + 1] = name
+	end
+	table.sort(names)
+	return names
+end
+
 function QueryBuilder:_build()
 	if self._built then
 		return self._built
@@ -608,7 +657,7 @@ function QueryBuilder:_build()
 	local current = self._rootSource
 	local currentSchemas = self._schemaNames and cloneArray(self._schemaNames) or nil
 
-	for _, step in ipairs(self._steps) do
+	for stepIndex, step in ipairs(self._steps) do
 		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source)
 		if rightExpired then
 			expiredStreams[#expiredStreams + 1] = rightExpired
@@ -627,6 +676,17 @@ function QueryBuilder:_build()
 		local options = normalizeWindow(step, self._defaultWindowCount, self._scheduler)
 		options.joinType = step.joinType
 		options.on = normalizeKeySelector(step)
+		if self._vizHook then
+			local vizOptions = self._vizHook({
+				stepIndex = stepIndex,
+				step = step,
+				leftSchemas = currentSchemas,
+				rightSchemas = rightSchemas or (step.sourceSchema and { step.sourceSchema }) or nil,
+			})
+			if vizOptions ~= nil then
+				options.viz = vizOptions
+			end
+		end
 
 		local joinObservable, expired = JoinObservable.createJoinObservable(leftRecords, rightRecords, options)
 		expiredStreams[#expiredStreams + 1] = expired

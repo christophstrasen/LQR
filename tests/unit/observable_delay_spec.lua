@@ -1,6 +1,12 @@
+local package = require("package")
+package.path = "./?.lua;./?/init.lua;" .. package.path
+package.cpath = "./?.so;" .. package.cpath
+
+require("bootstrap")
+
 local rx = require("reactivex")
-local Delay = require("viz.observable_delay")
-local TimeUtils = require("viz.time_utils")
+local Delay = require("viz_low_level.observable_delay")
+local TimeUtils = require("viz_low_level.time_utils")
 
 describe("Observable delay sourceTime stamping", function()
     local originalTimeFn

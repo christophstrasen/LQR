@@ -22,6 +22,7 @@
 * **Code comments explain intent** When you leave comments, don't just describe what happens, but _why_ it happens and how it ties in with other systems. Briefly.
 * **Write tests and use them** when we refactor, change or expand our module work (not necessary when we just run experiments).
 * **prefer minimal-first solutions** When designing system extensions, do not put in optional and nice-to-have fluff.
+* **No legacy** do not build shims, wrappers or aliases when we can instead change the callsites directly.
 
 ## 2) Output Requirements
 - **never use diff output** But only copy-paste ready code and instructions

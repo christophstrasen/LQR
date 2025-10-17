@@ -1,7 +1,7 @@
 local scenarioName = os.getenv("VIZ_SCENARIO") or "left_join"
 
 local function loadScenario(name)
-	local modulePath = ("viz.scenarios.%s.scenario"):format(name)
+	local modulePath = ("viz_low_level.scenarios.%s.scenario"):format(name)
 	local ok, scenario = pcall(require, modulePath)
 	if not ok then
 		error(("Failed to load scenario '%s' via module '%s': %s"):format(name, modulePath, scenario))

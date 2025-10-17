@@ -1,6 +1,6 @@
 local rx = require("reactivex")
-local Profiles = require("viz.scenarios.left_join.profiles")
-local ConfigUtils = require("viz.config_utils")
+local Profiles = require("viz_low_level.scenarios.left_join.profiles")
+local ConfigUtils = require("viz_low_level.config_utils")
 
 local Scenario = {}
 

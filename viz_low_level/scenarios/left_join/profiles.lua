@@ -1,5 +1,5 @@
-local customers = require("viz.scenarios.left_join.customers")
-local orders = require("viz.scenarios.left_join.orders")
+local customers = require("viz_low_level.scenarios.left_join.customers")
+local orders = require("viz_low_level.scenarios.left_join.orders")
 
 local Profiles = {}
 

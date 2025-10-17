@@ -1,9 +1,9 @@
 require("bootstrap")
 
-local ScenarioLoader = require("viz.scenario_loader")
-local Observables = require("viz.observables")
+local ScenarioLoader = require("viz_low_level.scenario_loader")
+local Observables = require("viz_low_level.observables")
 local DataSources = ScenarioLoader.getRecipe(Observables)
-local ConfigUtils = require("viz.config_utils")
+local ConfigUtils = require("viz_low_level.config_utils")
 local PreRender = require("pre_render")
 local rx = require("reactivex")
 

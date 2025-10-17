@@ -4,11 +4,11 @@ package.cpath = "./?.so;" .. package.cpath
 
 require("bootstrap")
 
-local PreRender = require("viz.pre_render")
-local Delay = require("viz.observable_delay")
+local PreRender = require("viz_low_level.pre_render")
+local Delay = require("viz_low_level.observable_delay")
 local rx = require("reactivex")
-local ScenarioLoader = require("viz.scenario_loader")
-local Observables = require("viz.observables")
+local ScenarioLoader = require("viz_low_level.scenario_loader")
+local Observables = require("viz_low_level.observables")
 local Sources = ScenarioLoader.getRecipe(Observables)
 
 local windowConfig = Sources.window

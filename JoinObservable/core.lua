@@ -154,6 +154,15 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 	local gcOnInsert = options.gcOnInsert
 	local gcIntervalSeconds = options.gcIntervalSeconds or options.gc_interval_seconds
 	local gcScheduleFn = options.gcScheduleFn or options.gc_schedule_fn
+	local viz = options.viz
+	local vizEmit = viz and viz.emit
+	local baseViz = vizEmit
+			and {
+				stepIndex = viz.stepIndex,
+				depth = viz.depth,
+				joinType = options.joinType,
+			}
+		or nil
 	local debugLifecycle = os.getenv("DEBUG") == "1"
 	local function debugf(fmt, ...)
 		if not debugLifecycle then
@@ -162,6 +171,26 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		local ok, msg = pcall(string.format, fmt, ...)
 		if ok then
 			io.stderr:write("[JoinObservable debug] " .. msg .. "\n")
+		end
+	end
+	local function emitViz(kind, payload)
+		if not vizEmit or not baseViz then
+			return
+		end
+		local event = {
+			kind = kind,
+			stepIndex = baseViz.stepIndex,
+			depth = baseViz.depth,
+			joinType = baseViz.joinType,
+		}
+		if type(payload) == "table" then
+			for key, value in pairs(payload) do
+				event[key] = value
+			end
+		end
+		local ok, err = pcall(vizEmit, event)
+		if not ok then
+			warnf("Visualization sink failed: %s", tostring(err))
 		end
 	end
 	if gcOnInsert == nil then
@@ -196,12 +225,33 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			return
 		end
 
+		if baseViz then
+			local meta = record.entry and record.entry.RxMeta
+			emitViz("unmatched", {
+				side = side,
+				schema = record.schemaName,
+				key = record.key,
+				id = meta and meta.id or nil,
+				sourceTime = meta and meta.sourceTime or nil,
+			})
+		end
 		observer:onNext(singleSchemaResult(record))
 	end
 
 	local function publishExpiration(side, key, recordEntry, reason)
 		if not recordEntry or recordEntry.matched then
 			return
+		end
+		if baseViz then
+			local meta = recordEntry.entry and recordEntry.entry.RxMeta
+			emitViz("expire", {
+				side = side,
+				schema = recordEntry.schemaName,
+				key = key,
+				reason = reason,
+				id = meta and meta.id or nil,
+				sourceTime = meta and meta.sourceTime or nil,
+			})
 		end
 		expiredSubject:onNext({
 			schema = recordEntry.schemaName,
@@ -246,6 +296,25 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			local function handleMatch(leftRecord, rightRecord)
 				leftRecord.matched = true
 				rightRecord.matched = true
+				if baseViz then
+					local function brief(record)
+						if not record then
+							return nil
+						end
+						local meta = record.entry and record.entry.RxMeta
+						return {
+							schema = record.schemaName,
+							id = meta and meta.id or nil,
+							key = record.key,
+							sourceTime = meta and meta.sourceTime or nil,
+						}
+					end
+					emitViz("match", {
+						key = leftRecord and leftRecord.key or rightRecord.key,
+						left = brief(leftRecord),
+						right = brief(rightRecord),
+					})
+				end
 				strategy.onMatch(observer, leftRecord, rightRecord)
 			end
 
@@ -355,6 +424,17 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				end
 				meta.joinKey = key
 				local record = upsertCacheEntry(cache, key, entry, schemaName)
+
+				if baseViz then
+					emitViz("input", {
+						side = side,
+						schema = schemaName,
+						key = key,
+						id = meta.id,
+						sourceTime = meta.sourceTime,
+						schemaVersion = meta.schemaVersion,
+					})
+				end
 
 				if order then
 					for i = 1, #order do

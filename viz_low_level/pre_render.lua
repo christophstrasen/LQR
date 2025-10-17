@@ -1,6 +1,6 @@
 local rx = require("reactivex")
-local ScenarioLoader = require("viz.scenario_loader")
-local Observables = require("viz.observables")
+local ScenarioLoader = require("viz_low_level.scenario_loader")
+local Observables = require("viz_low_level.observables")
 local VizConfig = ScenarioLoader.getRecipe(Observables)
 local windowConfig = VizConfig.window or {}
 local PreRender = {}

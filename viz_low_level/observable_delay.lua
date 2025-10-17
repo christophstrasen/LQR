@@ -1,5 +1,5 @@
 local rx = require("reactivex")
-local TimeUtils = require("viz.time_utils")
+local TimeUtils = require("viz_low_level.time_utils")
 
 local DEBUG_TIMING = os.getenv("DEBUG_TIMING") == "1" or os.getenv("DEBUG") == "1"
 
