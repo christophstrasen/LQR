@@ -37,6 +37,7 @@ local function new(opts)
 	self.margin = opts.margin or DEFAULT_MARGIN
 	self.maxLayers = opts.maxLayers or 5
 	self.palette = opts.palette or {}
+	self.header = opts.header or {}
 	self.observedMin = nil
 	self.observedMax = nil
 	self.gridStart = opts.startId or 1
@@ -113,6 +114,7 @@ function Runtime:window()
 		endId = self.gridEnd,
 		columns = self.maxColumns,
 		rows = self.maxRows,
+		gc = self.gc,
 	}
 end
 

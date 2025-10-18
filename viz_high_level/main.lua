@@ -38,6 +38,7 @@ local app = {
 	runtime = nil,
 	subscription = nil,
 }
+local BACKGROUND = { 0.08, 0.08, 0.08, 1 }
 
 function love.load()
 	love.window.setMode(800, 600, { resizable = true })
@@ -49,6 +50,7 @@ function love.load()
 		maxColumns = 32,
 		maxRows = 16,
 		adjustInterval = 1.5,
+		header = app.attachment.header,
 	})
 
 	app.attachment.normalized:subscribe(function(event)
@@ -75,6 +77,99 @@ function love.draw()
 		return
 	end
 	local snapshot = Renderer.render(app.runtime, app.attachment.palette)
+
+	-- Header
+	local lg = love.graphics
+	lg.setColor(1, 1, 1, 1)
+	local headerY = 10
+	local headerData = snapshot.meta.header or {}
+	local window = headerData.window or snapshot.window
+	if window then
+		local rangeText = string.format(
+			"Showing records on id range %s-%s (grid %dx%d)",
+			tostring(window.startId),
+			tostring(window.endId),
+			window.columns or 0,
+			window.rows or 0
+		)
+		lg.printf(rangeText, 12, headerY, love.graphics.getWidth() - 24, "left")
+		headerY = headerY + 22
+		if window.gc then
+			local gcText
+			if window.gc.gcIntervalSeconds and window.gc.gcIntervalSeconds > 0 then
+				gcText = string.format("GC: interval=%.2fs%s", window.gc.gcIntervalSeconds, window.gc.gcOnInsert and " + per insert" or "")
+			elseif window.gc.gcOnInsert == false then
+				gcText = "GC: onComplete only"
+			else
+				gcText = "GC: per insert"
+			end
+			lg.printf(gcText, 12, headerY, love.graphics.getWidth() - 24, "left")
+			headerY = headerY + 22
+		end
+	end
+	if headerData.from and #headerData.from > 0 then
+		local fromText = string.format("from %s", table.concat(headerData.from, ", "))
+		lg.printf(fromText, 12, headerY, love.graphics.getWidth() - 24, "left")
+		headerY = headerY + 22
+	end
+
+	local joins = headerData.joins or {}
+	for _, join in ipairs(joins) do
+		local keyDesc = join.displayKey or "id"
+		local joinText = string.format("%s join %s on %s", join.type or "join", join.source or "right", keyDesc)
+		lg.printf(joinText, 12, headerY, love.graphics.getWidth() - 24, "left")
+		headerY = headerY + 18
+		if join.window then
+			local wtxt
+			if join.window.mode == "count" then
+				wtxt = string.format("Count window=%s", tostring(join.window.count))
+			elseif join.window.mode == "time" then
+				wtxt = string.format("Time window field=%s offset=%s", tostring(join.window.field), tostring(join.window.time))
+			end
+			if wtxt then
+				lg.printf(wtxt, 12, headerY, love.graphics.getWidth() - 24, "left")
+				headerY = headerY + 18
+			end
+		end
+	end
+
+	-- Legend (schemas)
+	local legend = snapshot.meta.legend or {}
+	if #legend > 0 then
+		headerY = headerY + 8
+		for _, entry in ipairs(legend) do
+			local rectSize = 16
+			local x = 12
+			lg.setColor(entry.color or { 1, 1, 1, 1 })
+			lg.rectangle("fill", x, headerY, rectSize, rectSize)
+			lg.setColor(1, 1, 1, 1)
+			local label = string.format("%s (%dx)", entry.schema, entry.count or 0)
+			lg.printf(label, x + rectSize + 8, headerY, love.graphics.getWidth() - x - rectSize - 16, "left")
+			headerY = headerY + 20
+		end
+	end
+
+	-- Outer legend (match/expire)
+	local outerLegend = snapshot.meta.outerLegend or {}
+	if #outerLegend > 0 then
+		headerY = headerY + 4
+		for _, entry in ipairs(outerLegend) do
+			local rectSize = 16
+			local x = 12
+			lg.setColor(entry.color or { 1, 1, 1, 1 })
+			lg.rectangle("fill", x, headerY, rectSize, rectSize)
+			-- Hollow inner to emphasize outer box
+			local inset = 2
+			lg.setColor(BACKGROUND)
+			lg.rectangle("fill", x + inset, headerY + inset, rectSize - inset * 2, rectSize - inset * 2)
+			lg.setColor(1, 1, 1, 1)
+			local label = entry.label or entry.kind
+			lg.printf(label, x + rectSize + 8, headerY, love.graphics.getWidth() - x - rectSize - 16, "left")
+			headerY = headerY + 20
+		end
+	end
+
+	lg.translate(12, headerY + 10)
 	Draw.drawSnapshot(snapshot)
 end
 

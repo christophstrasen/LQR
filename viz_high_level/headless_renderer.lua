@@ -7,6 +7,13 @@ local DEFAULT_EXPIRE_COLOR = { 0.9, 0.25, 0.25, 1 }
 
 local Renderer = {}
 
+local function bumpCount(map, key)
+	if not key then
+		return
+	end
+	map[key] = (map[key] or 0) + 1
+end
+
 local function mapIdToCell(window, id)
 	if not id then
 		return nil, nil
@@ -64,7 +71,21 @@ function Renderer.render(runtime, palette)
 	local snapshot = {
 		window = window,
 		cells = {},
+		meta = {
+			sourceCounts = {},
+			matchCount = 0,
+			expireCount = 0,
+			maxLayers = runtime.maxLayers or 5,
+			palette = palette,
+			header = runtime.header or {},
+			legend = {},
+			outerLegend = {
+				{ kind = "match", label = "Joined", color = colorForKind(palette, "match") },
+				{ kind = "expire", label = "Expired", color = colorForKind(palette, "expire") },
+			},
+		},
 	}
+	snapshot.meta.header.window = window
 
 	for _, evt in ipairs(runtime.events.source or {}) do
 		local col, row = mapIdToCell(window, evt.id)
@@ -75,8 +96,10 @@ function Renderer.render(runtime, palette)
 					schema = evt.schema,
 					id = evt.id,
 					color = colorForSchema(palette, evt.schema),
+					sourceTime = evt.sourceTime,
 				}
 			end
+			bumpCount(snapshot.meta.sourceCounts, evt.schema)
 		end
 	end
 
@@ -88,8 +111,10 @@ function Renderer.render(runtime, palette)
 			cell.borders[evt.layer] = {
 				kind = "match",
 				id = id,
+				schema = (evt.left and evt.left.schema) or (evt.right and evt.right.schema),
 				color = colorForKind(palette, "match"),
 			}
+			snapshot.meta.matchCount = snapshot.meta.matchCount + 1
 		end
 	end
 
@@ -101,11 +126,27 @@ function Renderer.render(runtime, palette)
 			cell.borders[evt.layer] = {
 				kind = "expire",
 				id = id,
+				schema = evt.schema,
 				reason = evt.reason,
 				color = colorForKind(palette, "expire"),
 			}
+			snapshot.meta.expireCount = snapshot.meta.expireCount + 1
 		end
 	end
+
+	-- Legend: derive from sourceCounts + palette.
+	local legendEntries = {}
+	for schema, count in pairs(snapshot.meta.sourceCounts) do
+		legendEntries[#legendEntries + 1] = {
+			schema = schema,
+			count = count,
+			color = colorForSchema(palette, schema),
+		}
+	end
+	table.sort(legendEntries, function(a, b)
+		return a.schema < b.schema
+	end)
+	snapshot.meta.legend = legendEntries
 
 	return snapshot
 end

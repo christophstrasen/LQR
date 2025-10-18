@@ -121,6 +121,39 @@ local function buildDepthResolver(totalSteps, maxLayers)
 	end
 end
 
+local function describeJoins(plan)
+	local joins = {}
+	local function keyLabel(key)
+		if type(key) == "string" then
+			return key
+		end
+		if type(key) == "table" then
+			if key.field then
+				return key.field
+			end
+			if key.map then
+				local parts = {}
+				for schema, field in pairs(key.map) do
+					parts[#parts + 1] = string.format("%s.%s", schema, tostring(field))
+				end
+				table.sort(parts)
+				return table.concat(parts, ", ")
+			end
+		end
+		return "id"
+	end
+	for _, join in ipairs(plan.joins or {}) do
+		joins[#joins + 1] = {
+			type = join.type,
+			source = join.source,
+			key = join.key,
+			displayKey = keyLabel(join.key),
+			window = join.window,
+		}
+	end
+	return joins
+end
+
 ---Attaches a visualization sink to a QueryBuilder and returns the wiring.
 ---@param queryBuilder table
 ---@param opts table|nil
@@ -155,6 +188,12 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		palette = palette,
 		maxLayers = maxLayers,
 		primarySchemas = primaries,
+		header = {
+			window = nil, -- filled by runtime snapshot
+			joins = describeJoins(plan),
+			from = plan.from or primaries,
+			gc = plan.gc,
+		},
 		normalized = sink:map(normalizeEventMapper(primarySet, maxLayers)):filter(function(event)
 			return event ~= nil
 		end),

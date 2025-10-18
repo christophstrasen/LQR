@@ -24,7 +24,14 @@ describe("viz_high_level adapter + runtime", function()
 			:window({ count = 5 })
 
 		local adapter = QueryVizAdapter.attach(builder, { maxLayers = 5 })
-		local runtime = Runtime.new({ maxLayers = 5, maxColumns = 10, maxRows = 1, adjustInterval = 1, margin = 0 })
+		local runtime = Runtime.new({
+			maxLayers = 5,
+			maxColumns = 10,
+			maxRows = 1,
+			adjustInterval = 1,
+			margin = 0,
+			header = adapter.header,
+		})
 
 		local tick = 0
 		local function advance()
@@ -69,5 +76,15 @@ describe("viz_high_level adapter + runtime", function()
 		end
 		assert.is_true(hasLayer1)
 		assert.is_true(hasLayer2)
+
+		local snap = require("viz_high_level.headless_renderer").render(runtime, adapter.palette)
+		assert.is_true(#(snap.meta.header.joins or {}) >= 2)
+		local dk = snap.meta.header.joins[1].displayKey or ""
+		assert.is_true(dk:find("customers%.id") ~= nil)
+		assert.is_true(dk:find("orders%.customerId") ~= nil)
+		local dk2 = snap.meta.header.joins[2].displayKey or ""
+		assert.is_true(dk2:find("orders%.id") ~= nil)
+		assert.is_true(dk2:find("refunds%.orderId") ~= nil)
+		assert.are.same({ "customers" }, snap.meta.header.from)
 	end)
 end)
