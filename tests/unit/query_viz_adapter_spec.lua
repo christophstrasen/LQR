@@ -96,4 +96,25 @@ describe("Query visualization adapter", function()
 		end
 		assert.is_true(hasOuterExpire) -- final join emits expiration on completion
 	end)
+
+	it("generates a rainbow palette for many schemas without gaps", function()
+		local builder = Query.from(SchemaHelpers.observableFromTable("a", { { id = 1 } }), "a")
+			:leftJoin(SchemaHelpers.observableFromTable("b", { { id = 1 } }), "b")
+			:leftJoin(SchemaHelpers.observableFromTable("c", { { id = 1 } }), "c")
+			:leftJoin(SchemaHelpers.observableFromTable("d", { { id = 1 } }), "d")
+			:leftJoin(SchemaHelpers.observableFromTable("e", { { id = 1 } }), "e")
+			:leftJoin(SchemaHelpers.observableFromTable("f", { { id = 1 } }), "f")
+			:leftJoin(SchemaHelpers.observableFromTable("g", { { id = 1 } }), "g")
+			:leftJoin(SchemaHelpers.observableFromTable("h", { { id = 1 } }), "h")
+
+		local attachment = QueryVizAdapter.attach(builder)
+		for _, schema in ipairs(attachment.primarySchemas) do
+			local color = attachment.palette[schema]
+			assert.is_not_nil(color)
+			assert.is_not_nil(color[1])
+			assert.is_not_nil(color[2])
+			assert.is_not_nil(color[3])
+			assert.are.equal(1, color[4])
+		end
+	end)
 end)
