@@ -233,6 +233,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				key = record.key,
 				id = meta and meta.id or nil,
 				sourceTime = meta and meta.sourceTime or nil,
+				entry = record.entry,
 			})
 		end
 		observer:onNext(singleSchemaResult(record))
@@ -251,6 +252,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				reason = reason,
 				id = meta and meta.id or nil,
 				sourceTime = meta and meta.sourceTime or nil,
+				entry = recordEntry.entry,
 			})
 		end
 		expiredSubject:onNext({
@@ -307,6 +309,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 							id = meta and meta.id or nil,
 							key = record.key,
 							sourceTime = meta and meta.sourceTime or nil,
+							entry = record.entry,
 						}
 					end
 					emitViz("match", {
@@ -433,6 +436,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 						id = meta.id,
 						sourceTime = meta.sourceTime,
 						schemaVersion = meta.schemaVersion,
+						entry = entry,
 					})
 				end
 

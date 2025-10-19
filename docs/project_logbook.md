@@ -130,3 +130,36 @@
 1. **Lifecycle discipline:** Flushing caches and cancelling timers on all terminal signals avoids hidden state and stray work after errors/completion.
 2. **Hot vs cold clarity:** Shared streams should use explicit multicast helpers; we added them to the fork and documented when to apply them in our join pipelines.
 3. **Metadata fidelity:** Mapper outputs now retain schema metadata even when returning bare tables, keeping downstream joins predictable.
+
+## Day 9 – High-level viz pipeline (WIP) for multi-join projection & stacking
+
+### Highlights
+- **New high-level viz path:** Spun up a separate high-level visualization pipeline (keeping the low-level intact) aimed at pluggable, multi-join rendering; wired Love2D entrypoint and headless renderer to consume adapter/runtime snapshots.
+- **Projection map & enrichment:** Derived projection domain/fields from the first join’s ON map, threading projection metadata into normalized viz events. Events now carry `projectionKey`/`projectable` only when the schema has a known projection field, using actual record payloads (so orders with customerId project even without the customer schema present).
+- **Renderer behavior:** Headless/Love2D renderers draw only projectable inners/borders; non-projectables are counted. Legends show total/projectable/non-projectable per schema and projectable/total counts for match/expire. Header includes projection info and non-projectable summaries.
+- **Stacked layers fixed:** Borders now sort by layer and inset per layer; refund/order stacked joins render as two outlines when projection data is available. Snapshot hover metadata retains native ids/schemas.
+- **Examples/tests:** Headless trace now runs through the real Query+adapter pipeline. Added projection map and projectable vs non-projectable tests (including non-projectable events that don’t draw), merged enrichment coverage, and kept the suite green.
+
+### Takeaways
+1. **Projection must use real payloads:** Resolving projection keys from record fields (not just schema presence) allows deeper joins to project even when the primary schema isn’t in the event.
+2. **Non-projectables stay visible via counts:** We avoid misplacing borders by hiding non-projectables from the 2D grid but surfacing them in counts/legend; projection keys are required for drawing.
+3. **Layering clarity across dimensions:** Sorted/inset borders make stacked joins readable, while counts/metadata acknowledge that some joins live in other key domains—flattened into 2D without pretending they occupy the same plane.
+
+## Day 10 – Auto-zoomed grid, color mixing parity, and Love2D polish
+
+### Highlights
+- **Decay-aware color mixing:** The high-level renderer now records ingest timestamps and decays mix weights over time, matching the low-level viz’s additive blending. Overlapping sources/matches blend colors when they happen close together; stale hues fade toward the neutral background.
+- **Consistent grid visuals:** Every cell now renders a default light-gray inner rectangle with borders, so decayed events reveal the same grid state as untouched cells. The Love2D drawer blends event colors toward that baseline, making fade-outs intuitive.
+- **Auto zoom & sliding window:** Runtime tracks active IDs (based on projection keys and intensity) to decide whether a 10×10 or 100×100 grid is needed. It slides the window with a 20% forward buffer and only reevaluates every two seconds, keeping the view stable. Manual configs still work via `maxColumns/maxRows`.
+- **Digit-based labels:** Column labels now represent the higher-order digits (beyond the row granularity), while row labels display the last 1–2 digits depending on zoom level. The grid aligns IDs to these digit boundaries, so headers are meaningful at a glance.
+- **Love2D integration:** The on-screen viz uses the runtime’s auto zoom, draws consistent backgrounds, and displays headers/legends derived from the snapshot. Headless traces also consume the same snapshot data, ensuring parity between scripted runs and the UI.
+
+### Key learnings
+1. **Consistent baselines reduce cognitive load:** Drawing default cells (and blending fades toward that state) keeps the grid legible even as events decay, avoiding ghosts or abrupt flashes.
+2. **Timestamped mixing unlocks richer storytelling:** Recording event ingest times (and allowing configurable half-lives) makes color blending and opacity meaningful rather than arbitrary; this paved the way for future animation ideas.
+3. **Auto zoom needs clear alignment rules:** Splitting ID digits into row/column labels forced us to align grid starts to row multiples and define row/column counts precisely, otherwise the text got misleading. This alignment also stabilized sliding behavior.
+
+### Next steps
+- Exercise the Love2D viz against real (non-deterministic) streams to validate mixing/zoom heuristics; tune half-life/buffer defaults as needed.
+- Reintroduce “outer layer” annotations from the low-level viz so anti joins and expirations have more expressive outlines.
+- Expand documentation/headless trace guidance to explain how to read the new grid, labels, and decay behavior, potentially with annotated snapshots.

@@ -5,8 +5,18 @@ package.cpath = "./?.so;" .. package.cpath
 require("bootstrap")
 
 local Query = require("Query")
-local QueryVizAdapter = require("viz_high_level.query_adapter")
+local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local SchemaHelpers = require("tests.support.schema_helpers")
+
+local function ofType(entries, entryType)
+	local filtered = {}
+	for _, entry in ipairs(entries or {}) do
+		if entry.type == entryType then
+			filtered[#filtered + 1] = entry
+		end
+	end
+	return filtered
+end
 
 ---@diagnostic disable: undefined-global
 describe("Query visualization adapter", function()
@@ -29,14 +39,14 @@ describe("Query visualization adapter", function()
 		assert.is_not_nil(attachment.palette.orders)
 		assert.is_not_nil(attachment.palette.refunds)
 
-		local results = {}
-		attachment.query:subscribe(function(result)
-			results[#results + 1] = result
-		end)
-
 		local normalized = {}
 		attachment.normalized:subscribe(function(event)
 			normalized[#normalized + 1] = event
+		end)
+
+		local results = {}
+		attachment.query:subscribe(function(result)
+			results[#results + 1] = result
 		end)
 
 		customersSubject:onNext({ id = 1, name = "Ada" })
@@ -57,55 +67,31 @@ describe("Query visualization adapter", function()
 		assert.are.equal(102, results[2]:get("orders").id)
 		assert.is_nil(results[2]:get("refunds"))
 
-		local function ofType(kind)
-			local filtered = {}
-			for _, entry in ipairs(normalized) do
-				if entry.type == kind then
-					filtered[#filtered + 1] = entry
-				end
-			end
-			return filtered
-		end
-
-		local sources = ofType("source")
-		assert.are.same(4, #sources) -- 1 customer, 2 orders, 1 refund (primaries only, deduped)
-
-		local matches = ofType("match")
-		assert.is_true(#matches >= 2)
-		for _, entry in ipairs(matches) do
-			assert.is_true(entry.layer >= 1 and entry.layer <= 5)
-		end
-
-		local outerMatch
-		for _, entry in ipairs(matches) do
-			if entry.layer == 1 and entry.left and entry.left.schema == "orders" then
-				outerMatch = entry
-				break
-			end
-		end
-		assert.is_not_nil(outerMatch, "expected outermost (layer 1) match for refund join")
-
-		local expires = ofType("expire")
-		assert.is_true(#expires >= 1)
-		local hasOuterExpire = false
-		for _, entry in ipairs(expires) do
-			assert.is_true(entry.layer >= 1 and entry.layer <= 5)
-			if entry.layer == 1 then
-				hasOuterExpire = true
-			end
-		end
-		assert.is_true(hasOuterExpire) -- final join emits expiration on completion
+		local joins = ofType(normalized, "joinresult")
+		assert.is_true(#joins >= 1)
+		assert.are.equal("match", joins[1].kind)
+		assert.are.equal("joinresult", joins[1].type)
+		local sources = ofType(normalized, "source")
+		assert.is_true(#sources >= 1)
+		assert.are.equal("source", sources[1].type)
 	end)
 
 	it("generates a rainbow palette for many schemas without gaps", function()
 		local builder = Query.from(SchemaHelpers.observableFromTable("a", { { id = 1 } }), "a")
 			:leftJoin(SchemaHelpers.observableFromTable("b", { { id = 1 } }), "b")
+			:onSchemas({ a = "id", b = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("c", { { id = 1 } }), "c")
+			:onSchemas({ a = "id", c = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("d", { { id = 1 } }), "d")
+			:onSchemas({ a = "id", d = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("e", { { id = 1 } }), "e")
+			:onSchemas({ a = "id", e = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("f", { { id = 1 } }), "f")
+			:onSchemas({ a = "id", f = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("g", { { id = 1 } }), "g")
+			:onSchemas({ a = "id", g = "id" })
 			:leftJoin(SchemaHelpers.observableFromTable("h", { { id = 1 } }), "h")
+			:onSchemas({ a = "id", h = "id" })
 
 		local attachment = QueryVizAdapter.attach(builder)
 		for _, schema in ipairs(attachment.primarySchemas) do

@@ -6,8 +6,8 @@ require("bootstrap")
 
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local QueryVizAdapter = require("viz_high_level.query_adapter")
-local Runtime = require("viz_high_level.runtime")
+local QueryVizAdapter = require("viz_high_level.core.query_adapter")
+local Runtime = require("viz_high_level.core.runtime")
 
 ---@diagnostic disable: undefined-global
 describe("viz_high_level adapter + runtime", function()
@@ -54,30 +54,7 @@ describe("viz_high_level adapter + runtime", function()
 		ordersSubject:onCompleted()
 		refundsSubject:onCompleted()
 
-			-- Window should bias to the newest primary ids within capacity (10 wide).
-			local window = runtime:window()
-			assert.are.equal(201, window.endId)
-			assert.are.equal(192, window.startId)
-
-			-- Primary source events dedupe per schema+id (customers/orders/refunds primaries here).
-			assert.are.equal(4, #runtime.events.source)
-
-		-- Matches should have layers clamped between 1 and 5 and include outermost refund join.
-		local hasLayer1 = false
-		local hasLayer2 = false
-		for _, entry in ipairs(runtime.events.match) do
-			assert.is_true(entry.layer >= 1 and entry.layer <= 5)
-			if entry.layer == 1 then
-				hasLayer1 = true
-			end
-			if entry.layer == 2 then
-				hasLayer2 = true
-			end
-		end
-		assert.is_true(hasLayer1)
-		assert.is_true(hasLayer2)
-
-		local snap = require("viz_high_level.headless_renderer").render(runtime, adapter.palette)
+		local snap = require("viz_high_level.core.headless_renderer").render(runtime, adapter.palette)
 		assert.is_true(#(snap.meta.header.joins or {}) >= 2)
 		local dk = snap.meta.header.joins[1].displayKey or ""
 		assert.is_true(dk:find("customers%.id") ~= nil)

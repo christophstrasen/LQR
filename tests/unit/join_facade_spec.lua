@@ -140,6 +140,11 @@ describe("Join high-level facade", function()
 				},
 			},
 			select = { left = "L", right = "R" },
+			gc = {
+				mode = "count",
+				count = 5,
+				gcOnInsert = true,
+			},
 		}, plan)
 	end)
 end)

@@ -787,12 +787,43 @@ local function windowDescription(window, defaultWindowCount)
 	}
 end
 
+local function gcDescription(window, defaultWindowCount)
+	local description = {
+		mode = "count",
+		count = defaultWindowCount,
+		gcOnInsert = true,
+	}
+	if not window then
+		return description
+	end
+	if window.count then
+		description.mode = "count"
+		description.count = window.count
+	elseif window.time or window.offset then
+		description.mode = "time"
+		description.time = window.time or window.offset or 0
+		description.field = window.field or "sourceTime"
+	end
+	if window.gcOnInsert ~= nil then
+		description.gcOnInsert = window.gcOnInsert
+	end
+	if window.gcIntervalSeconds then
+		description.gcIntervalSeconds = window.gcIntervalSeconds
+	end
+	return description
+end
+
 ---Returns a stable description table for tests/logs.
 ---@return table
 function QueryBuilder:describe()
 	local plan = {
 		from = self._rootSchemas or { "unknown" },
 		joins = {},
+	}
+	local planGc = {
+		mode = "count",
+		count = self._defaultWindowCount,
+		gcOnInsert = true,
 	}
 	for _, step in ipairs(self._steps) do
 		plan.joins[#plan.joins + 1] = {
@@ -801,7 +832,11 @@ function QueryBuilder:describe()
 			key = keyDescription(step),
 			window = windowDescription(step.window, self._defaultWindowCount),
 		}
+		if step.window then
+			planGc = gcDescription(step.window, self._defaultWindowCount)
+		end
 	end
+	plan.gc = planGc
 	if self._selection then
 		plan.select = self._selection
 	end
