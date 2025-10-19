@@ -1,5 +1,8 @@
 -- Headless renderer that converts runtime state into a drawable snapshot (no pixels).
 -- Useful for tests and trace replay to validate layout/layering logic.
+-- The core idea: take every buffered event, map it to a cell (projection key -> grid
+-- column/row), blend in the schema color, and keep a "mix weight" that decays over
+-- time so cells fade out. Borders represent joins/expirations per layer.
 
 local DEFAULT_INNER_COLOR = { 0.2, 0.2, 0.2, 1 }
 local DEFAULT_MATCH_COLOR = { 0.2, 0.85, 0.2, 1 }
@@ -8,8 +11,10 @@ local DEFAULT_EXPIRE_COLOR = { 0.9, 0.25, 0.25, 1 }
 local Renderer = {}
 local DEFAULT_NEW_EVENT_WEIGHT = 1
 local DEFAULT_MAX_WEIGHT = DEFAULT_NEW_EVENT_WEIGHT -- first hit starts fully saturated
+local MIN_VISIBLE_RATIO = 0.02
 local BACKGROUND_COLOR = { 0.08, 0.08, 0.08, 1 }
 
+-- Utility: accumulate source/match stats for legend + metadata.
 local function bumpCount(map, key)
 	if not key then
 		return
@@ -17,6 +22,8 @@ local function bumpCount(map, key)
 	map[key] = (map[key] or 0) + 1
 end
 
+-- Project a logical id (projection key) into a column/row inside the window.
+-- We lay out ids column-major: each column spans "rows" ids.
 local function mapIdToCell(window, id)
 	if not id then
 		return nil, nil
@@ -35,6 +42,8 @@ local function mapIdToCell(window, id)
 	return col, row
 end
 
+-- Fetch or create a cell structure for a given column/row.
+-- The renderer uses sparse storage so we only keep cells that have data.
 local function ensureCell(snapshot, col, row)
 	snapshot.cells[col] = snapshot.cells[col] or {}
 	snapshot.cells[col][row] = snapshot.cells[col][row] or { borders = {} }
@@ -63,6 +72,8 @@ local function cloneColor(color)
 	return { color[1], color[2], color[3], color[4] or 1 }
 end
 
+-- Exponential decay helper: given a mix weight, how much remains after deltaSeconds?
+-- We use a half-life so that every N seconds the weight halves, mimicking "impact fades".
 local function decayWeight(weight, deltaSeconds, halfLife)
 	if not weight or weight <= 0 then
 		return 0
@@ -77,6 +88,8 @@ local function decayWeight(weight, deltaSeconds, halfLife)
 	return weight * math.exp(-lambda * deltaSeconds)
 end
 
+-- Blend schema colors while respecting current weight: we don't just overwrite the cell,
+-- we mix old vs new proportional to their weights so overlapping schemas form gradients.
 local function blendColor(existingColor, existingWeight, newColor, newWeight)
 	if not existingColor or existingWeight <= 0 then
 		return cloneColor(newColor), math.min(newWeight, DEFAULT_MAX_WEIGHT)
@@ -92,7 +105,8 @@ local function blendColor(existingColor, existingWeight, newColor, newWeight)
 		existingColor[2] * existingFactor + newColor[2] * newFactor,
 		existingColor[3] * existingFactor + newColor[3] * newFactor,
 		1,
-	}, math.min(totalWeight, DEFAULT_MAX_WEIGHT)
+	},
+		math.min(totalWeight, DEFAULT_MAX_WEIGHT)
 end
 
 local function extractId(event)
@@ -144,7 +158,8 @@ function Renderer.render(runtime, palette, now)
 	snapshot.meta.header.window = window
 	snapshot.meta.header.projection = snapshot.meta.header.projection or {}
 
-	for _, evt in ipairs(runtime.events.source or {}) do
+-- Inner fills: each projectable source event becomes a colored square tracked by schema/id.
+for _, evt in ipairs(runtime.events.source or {}) do
 		local id = evt.projectionKey or evt.id
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
@@ -159,13 +174,13 @@ function Renderer.render(runtime, palette, now)
 					lastUpdateTime = evt.ingestTime or 0,
 				}
 			else
-			local weight = decayWeight(cell.inner.mixWeight or 0, (evt.ingestTime or 0) - (cell.inner.lastUpdateTime or evt.ingestTime or 0), halfLife)
-				local mixedColor, newWeight = blendColor(
-					cell.inner.color,
-					weight,
-					colorForSchema(palette, evt.schema),
-					DEFAULT_NEW_EVENT_WEIGHT
+				local weight = decayWeight(
+					cell.inner.mixWeight or 0,
+					(evt.ingestTime or 0) - (cell.inner.lastUpdateTime or evt.ingestTime or 0),
+					halfLife
 				)
+				local mixedColor, newWeight =
+					blendColor(cell.inner.color, weight, colorForSchema(palette, evt.schema), DEFAULT_NEW_EVENT_WEIGHT)
 				cell.inner.color = mixedColor
 				cell.inner.mixWeight = newWeight
 				cell.inner.lastUpdateTime = evt.ingestTime or cell.inner.lastUpdateTime
@@ -181,7 +196,8 @@ function Renderer.render(runtime, palette, now)
 		end
 	end
 
-	for _, evt in ipairs(runtime.events.match or {}) do
+-- Outer borders: every join result (match layer) gets a border at the proper layer.
+for _, evt in ipairs(runtime.events.match or {}) do
 		local id = evt.projectionKey or extractId(evt)
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
@@ -195,7 +211,11 @@ function Renderer.render(runtime, palette, now)
 			border.projectionDomain = snapshot.meta.header.projection and snapshot.meta.header.projection.domain
 			local color = colorForKind(palette, "match")
 			if border.color then
-				local weight = decayWeight(border.mixWeight or 0, (evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0), halfLife)
+				local weight = decayWeight(
+					border.mixWeight or 0,
+					(evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0),
+					halfLife
+				)
 				local mixedColor, newWeight = blendColor(border.color, weight, color, DEFAULT_NEW_EVENT_WEIGHT)
 				border.color = mixedColor
 				border.mixWeight = newWeight
@@ -211,7 +231,8 @@ function Renderer.render(runtime, palette, now)
 		end
 	end
 
-	for _, evt in ipairs(runtime.events.expire or {}) do
+-- Expirations also show up as borders (different color) so we can see why cells disappear.
+for _, evt in ipairs(runtime.events.expire or {}) do
 		local id = evt.projectionKey or extractId(evt)
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
@@ -226,7 +247,11 @@ function Renderer.render(runtime, palette, now)
 			border.reason = evt.reason
 			local color = colorForKind(palette, "expire")
 			if border.color then
-				local weight = decayWeight(border.mixWeight or 0, (evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0), halfLife)
+				local weight = decayWeight(
+					border.mixWeight or 0,
+					(evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0),
+					halfLife
+				)
 				local mixedColor, newWeight = blendColor(border.color, weight, color, DEFAULT_NEW_EVENT_WEIGHT)
 				border.color = mixedColor
 				border.mixWeight = newWeight
@@ -247,12 +272,24 @@ function Renderer.render(runtime, palette, now)
 			if cell.inner then
 				local elapsed = currentTime - (cell.inner.lastUpdateTime or currentTime)
 				cell.inner.mixWeight = decayWeight(cell.inner.mixWeight or 0, elapsed, halfLife)
-				cell.inner.intensity = math.min((cell.inner.mixWeight or 0) / DEFAULT_MAX_WEIGHT, 1)
+				local intensity = (cell.inner.mixWeight or 0) / DEFAULT_MAX_WEIGHT
+				if intensity <= MIN_VISIBLE_RATIO then
+					cell.inner.mixWeight = 0
+					cell.inner.intensity = 0
+				else
+					cell.inner.intensity = math.min(intensity, 1)
+				end
 			end
 			for _, border in pairs(cell.borders or {}) do
 				local elapsed = currentTime - (border.lastUpdateTime or currentTime)
 				border.mixWeight = decayWeight(border.mixWeight or 0, elapsed, halfLife)
-				border.opacity = math.min((border.mixWeight or 0) / DEFAULT_MAX_WEIGHT, 1)
+				local opacity = (border.mixWeight or 0) / DEFAULT_MAX_WEIGHT
+				if opacity <= MIN_VISIBLE_RATIO then
+					border.mixWeight = 0
+					border.opacity = 0
+				else
+					border.opacity = math.min(opacity, 1)
+				end
 			end
 		end
 	end

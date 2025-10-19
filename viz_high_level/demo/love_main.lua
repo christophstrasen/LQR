@@ -11,7 +11,7 @@ local DebugViz = require("viz_high_level.debug")
 local Draw = require("viz_high_level.core.draw")
 local DemoData = require("viz_high_level.demo.demo_data")
 
-local MIX_DECAY_HALF_LIFE = 100
+local MIX_DECAY_HALF_LIFE = 1
 local app = {
 	attachment = nil,
 	runtime = nil,

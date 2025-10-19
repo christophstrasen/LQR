@@ -1,5 +1,8 @@
 -- Headless-friendly high-level viz runtime that consumes normalized adapter events
 -- and maintains expandable grid/window state plus per-layer event buffers.
+-- Think of this as the brains behind the snapshots: it maps ids onto a sliding grid,
+-- tracks when rows were last "seen", and enforces auto-zoom rules so renderers only
+-- worry about pixels.
 local Runtime = {}
 Runtime.__index = Runtime
 
@@ -72,6 +75,8 @@ local function windowSize(self)
 		* (self.windowConfig.rows or ZOOM_SMALL.rows)
 end
 
+-- Figure out which projection ids are still "alive" so auto-zoom decisions can focus on
+-- currently visible rows. We reuse the mix half-life as a rough TTL for activity.
 local function collectActiveIds(self, now)
 	local minId, maxId, count = nil, nil, 0
 	local ttl = (self.mixDecayHalfLife or DEFAULT_MIX_HALF_LIFE) * 4
@@ -87,6 +92,9 @@ local function collectActiveIds(self, now)
 	return minId, maxId, count
 end
 
+-- Margin padding for the window: either respect a caller-supplied absolute value or derive
+-- one as a percentage of the current grid columns (default 20%). This keeps some breathing
+-- room so inserts near the edges don't instantly re-center the window.
 local function effectiveMargin(self)
 	if self.marginAbsolute ~= nil then
 		return self.marginAbsolute
@@ -103,6 +111,8 @@ local function effectiveMargin(self)
 	return reserveColumns * rows
 end
 
+-- Manual zoom case: callers fixed maxColumns/maxRows, so we just clamp observed ids into
+-- that rectangle plus whatever margin we configured.
 local function manualAdjust(self, now)
 	if not self.observedMin or not self.observedMax then
 		self.lastAdjust = now
@@ -134,6 +144,8 @@ local function manualAdjust(self, now)
 	self.lastAdjust = now
 end
 
+-- Auto zoom driver: resize between 10x10 and 100x100, slide the window to keep recent ids
+-- visible, and fall back to a "compressed" mode when even the large grid overflows.
 function Runtime:_maybeAdjust(now)
 	if not now then
 		return
@@ -173,6 +185,8 @@ function Runtime:_maybeAdjust(now)
 	if visibleSpan < 1 then
 		visibleSpan = range
 	end
+	-- Buffer shrinks the effective span we try to display so the window doesn't thrash.
+	-- If active ids overshoot even this reduced span we pin the start near the latest id.
 
 	local start = activeMin
 	if (activeMax - start + 1) > visibleSpan then
@@ -200,6 +214,9 @@ function Runtime:_maybeAdjust(now)
 	self.lastAdjust = now
 end
 
+-- Public API: every normalized event funnels through here. We stamp ingestTime (used for
+-- decay), stash events by type so the renderer can iterate, and update auto-zoom state
+-- whenever a projectable source arrives.
 function Runtime:ingest(event, now)
 	if not event or not event.type then
 		return
