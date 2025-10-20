@@ -1,5 +1,4 @@
--- Shared helpers to build demo query sources and emit deterministic events.
-local DemoData = {}
+local SimpleDemo = {}
 
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
@@ -37,11 +36,13 @@ local BASELINE_EVENTS = {
 	{ schema = "orders", payload = { id = 103, customerId = 90 } },
 }
 
-function DemoData.build()
+---@return table
+function SimpleDemo.build()
 	return buildSubjects()
 end
 
-function DemoData.emitBaseline(subjects)
+---@param subjects table
+local function emitBaseline(subjects)
 	for _, event in ipairs(BASELINE_EVENTS) do
 		local subject = subjects[event.schema]
 		assert(subject, string.format("Unknown schema %s in demo events", tostring(event.schema)))
@@ -49,7 +50,8 @@ function DemoData.emitBaseline(subjects)
 	end
 end
 
-function DemoData.complete(subjects)
+---@param subjects table
+function SimpleDemo.complete(subjects)
 	for _, subject in pairs(subjects or {}) do
 		if subject.onCompleted then
 			subject:onCompleted()
@@ -57,4 +59,30 @@ function DemoData.complete(subjects)
 	end
 end
 
-return DemoData
+---@param subjects table
+---@return table driver
+function SimpleDemo.start(subjects)
+	emitBaseline(subjects)
+	SimpleDemo.complete(subjects)
+	local driver = { finished = true }
+	function driver:update()
+		return true
+	end
+	function driver:runAll()
+		return true
+	end
+	function driver:runUntil()
+		return true
+	end
+	function driver:isFinished()
+		return true
+	end
+	return driver
+end
+
+SimpleDemo.loveDefaults = {
+	label = "simple snapshot",
+	visualsTTL = 2,
+}
+
+return SimpleDemo

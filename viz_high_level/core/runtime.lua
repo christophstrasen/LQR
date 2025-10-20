@@ -53,7 +53,8 @@ local function new(opts)
 	self.maxLayers = opts.maxLayers or 5
 	self.palette = opts.palette or {}
 	self.header = opts.header or {}
-	self.mixDecayHalfLife = opts.mixDecayHalfLife or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
+	self.visualsTTL = opts.visualsTTL or opts.mixDecayHalfLife or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
+	self.mixDecayHalfLife = self.visualsTTL
 	self.activeIds = {}
 	self.observedMin = nil
 	self.observedMax = nil
@@ -79,7 +80,7 @@ end
 -- currently visible rows. We reuse the mix half-life as a rough TTL for activity.
 local function collectActiveIds(self, now)
 	local minId, maxId, count = nil, nil, 0
-	local ttl = (self.mixDecayHalfLife or DEFAULT_MIX_HALF_LIFE) * 4
+	local ttl = (self.visualsTTL or DEFAULT_MIX_HALF_LIFE) * 4
 	for id, lastSeen in pairs(self.activeIds) do
 		if now - lastSeen <= ttl then
 			minId = minId and math.min(minId, id) or id

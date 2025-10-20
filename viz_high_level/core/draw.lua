@@ -1,23 +1,57 @@
 -- Drawing helpers for high-level viz snapshots.
 local Draw = {}
+local CellLayers = require("viz_high_level.core.cell_layers")
 
 local SMALL_CELL_SIZE = 26
-local LARGE_CELL_SIZE = 8
-local CELL_PADDING = 3
-local INNER_INSET = 4
+local LARGE_CELL_SIZE = 12 -- 50% larger than before to keep 100x100 mode readable
+local SMALL_CELL_PADDING = 3
+local LARGE_CELL_PADDING = 1
+local SMALL_INNER_INSET = 4
+local LARGE_INNER_INSET = 2
+local SMALL_OUTER_INSET = 1
+local LARGE_OUTER_INSET = 1
+local SMALL_BORDER_STEP = 3
+local LARGE_BORDER_STEP = 2
 local BACKGROUND = { 0.1, 0.1, 0.1, 1 }
 local EMPTY_CELL_COLOR = { 0.2, 0.2, 0.2, 1 }
+local OUTER_BASE_COLOR = { 0.24, 0.24, 0.24, 1 }
+local OUTER_SHADOW_COLOR = { 0.12, 0.12, 0.12, 1 }
+local NEUTRAL_BORDER_COLOR = OUTER_BASE_COLOR
 local BORDER_COLORS = {
 	match = { 0, 1, 0, 1 },
 	expire = { 1, 0, 0, 1 },
 }
 local ROW_LABEL_WIDTH = 40
 local COLUMN_LABEL_HEIGHT = 18
+local COLUMN_LABEL_GAP = 10
+
+local function clamp01(value)
+	if value < 0 then
+		return 0
+	end
+	if value > 1 then
+		return 1
+	end
+	return value
+end
+
+local function lerpColor(from, to, factor)
+	factor = clamp01(factor or 1)
+	local inv = 1 - factor
+	local src = from or to
+	return {
+		(src[1] or 0) * factor + (to[1] or 0) * inv,
+		(src[2] or 0) * factor + (to[2] or 0) * inv,
+		(src[3] or 0) * factor + (to[3] or 0) * inv,
+		(src[4] or 1) * factor + (to[4] or 1) * inv,
+	}
+end
 
 local function metricsForWindow(window)
 	local columns = window.columns or 10
 	local rows = window.rows or 10
-	local cellSize = columns > 10 and LARGE_CELL_SIZE or SMALL_CELL_SIZE
+	local useLarge = columns > 10
+	local cellSize = useLarge and LARGE_CELL_SIZE or SMALL_CELL_SIZE
 	return {
 		cellSize = cellSize,
 		width = columns * cellSize,
@@ -26,6 +60,10 @@ local function metricsForWindow(window)
 		rows = rows,
 		rowLabelWidth = ROW_LABEL_WIDTH,
 		columnLabelHeight = COLUMN_LABEL_HEIGHT,
+		padding = useLarge and LARGE_CELL_PADDING or SMALL_CELL_PADDING,
+		innerInset = useLarge and LARGE_INNER_INSET or SMALL_INNER_INSET,
+		outerInset = useLarge and LARGE_OUTER_INSET or SMALL_OUTER_INSET,
+		borderStep = useLarge and LARGE_BORDER_STEP or SMALL_BORDER_STEP,
 	}
 end
 
@@ -39,67 +77,60 @@ local function rect(x, y, size, color, lineWidth, mode)
 	lg.rectangle(mode, x, y, size, size)
 end
 
-local function drawCell(col, row, cell, metrics)
-	cell = cell or { borders = {} }
-	local size = metrics.cellSize - CELL_PADDING * 2
-	local x = (col - 1) * metrics.cellSize + CELL_PADDING
-	local y = (row - 1) * metrics.cellSize + CELL_PADDING
-	rect(x, y, size, BACKGROUND, nil, "fill")
-	-- Inner fill
-	if cell.inner and cell.inner.color then
-		local innerSize = size - INNER_INSET * 2
-		innerSize = math.max(4, innerSize)
-		local inset = INNER_INSET
-		local color = cell.inner.color
-		local intensity = math.min(math.max(cell.inner.intensity or color[4] or 1, 0), 1)
-		local mixedColor = {
-			EMPTY_CELL_COLOR[1] * (1 - intensity) + color[1] * intensity,
-			EMPTY_CELL_COLOR[2] * (1 - intensity) + color[2] * intensity,
-			EMPTY_CELL_COLOR[3] * (1 - intensity) + color[3] * intensity,
-			1,
-		}
-		rect(
-			x + inset,
-			y + inset,
-			innerSize,
-			mixedColor,
-			nil,
-			"fill"
-		)
-	else
-		local innerSize = size - INNER_INSET * 2
-		innerSize = math.max(4, innerSize)
-		local inset = INNER_INSET
-		rect(x + inset, y + inset, innerSize, EMPTY_CELL_COLOR, nil, "fill")
-		rect(x + inset, y + inset, innerSize, { 0.3, 0.3, 0.3, 0.6 }, 1, "line")
+local function regionColor(region, fallback)
+	if not region then
+		return fallback
 	end
+	local color = select(1, region:getColor())
+	return color or fallback
+end
 
-	-- Layered borders (outermost = layer 1), sorted for deterministic drawing.
-	local layers = {}
-	for layer in pairs(cell.borders or {}) do
-		layers[#layers + 1] = layer
-		layers[#layers] = tonumber(layers[#layers]) or layers[#layers]
+local function drawCell(col, row, cell, metrics, renderTime, maxLayers)
+	local composite = cell and cell.composite
+	if not composite then
+		composite = CellLayers.CompositeCell.new({
+			maxLayers = maxLayers or 1,
+		})
 	end
-	table.sort(layers)
-	for _, layer in ipairs(layers) do
-		local border = cell.borders[layer]
-		local lineSize = 2
-		local inset = (layer - 1) * 3
-		local borderSize = size - inset * 2
-		if borderSize < 2 then
-			borderSize = 2
+	local padding = metrics.padding or SMALL_CELL_PADDING
+	local baseSize = metrics.cellSize - padding * 2
+	if baseSize < 2 then
+		baseSize = 2
+	end
+	local x = (col - 1) * metrics.cellSize + padding
+	local y = (row - 1) * metrics.cellSize + padding
+	composite:update(renderTime)
+	local outerInset = metrics.outerInset or 1
+	local currentInset = outerInset
+	local currentSize = baseSize - outerInset * 2
+	if currentSize <= 0 then
+		return
+	end
+	local outerColor = regionColor(composite:getOuter(), NEUTRAL_GAP_COLOR)
+	rect(x + currentInset, y + currentInset, currentSize, outerColor, nil, "fill")
+	local borderThickness = metrics.borderStep or SMALL_BORDER_STEP
+	local gapThickness = math.max(1, math.floor(borderThickness / 3))
+	for depth = 1, maxLayers do
+		local borderRegion = composite:getBorder(depth)
+		local gapRegion = composite:getGap(depth)
+		local borderColor = regionColor(borderRegion, NEUTRAL_BORDER_COLOR)
+		rect(x + currentInset, y + currentInset, currentSize, borderColor, nil, "fill")
+		currentInset = currentInset + borderThickness
+		currentSize = currentSize - borderThickness * 2
+		if currentSize <= 0 then
+			break
 		end
-		local baseColor = border.color or BORDER_COLORS[border.kind] or { 1, 1, 1, 1 }
-		local alpha = border.opacity or baseColor[4] or 1
-		rect(
-			x + inset,
-			y + inset,
-			borderSize,
-			{ baseColor[1], baseColor[2], baseColor[3], alpha },
-			lineSize,
-			"line"
-		)
+		local gapColor = regionColor(gapRegion, NEUTRAL_GAP_COLOR)
+		rect(x + currentInset, y + currentInset, currentSize, gapColor, nil, "fill")
+		currentInset = currentInset + gapThickness
+		currentSize = currentSize - gapThickness * 2
+		if currentSize <= 0 then
+			break
+		end
 	end
+	local innerColor = regionColor(composite:getInner(), EMPTY_CELL_COLOR)
+	rect(x + currentInset, y + currentInset, currentSize, innerColor, nil, "fill")
+	rect(x + currentInset, y + currentInset, currentSize, { 0.3, 0.3, 0.3, 0.6 }, 1, "line")
 end
 
 local function columnLabel(window, col)
@@ -130,17 +161,25 @@ function Draw.drawSnapshot(snapshot, opts)
 		return
 	end
 	local metrics = metricsForWindow(window)
+	local maxLayers = (snapshot.meta and snapshot.meta.maxLayers) or 1
+	local renderTime = (snapshot.meta and snapshot.meta.renderTime) or (love and love.timer and love.timer.getTime()) or os.clock()
 	for col = 1, metrics.columns do
 		for row = 1, metrics.rows do
 			local cell = snapshot.cells[col] and snapshot.cells[col][row]
-			drawCell(col, row, cell, metrics)
+			drawCell(col, row, cell, metrics, renderTime, maxLayers)
 		end
 	end
 	if opts and opts.showLabels then
 		lg.setColor(1, 1, 1, 1)
 		for col = 1, metrics.columns do
 			local colText = columnLabel(window, col)
-			lg.printf(colText, (col - 1) * metrics.cellSize, -COLUMN_LABEL_HEIGHT, metrics.cellSize, "center")
+			lg.printf(
+				colText,
+				(col - 1) * metrics.cellSize,
+				-(COLUMN_LABEL_HEIGHT + COLUMN_LABEL_GAP),
+				metrics.cellSize,
+				"center"
+			)
 		end
 		for row = 1, metrics.rows do
 			local rowText = rowLabel(window, row)

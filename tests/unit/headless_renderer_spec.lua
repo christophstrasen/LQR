@@ -62,7 +62,7 @@ describe("viz_high_level headless renderer", function()
 			maxColumns = 10,
 			maxRows = 1,
 			startId = 10,
-			mixDecayHalfLife = 0.5,
+			visualsTTL = 0.5,
 			header = {
 				projection = { domain = "customers" },
 			},
@@ -102,17 +102,23 @@ describe("viz_high_level headless renderer", function()
 		local snap = Renderer.render(runtime, palette)
 		local cell = cellForId(snap, 10)
 		assert.is_not_nil(cell)
-		assert.is_not_nil(cell.inner)
-		-- Color should be a mix (both red and blue components present).
-		assert.is_true(cell.inner.color[1] > 0 and cell.inner.color[3] > 0)
-		local initialIntensity = cell.inner.intensity or 1
-		assert.is_true(initialIntensity <= 1 and initialIntensity > 0)
+		local innerRegion = cell.composite and cell.composite:getInner()
+		assert.is_not_nil(innerRegion)
+		local initialColor = select(1, innerRegion:getColor())
+		assert.is_not_nil(initialColor)
+		assert.is_true(initialColor[1] > 0 and initialColor[3] > 0)
 
 		-- After a gap, the cell fades before new data arrives.
 		local fadedSnap = Renderer.render(runtime, palette, 5)
 		local fadedCell = cellForId(fadedSnap, 10)
-		assert.is_not_nil(fadedCell)
-		assert.is_true((fadedCell.inner.intensity or 0) < initialIntensity)
+		local fadedRegion = fadedCell.composite and fadedCell.composite:getInner()
+		assert.is_not_nil(fadedRegion)
+		local fadedColor = select(1, fadedRegion:getColor())
+		assert.is_not_nil(fadedColor)
+		local backgroundBlue = 0.2
+		local distInitial = math.abs(initialColor[3] - backgroundBlue)
+		local distFaded = math.abs(fadedColor[3] - backgroundBlue)
+		assert.is_true(distFaded < distInitial)
 
 		-- New schema takes over at the same timestamp, restoring intensity.
 		runtime:ingest({
@@ -125,8 +131,11 @@ describe("viz_high_level headless renderer", function()
 
 		local snap2 = Renderer.render(runtime, palette, 5)
 		local cell2 = cellForId(snap2, 10)
-		assert.is_not_nil(cell2)
-		assert.is_true(cell2.inner.color[3] > cell2.inner.color[1])
-		assert.is_true((cell2.inner.intensity or 0) >= (fadedCell.inner.intensity or 0))
+		local finalRegion = cell2.composite and cell2.composite:getInner()
+		assert.is_not_nil(finalRegion)
+		local finalColor = select(1, finalRegion:getColor())
+		assert.is_not_nil(finalColor)
+		assert.is_true(finalColor[3] > finalColor[1])
+		assert.is_true(finalColor[3] > fadedColor[3])
 	end)
 end)

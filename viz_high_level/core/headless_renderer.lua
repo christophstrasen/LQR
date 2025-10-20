@@ -7,11 +7,12 @@
 local DEFAULT_INNER_COLOR = { 0.2, 0.2, 0.2, 1 }
 local DEFAULT_MATCH_COLOR = { 0.2, 0.85, 0.2, 1 }
 local DEFAULT_EXPIRE_COLOR = { 0.9, 0.25, 0.25, 1 }
+local NEUTRAL_BORDER_COLOR = { 0.24, 0.24, 0.24, 1 }
+local NEUTRAL_GAP_COLOR = { 0.12, 0.12, 0.12, 1 }
 
+local Log = require("log")
+local CellLayers = require("viz_high_level.core.cell_layers")
 local Renderer = {}
-local DEFAULT_NEW_EVENT_WEIGHT = 1
-local DEFAULT_MAX_WEIGHT = DEFAULT_NEW_EVENT_WEIGHT -- first hit starts fully saturated
-local MIN_VISIBLE_RATIO = 0.02
 local BACKGROUND_COLOR = { 0.08, 0.08, 0.08, 1 }
 
 -- Utility: accumulate source/match stats for legend + metadata.
@@ -44,10 +45,23 @@ end
 
 -- Fetch or create a cell structure for a given column/row.
 -- The renderer uses sparse storage so we only keep cells that have data.
-local function ensureCell(snapshot, col, row)
+local function ensureCell(snapshot, col, row, maxLayers, visualsTTL, createComposite)
 	snapshot.cells[col] = snapshot.cells[col] or {}
-	snapshot.cells[col][row] = snapshot.cells[col][row] or { borders = {} }
-	return snapshot.cells[col][row]
+	local cell = snapshot.cells[col][row]
+	if not cell then
+		cell = { borders = {} }
+		snapshot.cells[col][row] = cell
+	end
+	if not cell.composite then
+		cell.composite = CellLayers.CompositeCell.new({
+			maxLayers = maxLayers or 2,
+			ttl = visualsTTL or DEFAULT_ADJUST_INTERVAL,
+			innerColor = DEFAULT_INNER_COLOR,
+			borderColor = NEUTRAL_BORDER_COLOR,
+			gapColor = NEUTRAL_GAP_COLOR,
+		})
+	end
+	return cell
 end
 
 local function colorForSchema(palette, schema)
@@ -63,50 +77,6 @@ local function colorForKind(palette, kind)
 		return (palette and palette.joined) or DEFAULT_MATCH_COLOR
 	end
 	return (palette and palette.expired) or DEFAULT_EXPIRE_COLOR
-end
-
-local function cloneColor(color)
-	if not color then
-		return { 1, 1, 1, 1 }
-	end
-	return { color[1], color[2], color[3], color[4] or 1 }
-end
-
--- Exponential decay helper: given a mix weight, how much remains after deltaSeconds?
--- We use a half-life so that every N seconds the weight halves, mimicking "impact fades".
-local function decayWeight(weight, deltaSeconds, halfLife)
-	if not weight or weight <= 0 then
-		return 0
-	end
-	if not deltaSeconds or deltaSeconds <= 0 then
-		return weight
-	end
-	if not halfLife or halfLife <= 0 then
-		return weight
-	end
-	local lambda = math.log(2) / halfLife
-	return weight * math.exp(-lambda * deltaSeconds)
-end
-
--- Blend schema colors while respecting current weight: we don't just overwrite the cell,
--- we mix old vs new proportional to their weights so overlapping schemas form gradients.
-local function blendColor(existingColor, existingWeight, newColor, newWeight)
-	if not existingColor or existingWeight <= 0 then
-		return cloneColor(newColor), math.min(newWeight, DEFAULT_MAX_WEIGHT)
-	end
-	local totalWeight = existingWeight + newWeight
-	if totalWeight <= 0 then
-		return cloneColor(newColor), newWeight
-	end
-	local existingFactor = existingWeight / totalWeight
-	local newFactor = newWeight / totalWeight
-	return {
-		existingColor[1] * existingFactor + newColor[1] * newFactor,
-		existingColor[2] * existingFactor + newColor[2] * newFactor,
-		existingColor[3] * existingFactor + newColor[3] * newFactor,
-		1,
-	},
-		math.min(totalWeight, DEFAULT_MAX_WEIGHT)
 end
 
 local function extractId(event)
@@ -132,12 +102,13 @@ end
 function Renderer.render(runtime, palette, now)
 	assert(runtime and runtime.window, "runtime with window() required")
 	local window = runtime:window()
-	local halfLife = runtime.mixDecayHalfLife or runtime.adjustInterval or DEFAULT_ADJUST_INTERVAL
+	local visualsTTL = runtime.visualsTTL or runtime.adjustInterval or DEFAULT_ADJUST_INTERVAL
 	local currentTime = now or runtime.lastIngestTime or 0
 	local snapshot = {
 		window = window,
 		cells = {},
 		meta = {
+			renderTime = currentTime,
 			sourceCounts = {},
 			projectableSourceCounts = {},
 			nonProjectableSourceCounts = {},
@@ -158,36 +129,25 @@ function Renderer.render(runtime, palette, now)
 	snapshot.meta.header.window = window
 	snapshot.meta.header.projection = snapshot.meta.header.projection or {}
 
--- Inner fills: each projectable source event becomes a colored square tracked by schema/id.
-for _, evt in ipairs(runtime.events.source or {}) do
+	-- Inner fills: each projectable source event becomes a colored square tracked by schema/id.
+	for _, evt in ipairs(runtime.events.source or {}) do
 		local id = evt.projectionKey or evt.id
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
-			local cell = ensureCell(snapshot, col, row)
-			if not cell.inner then
-				cell.inner = {
-					schema = evt.schema,
-					id = evt.id,
-					color = colorForSchema(palette, evt.schema),
-					sourceTime = evt.sourceTime,
-					mixWeight = DEFAULT_NEW_EVENT_WEIGHT,
-					lastUpdateTime = evt.ingestTime or 0,
-				}
-			else
-				local weight = decayWeight(
-					cell.inner.mixWeight or 0,
-					(evt.ingestTime or 0) - (cell.inner.lastUpdateTime or evt.ingestTime or 0),
-					halfLife
-				)
-				local mixedColor, newWeight =
-					blendColor(cell.inner.color, weight, colorForSchema(palette, evt.schema), DEFAULT_NEW_EVENT_WEIGHT)
-				cell.inner.color = mixedColor
-				cell.inner.mixWeight = newWeight
-				cell.inner.lastUpdateTime = evt.ingestTime or cell.inner.lastUpdateTime
-				cell.inner.schema = evt.schema
-				cell.inner.id = evt.id
-				cell.inner.sourceTime = evt.sourceTime
-			end
+			local cell = ensureCell(snapshot, col, row, runtime.maxLayers, visualsTTL)
+			local innerRegion = cell.composite:getInner()
+			innerRegion:setBackground(DEFAULT_INNER_COLOR)
+			innerRegion:setDefaultTTL(visualsTTL)
+			innerRegion:addLayer({
+				color = colorForSchema(palette, evt.schema),
+				ts = evt.ingestTime or currentTime,
+				id = string.format("%s::%s", tostring(evt.schema), tostring(evt.id)),
+				label = evt.schema,
+			})
+			cell.innerMeta = {
+				schema = evt.schema,
+				recordId = evt.id,
+			}
 			bumpCount(snapshot.meta.sourceCounts, evt.schema)
 			bumpCount(snapshot.meta.projectableSourceCounts, evt.schema)
 		else
@@ -196,34 +156,30 @@ for _, evt in ipairs(runtime.events.source or {}) do
 		end
 	end
 
--- Outer borders: every join result (match layer) gets a border at the proper layer.
-for _, evt in ipairs(runtime.events.match or {}) do
+	-- Outer borders: every join result (match layer) gets a border at the proper layer.
+	for _, evt in ipairs(runtime.events.match or {}) do
 		local id = evt.projectionKey or extractId(evt)
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
-			local cell = ensureCell(snapshot, col, row)
-			cell.borders[evt.layer] = cell.borders[evt.layer] or {}
-			local border = cell.borders[evt.layer]
-			border.kind = evt.kind or "match"
-			border.id = id
-			border.nativeId = (evt.right and evt.right.id) or (evt.left and evt.left.id) or evt.id
-			border.nativeSchema = (evt.right and evt.right.schema) or (evt.left and evt.left.schema) or evt.schema
-			border.projectionDomain = snapshot.meta.header.projection and snapshot.meta.header.projection.domain
-			local color = colorForKind(palette, "match")
-			if border.color then
-				local weight = decayWeight(
-					border.mixWeight or 0,
-					(evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0),
-					halfLife
-				)
-				local mixedColor, newWeight = blendColor(border.color, weight, color, DEFAULT_NEW_EVENT_WEIGHT)
-				border.color = mixedColor
-				border.mixWeight = newWeight
-			else
-				border.color = cloneColor(color)
-				border.mixWeight = DEFAULT_NEW_EVENT_WEIGHT
+			local cell = ensureCell(snapshot, col, row, runtime.maxLayers, visualsTTL)
+			local borderRegion = cell.composite:getBorder(evt.layer)
+			if borderRegion then
+				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
+				borderRegion:setDefaultTTL(visualsTTL)
+				borderRegion:addLayer({
+					color = colorForKind(palette, "match"),
+					ts = evt.ingestTime or currentTime,
+					id = string.format("match_%s_%s", tostring(evt.layer), tostring(id)),
+					label = evt.kind or "match",
+				})
 			end
-			border.lastUpdateTime = evt.ingestTime or border.lastUpdateTime
+			cell.borderMeta = cell.borderMeta or {}
+			cell.borderMeta[evt.layer] = {
+				kind = evt.kind or "match",
+				nativeId = (evt.right and evt.right.id) or (evt.left and evt.left.id) or evt.id,
+				nativeSchema = (evt.right and evt.right.schema) or (evt.left and evt.left.schema) or evt.schema,
+				reason = evt.reason,
+			}
 			snapshot.meta.matchCount = snapshot.meta.matchCount + 1
 			snapshot.meta.projectableMatchCount = snapshot.meta.projectableMatchCount + 1
 		else
@@ -231,35 +187,30 @@ for _, evt in ipairs(runtime.events.match or {}) do
 		end
 	end
 
--- Expirations also show up as borders (different color) so we can see why cells disappear.
-for _, evt in ipairs(runtime.events.expire or {}) do
+	-- Expirations also show up as borders (different color) so we can see why cells disappear.
+	for _, evt in ipairs(runtime.events.expire or {}) do
 		local id = evt.projectionKey or extractId(evt)
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
-			local cell = ensureCell(snapshot, col, row)
-			cell.borders[evt.layer] = cell.borders[evt.layer] or {}
-			local border = cell.borders[evt.layer]
-			border.kind = "expire"
-			border.id = id
-			border.nativeId = evt.id
-			border.nativeSchema = evt.schema
-			border.projectionDomain = snapshot.meta.header.projection and snapshot.meta.header.projection.domain
-			border.reason = evt.reason
-			local color = colorForKind(palette, "expire")
-			if border.color then
-				local weight = decayWeight(
-					border.mixWeight or 0,
-					(evt.ingestTime or 0) - (border.lastUpdateTime or evt.ingestTime or 0),
-					halfLife
-				)
-				local mixedColor, newWeight = blendColor(border.color, weight, color, DEFAULT_NEW_EVENT_WEIGHT)
-				border.color = mixedColor
-				border.mixWeight = newWeight
-			else
-				border.color = cloneColor(color)
-				border.mixWeight = DEFAULT_NEW_EVENT_WEIGHT
+			local cell = ensureCell(snapshot, col, row, runtime.maxLayers, visualsTTL)
+			local borderRegion = cell.composite:getBorder(evt.layer)
+			if borderRegion then
+				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
+				borderRegion:setDefaultTTL(visualsTTL)
+				borderRegion:addLayer({
+					color = colorForKind(palette, "expire"),
+					ts = evt.ingestTime or currentTime,
+					id = string.format("expire_%s_%s", tostring(evt.layer), tostring(id)),
+					label = "expire",
+				})
 			end
-			border.lastUpdateTime = evt.ingestTime or border.lastUpdateTime
+			cell.borderMeta = cell.borderMeta or {}
+			cell.borderMeta[evt.layer] = {
+				kind = "expire",
+				nativeId = evt.id,
+				nativeSchema = evt.schema,
+				reason = evt.reason,
+			}
 			snapshot.meta.expireCount = snapshot.meta.expireCount + 1
 			snapshot.meta.projectableExpireCount = snapshot.meta.projectableExpireCount + 1
 		else
@@ -269,27 +220,8 @@ for _, evt in ipairs(runtime.events.expire or {}) do
 
 	for _, column in pairs(snapshot.cells) do
 		for _, cell in pairs(column) do
-			if cell.inner then
-				local elapsed = currentTime - (cell.inner.lastUpdateTime or currentTime)
-				cell.inner.mixWeight = decayWeight(cell.inner.mixWeight or 0, elapsed, halfLife)
-				local intensity = (cell.inner.mixWeight or 0) / DEFAULT_MAX_WEIGHT
-				if intensity <= MIN_VISIBLE_RATIO then
-					cell.inner.mixWeight = 0
-					cell.inner.intensity = 0
-				else
-					cell.inner.intensity = math.min(intensity, 1)
-				end
-			end
-			for _, border in pairs(cell.borders or {}) do
-				local elapsed = currentTime - (border.lastUpdateTime or currentTime)
-				border.mixWeight = decayWeight(border.mixWeight or 0, elapsed, halfLife)
-				local opacity = (border.mixWeight or 0) / DEFAULT_MAX_WEIGHT
-				if opacity <= MIN_VISIBLE_RATIO then
-					border.mixWeight = 0
-					border.opacity = 0
-				else
-					border.opacity = math.min(opacity, 1)
-				end
+			if cell.composite then
+				cell.composite:update(currentTime)
 			end
 		end
 	end

@@ -51,7 +51,7 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("auto zooms between 10x10 and 100x100", function()
-		local runtime = Runtime.new({ adjustInterval = 0.1, mixDecayHalfLife = 5 })
+		local runtime = Runtime.new({ adjustInterval = 0.1, visualsTTL = 5 })
 		for i = 1, 20 do
 			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.11)
 		end
@@ -74,7 +74,7 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("compresses window to latest ids when span exceeds capacity", function()
-		local runtime = Runtime.new({ adjustInterval = 0, mixDecayHalfLife = 100 })
+		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 100 })
 		-- Populate more than 10*10 ids to force switch to large grid.
 		for i = 1, 200 do
 			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i)
@@ -95,7 +95,7 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("derives margin from grid size when percent configured", function()
-		local runtime = Runtime.new({ adjustInterval = 0, mixDecayHalfLife = 5 })
+		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 5 })
 		for i = 1, 15 do
 			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.1)
 		end

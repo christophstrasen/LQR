@@ -1,58 +1,27 @@
--- Love2D demo for the high-level visualization.
-package.path = "./?.lua;./?/init.lua;" .. package.path
-
-require("bootstrap")
-
 local Log = require("log")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local Runtime = require("viz_high_level.core.runtime")
 local Renderer = require("viz_high_level.core.headless_renderer")
 local DebugViz = require("viz_high_level.debug")
 local Draw = require("viz_high_level.core.draw")
-local DemoData = require("viz_high_level.demo.demo_data")
 
-local MIX_DECAY_HALF_LIFE = 1
-local app = {
-	attachment = nil,
-	runtime = nil,
-	subscription = nil,
-}
-local BACKGROUND = { 0.08, 0.08, 0.08, 1 }
+local LoveRunner = {}
 
-function love.load()
-	love.window.setMode(800, 600, { resizable = true })
-	Log.info("Initializing high-level viz demo")
-	local demo = DemoData.build()
-	app.attachment = QueryVizAdapter.attach(demo.builder)
-	app.runtime = Runtime.new({
-		maxLayers = app.attachment.maxLayers,
-		palette = app.attachment.palette,
-		adjustInterval = 1.5,
-		header = app.attachment.header,
-		mixDecayHalfLife = MIX_DECAY_HALF_LIFE,
-	})
+local DEFAULT_BACKGROUND = { 0.08, 0.08, 0.08, 1 }
 
-	app.attachment.normalized:subscribe(function(event)
-		app.runtime:ingest(event, love.timer.getTime())
-	end)
-
-	app.attachment.query:subscribe(function() end)
-
-	DemoData.emitBaseline(demo.subjects)
-	DemoData.complete(demo.subjects)
+local function cloneColor(color)
+	if not color then
+		return { 0, 0, 0, 1 }
+	end
+	return { color[1] or 0, color[2] or 0, color[3] or 0, color[4] or 1 }
 end
 
-function love.draw()
-	love.graphics.clear(0.08, 0.08, 0.08, 1)
-	if not app.runtime then
-		return
-	end
-	local now = love.timer.getTime()
-	local snapshot = Renderer.render(app.runtime, app.attachment.palette, now)
-	DebugViz.snapshot(snapshot, { label = "love-frame" })
+local function fieldLabel(join)
+	local keyDesc = join.displayKey or "id"
+	return string.format("%s join %s on %s", join.type or "join", join.source or "right", keyDesc)
+end
 
-	local lg = love.graphics
-	lg.setColor(1, 1, 1, 1)
+local function drawHeader(snapshot, lg, backgroundColor)
 	local headerY = 10
 	local headerData = snapshot.meta.header or {}
 	local window = headerData.window or snapshot.window
@@ -91,9 +60,7 @@ function love.draw()
 
 	local joins = headerData.joins or {}
 	for _, join in ipairs(joins) do
-		local keyDesc = join.displayKey or "id"
-		local joinText = string.format("%s join %s on %s", join.type or "join", join.source or "right", keyDesc)
-		lg.printf(joinText, 12, headerY, love.graphics.getWidth() - 24, "left")
+		lg.printf(fieldLabel(join), 12, headerY, love.graphics.getWidth() - 24, "left")
 		headerY = headerY + 18
 		if join.window then
 			local wtxt
@@ -143,7 +110,8 @@ function love.draw()
 			lg.setColor(entry.color or { 1, 1, 1, 1 })
 			lg.rectangle("fill", x, headerY, rectSize, rectSize)
 			local inset = 2
-			lg.setColor(BACKGROUND)
+			local bg = backgroundColor or DEFAULT_BACKGROUND
+			lg.setColor(bg[1], bg[2], bg[3], bg[4])
 			lg.rectangle("fill", x + inset, headerY + inset, rectSize - inset * 2, rectSize - inset * 2)
 			lg.setColor(1, 1, 1, 1)
 			local countLabel = ""
@@ -179,13 +147,94 @@ function love.draw()
 		headerY = headerY + 20
 	end
 
+	return headerY
+end
+
+local function drawSnapshot(snapshot, background)
+	local lg = love.graphics
+	lg.clear(background[1], background[2], background[3], background[4])
+	lg.setColor(1, 1, 1, 1)
+	local headerBase = drawHeader(snapshot, lg, background)
 	local metrics = Draw.metrics(snapshot)
-	lg.translate(12 + (metrics.rowLabelWidth or 0), headerY + 10 + (metrics.columnLabelHeight or 0))
+	lg.translate(12 + (metrics.rowLabelWidth or 0), headerBase + 10 + (metrics.columnLabelHeight or 0))
 	Draw.drawSnapshot(snapshot, { showLabels = true })
 end
 
-function love.quit()
-	if app.subscription and app.subscription.unsubscribe then
-		app.subscription:unsubscribe()
+---@param opts table
+function LoveRunner.bootstrap(opts)
+	opts = opts or {}
+	assert(opts.scenarioModule, "scenarioModule required")
+	local scenario = require(opts.scenarioModule)
+	local defaults = scenario.loveDefaults or {}
+	local visualsTTL = opts.visualsTTL or defaults.visualsTTL or 3
+	local ticksPerSecond = opts.ticksPerSecond or defaults.ticksPerSecond or 0
+	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
+	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
+	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
+
+	local app = {
+		attachment = nil,
+		runtime = nil,
+		driver = nil,
+		scenario = scenario,
+		background = background,
+		ticksPerSecond = ticksPerSecond,
+	}
+
+	local function startScenario()
+		local demo = assert(scenario.build(), "scenario build() must return subjects + builder")
+		assert(demo.builder, "scenario build() result missing builder")
+		assert(demo.subjects, "scenario build() result missing subjects")
+		app.attachment = QueryVizAdapter.attach(demo.builder)
+		app.runtime = Runtime.new({
+			maxLayers = app.attachment.maxLayers,
+			palette = app.attachment.palette,
+			adjustInterval = 1.5,
+			header = app.attachment.header,
+			visualsTTL = visualsTTL,
+		})
+
+		app.attachment.normalized:subscribe(function(event)
+			app.runtime:ingest(event, love.timer.getTime())
+		end)
+
+		app.attachment.query:subscribe(function() end)
+
+		if scenario.start then
+			app.driver = scenario.start(demo.subjects, {
+				ticksPerSecond = ticksPerSecond,
+			})
+		end
+
+		if not app.driver and scenario.complete then
+			scenario.complete(demo.subjects)
+		end
+	end
+
+	function love.load()
+		love.window.setMode(windowWidth, windowHeight, { resizable = true })
+		Log.info(string.format("Initializing high-level viz demo (%s)", tostring(opts.scenarioModule)))
+		startScenario()
+	end
+
+	function love.update(dt)
+		if app.driver and app.driver.update then
+			app.driver:update(dt)
+		end
+	end
+
+	function love.draw()
+		if not app.runtime then
+			return
+		end
+		local snapshot = Renderer.render(app.runtime, app.attachment.palette, love.timer.getTime())
+		DebugViz.snapshot(snapshot, { label = "love-frame" })
+		drawSnapshot(snapshot, app.background)
+	end
+
+	function love.quit()
+		-- nothing to clean up; Love handles exit.
 	end
 end
+
+return LoveRunner

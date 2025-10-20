@@ -2,7 +2,9 @@
 -- Emits detailed cell/border summaries when debug logging is enabled.
 local DebugViz = {}
 local Log = require("log")
+local CellLayers = require("viz_high_level.core.cell_layers")
 local VizLog = Log.withTag("viz")
+local NEUTRAL_BORDER_COLOR = { 0.24, 0.24, 0.24, 1 }
 local lastSignature
 local seenCells = {}
 local lastWindowSignature
@@ -55,23 +57,26 @@ local function snapshotSignature(snapshot, cells)
 	}
 	for _, entry in ipairs(cells) do
 		local cell = entry.cell or {}
-		if cell.inner then
+		if cell.composite then
+			local meta = cell.innerMeta or {}
+			local innerRegion = cell.composite:getInner()
+			local _, layers = innerRegion and innerRegion:getColor()
 			parts[#parts + 1] = table.concat({
 				"I",
 				entry.col,
 				entry.row,
-				tostring(cell.inner.schema),
-				tostring(cell.inner.id),
-				string.format("%.2f", cell.inner.mixWeight or 0),
+				tostring(meta.schema),
+				tostring(meta.recordId),
+				string.format("%.2f", layers or 0),
 			}, ":")
 		end
 		local layers = {}
-		for layer in pairs(cell.borders or {}) do
+		for layer in pairs(cell.borderMeta or {}) do
 			layers[#layers + 1] = layer
 		end
 		table.sort(layers)
 		for _, layer in ipairs(layers) do
-			local border = cell.borders[layer]
+			local border = cell.borderMeta[layer]
 			parts[#parts + 1] = table.concat({
 				"B",
 				entry.col,
@@ -133,7 +138,7 @@ function DebugViz.snapshot(snapshot, opts)
 		local cell = entry.cell or {}
 		local id = idForCell(window, entry.col or 1, entry.row or 1)
 		local key = cellKey(window, entry, id)
-		if cell.inner and not seenCells[key] then
+		if cell.composite and not seenCells[key] then
 			hasNewCells = true
 			break
 		end
@@ -161,48 +166,56 @@ function DebugViz.snapshot(snapshot, opts)
 		local rowZero = (entry.row or 1) - 1
 		local id = idForCell(window, entry.col or 1, entry.row or 1)
 		local key = cellKey(window, entry, id)
-		local isNew = cell.inner and not seenCells[key]
+		local hasInner = cell.composite and cell.composite:getInner()
+		local isNew = hasInner and not seenCells[key]
 		if isNew then
 			seenCells[key] = true
 		end
 		local cellLevel = isNew and "info" or "debug"
-		if cell.inner then
+		local innerColor, innerActive
+		if cell.composite then
+			local innerRegion = cell.composite:getInner()
+			if innerRegion then
+				innerColor, innerActive = innerRegion:getColor()
+			end
+		end
+		if innerColor then
+			local metaInner = cell.innerMeta or {}
 			logAt(
 				cellLevel,
-				"  cell %d,%d id=%s inner schema=%s recordId=%s mix=%.2f intensity=%.2f color=%s",
+				"  cell %d,%d id=%s inner schema=%s recordId=%s layers=%d color=%s",
 				colZero,
 				rowZero,
 				tostring(id),
-				tostring(cell.inner.schema),
-				tostring(cell.inner.id),
-				cell.inner.mixWeight or 0,
-				cell.inner.intensity or 0,
-				formatColor(cell.inner.color)
+				tostring(metaInner.schema),
+				tostring(metaInner.recordId),
+				innerActive or 0,
+				formatColor(innerColor)
 			)
 		else
 			logAt(cellLevel, "  cell %d,%d id=%s (no inner fill)", colZero, rowZero, tostring(id))
 			seenCells[key] = nil
 		end
 		local layers = {}
-		for layer in pairs(cell.borders or {}) do
+		for layer in pairs(cell.borderMeta or {}) do
 			layers[#layers + 1] = layer
 		end
 		table.sort(layers)
 		for _, layer in ipairs(layers) do
-			local border = cell.borders[layer]
-			if border then
-				logAt(
-					cellLevel,
-					"    border layer=%d kind=%s schema=%s nativeId=%s opacity=%.2f color=%s reason=%s",
-					layer,
-					tostring(border.kind),
-					tostring(border.nativeSchema),
-					tostring(border.nativeId),
-					border.opacity or 0,
-					formatColor(border.color),
-					tostring(border.reason)
-				)
-			end
+			local region = cell.composite and cell.composite:getBorder(layer)
+			local borderColor, active = region and region:getColor()
+			local metaBorder = cell.borderMeta[layer] or {}
+			logAt(
+				cellLevel,
+				"    border layer=%d kind=%s schema=%s nativeId=%s layers=%d color=%s reason=%s",
+				layer,
+				tostring(metaBorder.kind),
+				tostring(metaBorder.nativeSchema),
+				tostring(metaBorder.nativeId),
+				active or 0,
+				formatColor(borderColor or NEUTRAL_BORDER_COLOR),
+				tostring(metaBorder.reason)
+			)
 		end
 	end
 

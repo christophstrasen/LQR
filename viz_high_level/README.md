@@ -23,4 +23,8 @@ The adapter exposes `attachment.normalized`, an observable made up of determinis
 
 Primary `source` events are deduplicated by `schema::id` to avoid spamming the grid whenever a join replays cached inserts. Tokens are released once that id expires or gets flushed as unmatched, so future inserts show up as "updates". If you re-emit a record (same schema/id) before its window cycles, the adapter intentionally keeps only the first visual row to prevent flicker.
 
-See `viz_high_level/demo/headless.lua` (or the shim in `viz_high_level/examples/headless_trace.lua`) for a deterministic trace that wires all pieces together without Love2D.
+## Demo layout
+
+- `viz_high_level/demo/simple/` keeps the original eight-event snapshot demo for smoke testing. Run `viz_high_level/demo/simple/headless.lua` to trace it without Love2D, or launch the Love app via `love . simple` (same UI as the lively demo).
+- `viz_high_level/demo/timeline/` hosts the lively scheduler-driven scenario (customers → orders → shipments). `love .` (or `love . timeline` / `love . --demo timeline`) runs it, while `viz_high_level/demo/timeline/headless.lua` replays the same timeline headlessly and emits labeled snapshots throughout the run.
+- Shared helper modules (scheduler, future test harnesses, etc.) live directly under `viz_high_level/demo/` so each scenario subfolder only needs to expose `build()/start()` implementations.
