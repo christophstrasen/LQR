@@ -108,6 +108,9 @@ CompositeCell.__index = CompositeCell
 
 function CompositeCell.new(opts)
 	opts = opts or {}
+	-- Explainer: Composite cells bundle the outer fill, every border/gap pair, and
+	-- the inner fill so the renderer can treat a grid cell as a single unit.
+	-- This is what guarantees we always fade back to the same baseline.
 	local self = setmetatable({}, CompositeCell)
 	self.ttl = opts.ttl or 1.5
 	self.maxLayers = opts.maxLayers or 2

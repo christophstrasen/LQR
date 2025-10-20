@@ -116,7 +116,7 @@ function Renderer.render(runtime, palette, now)
 			expireCount = 0,
 			projectableMatchCount = 0,
 			projectableExpireCount = 0,
-			maxLayers = runtime.maxLayers or 5,
+			maxLayers = runtime.maxLayers or 2,
 			palette = palette,
 			header = runtime.header or {},
 			legend = {},
@@ -134,6 +134,8 @@ function Renderer.render(runtime, palette, now)
 		local id = evt.projectionKey or evt.id
 		local col, row = mapIdToCell(window, id)
 		if col and row and evt.projectable then
+			-- Explainer: we lazily allocate composites so empty grid slots don't
+			-- consume memory. Once a cell gets data it keeps its composite across frames.
 			local cell = ensureCell(snapshot, col, row, runtime.maxLayers, visualsTTL)
 			local innerRegion = cell.composite:getInner()
 			innerRegion:setBackground(DEFAULT_INNER_COLOR)

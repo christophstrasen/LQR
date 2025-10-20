@@ -24,7 +24,7 @@ local clock = {
 
 local VISUALS_TTL = 3
 local runtime = Runtime.new({
-	maxLayers = 5,
+	maxLayers = 2,
 	adjustInterval = 1,
 	header = adapter.header,
 	visualsTTL = VISUALS_TTL,

@@ -12,6 +12,8 @@ local SMALL_OUTER_INSET = 1
 local LARGE_OUTER_INSET = 1
 local SMALL_BORDER_STEP = 3
 local LARGE_BORDER_STEP = 2
+local SMALL_INNER_OUTLINE = 2
+local LARGE_INNER_OUTLINE = 1
 local BACKGROUND = { 0.1, 0.1, 0.1, 1 }
 local EMPTY_CELL_COLOR = { 0.2, 0.2, 0.2, 1 }
 local OUTER_BASE_COLOR = { 0.24, 0.24, 0.24, 1 }
@@ -85,9 +87,11 @@ local function regionColor(region, fallback)
 	return color or fallback
 end
 
-local function drawCell(col, row, cell, metrics, renderTime, maxLayers)
+local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount)
 	local composite = cell and cell.composite
 	if not composite then
+		-- Explainer: even empty cells get a composite at draw time so the visuals
+		-- stay consistent after zoom shifts—every region fades the same way.
 		composite = CellLayers.CompositeCell.new({
 			maxLayers = maxLayers or 1,
 		})
@@ -108,9 +112,16 @@ local function drawCell(col, row, cell, metrics, renderTime, maxLayers)
 	end
 	local outerColor = regionColor(composite:getOuter(), NEUTRAL_GAP_COLOR)
 	rect(x + currentInset, y + currentInset, currentSize, outerColor, nil, "fill")
-	local borderThickness = metrics.borderStep or SMALL_BORDER_STEP
+	-- Explainer: border/gap thickness is derived from cell size so inner fills remain
+	-- readable on both the 10x10 and 100x100 grids. Thicker borders in small grids
+	-- make matches obvious without drowning out the center.
+	local borderThickness = math.max(1, math.floor((metrics.cellSize / metrics.columns) * 0.4))
 	local gapThickness = math.max(1, math.floor(borderThickness / 3))
-	for depth = 1, maxLayers do
+	local joins = joinCount or 0
+	local layersToDraw = math.min(joins, maxLayers or 0, composite.maxLayers or 0)
+	for depth = 1, layersToDraw do
+		-- TODO: add regression test that exercises expanding borderThickness when runtime.maxLayers grows
+		-- so we know the inner dimensions still shrink gracefully.
 		local borderRegion = composite:getBorder(depth)
 		local gapRegion = composite:getGap(depth)
 		local borderColor = regionColor(borderRegion, NEUTRAL_BORDER_COLOR)
@@ -130,7 +141,8 @@ local function drawCell(col, row, cell, metrics, renderTime, maxLayers)
 	end
 	local innerColor = regionColor(composite:getInner(), EMPTY_CELL_COLOR)
 	rect(x + currentInset, y + currentInset, currentSize, innerColor, nil, "fill")
-	rect(x + currentInset, y + currentInset, currentSize, { 0.3, 0.3, 0.3, 0.6 }, 1, "line")
+	local outline = (metrics.cellSize > 20) and SMALL_INNER_OUTLINE or LARGE_INNER_OUTLINE
+	rect(x + currentInset, y + currentInset, currentSize, { 0.3, 0.3, 0.3, 0.6 }, outline, "line")
 end
 
 local function columnLabel(window, col)
@@ -161,12 +173,14 @@ function Draw.drawSnapshot(snapshot, opts)
 		return
 	end
 	local metrics = metricsForWindow(window)
-	local maxLayers = (snapshot.meta and snapshot.meta.maxLayers) or 1
-	local renderTime = (snapshot.meta and snapshot.meta.renderTime) or (love and love.timer and love.timer.getTime()) or os.clock()
+	local meta = snapshot.meta or {}
+	local maxLayers = meta.maxLayers or 1
+	local joinCount = #(meta.header and meta.header.joins or {} )
+	local renderTime = meta.renderTime or (love and love.timer and love.timer.getTime()) or os.clock()
 	for col = 1, metrics.columns do
 		for row = 1, metrics.rows do
 			local cell = snapshot.cells[col] and snapshot.cells[col][row]
-			drawCell(col, row, cell, metrics, renderTime, maxLayers)
+			drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount)
 		end
 	end
 	if opts and opts.showLabels then

@@ -50,7 +50,7 @@ local function new(opts)
 	self.adjustInterval = opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
 	self.marginAbsolute = opts.margin
 	self.marginPercent = opts.marginPercent or DEFAULT_MARGIN_COLUMNS_PERCENT
-	self.maxLayers = opts.maxLayers or 5
+	self.maxLayers = opts.maxLayers or 2
 	self.palette = opts.palette or {}
 	self.header = opts.header or {}
 	self.visualsTTL = opts.visualsTTL or opts.mixDecayHalfLife or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
@@ -72,8 +72,7 @@ local function new(opts)
 end
 
 local function windowSize(self)
-	return (self.windowConfig.columns or ZOOM_SMALL.columns)
-		* (self.windowConfig.rows or ZOOM_SMALL.rows)
+	return (self.windowConfig.columns or ZOOM_SMALL.columns) * (self.windowConfig.rows or ZOOM_SMALL.rows)
 end
 
 -- Figure out which projection ids are still "alive" so auto-zoom decisions can focus on
