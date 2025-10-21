@@ -42,11 +42,89 @@ local function hsvToRgb(h, s, v)
 	end
 end
 
+local RESERVED_HUES = { 0.0, 1 / 3 }
+local MIN_HUE_DISTANCE = 0.08
+
+local function normalizeRange(startHue, endHue)
+	if startHue < 0 then
+		startHue = startHue + 1
+	end
+	if endHue < 0 then
+		endHue = endHue + 1
+	end
+	if startHue > 1 then
+		startHue = startHue - 1
+	end
+	if endHue > 1 then
+		endHue = endHue - 1
+	end
+	return startHue, endHue
+end
+
+local function subtractRange(allowed, removeStart, removeEnd)
+	local newAllowed = {}
+	for _, seg in ipairs(allowed) do
+		local segStart, segEnd = seg[1], seg[2]
+		if removeEnd <= segStart or removeStart >= segEnd then
+			newAllowed[#newAllowed + 1] = seg
+		else
+			if removeStart > segStart then
+				newAllowed[#newAllowed + 1] = { segStart, removeStart }
+			end
+			if removeEnd < segEnd then
+				newAllowed[#newAllowed + 1] = { removeEnd, segEnd }
+			end
+		end
+	end
+	return newAllowed
+end
+
+local function buildAllowedRanges()
+	local allowed = { { 0, 1 } }
+	for _, reserved in ipairs(RESERVED_HUES) do
+		local startHue = reserved - MIN_HUE_DISTANCE
+		local endHue = reserved + MIN_HUE_DISTANCE
+		startHue, endHue = normalizeRange(startHue, endHue)
+		if startHue < endHue then
+			allowed = subtractRange(allowed, startHue, endHue)
+		else
+			allowed = subtractRange(allowed, startHue, 1)
+			allowed = subtractRange(allowed, 0, endHue)
+		end
+	end
+	if #allowed == 0 then
+		allowed = { { 0, 1 } }
+	end
+	return allowed
+end
+
+local function hueAtOffset(allowed, offset)
+	for _, seg in ipairs(allowed) do
+		local segLen = seg[2] - seg[1]
+		if offset <= segLen then
+			return seg[1] + offset
+		end
+		offset = offset - segLen
+	end
+	return allowed[#allowed][2]
+end
+
 local function rainbowPalette(names)
 	local palette = {}
 	local total = math.max(1, #names)
+	local allowed = buildAllowedRanges()
+	local totalRange = 0
+	for _, seg in ipairs(allowed) do
+		totalRange = totalRange + (seg[2] - seg[1])
+	end
+	if totalRange <= 0 then
+		allowed = { { 0, 1 } }
+		totalRange = 1
+	end
 	for i, name in ipairs(names) do
-		local hue = ((i - 1) % total) / total
+		local unit = ((i - 0.5) / total) % 1
+		local offset = unit * totalRange
+		local hue = hueAtOffset(allowed, offset)
 		local r, g, b = hsvToRgb(hue, 0.7, 0.95)
 		palette[name] = { r, g, b, 1 }
 	end

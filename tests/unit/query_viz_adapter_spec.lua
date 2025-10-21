@@ -8,6 +8,23 @@ local Query = require("Query")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local SchemaHelpers = require("tests.support.schema_helpers")
 
+local function rgbToHue(color)
+	local r, g, b = color[1], color[2], color[3]
+	local maxc = math.max(r, g, b)
+	local minc = math.min(r, g, b)
+	local delta = maxc - minc
+	if delta == 0 then
+		return 0
+	end
+	if maxc == r then
+		return ((g - b) / delta) % 6 / 6
+	elseif maxc == g then
+		return ((b - r) / delta + 2) / 6
+	else
+		return ((r - g) / delta + 4) / 6
+	end
+end
+
 local function ofType(entries, entryType)
 	local filtered = {}
 	for _, entry in ipairs(entries or {}) do
@@ -101,6 +118,25 @@ describe("Query visualization adapter", function()
 			assert.is_not_nil(color[2])
 			assert.is_not_nil(color[3])
 			assert.are.equal(1, color[4])
+		end
+	end)
+
+	it("keeps schema hues away from match/expire colors", function()
+		local builder = Query.from(SchemaHelpers.observableFromTable("base", { { id = 1 } }), "base")
+			:leftJoin(SchemaHelpers.observableFromTable("extra", { { id = 1 } }), "extra")
+			:onSchemas({ base = "id", extra = "id" })
+		local attachment = QueryVizAdapter.attach(builder)
+		local reserved = { 0.0, 1 / 3 }
+		local minDistance = 0.08
+		for schema, color in pairs(attachment.palette) do
+			if schema ~= "joined" and schema ~= "expired" then
+				local hue = rgbToHue(color)
+				for _, target in ipairs(reserved) do
+					local diff = math.abs(hue - target)
+					diff = diff > 0.5 and (1 - diff) or diff
+					assert.is_true(diff >= minDistance, string.format("schema %s hue %f too close to reserved %f", schema, hue, target))
+				end
+			end
 		end
 	end)
 end)
