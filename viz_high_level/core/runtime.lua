@@ -50,11 +50,13 @@ local function new(opts)
 	self.adjustInterval = opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
 	self.marginAbsolute = opts.margin
 	self.marginPercent = opts.marginPercent or DEFAULT_MARGIN_COLUMNS_PERCENT
-	self.maxLayers = opts.maxLayers or 2
+	local planHeader = opts.header or {}
+	self.header = planHeader
+	local joinCount = planHeader.joins and #planHeader.joins or 0
+	self.maxLayers = opts.maxLayers or math.max(joinCount, 2)
 	self.palette = opts.palette or {}
 	self.header = opts.header or {}
-	self.visualsTTL = opts.visualsTTL or opts.mixDecayHalfLife or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
-	self.mixDecayHalfLife = self.visualsTTL
+	self.visualsTTL = opts.visualsTTL or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
 	self.activeIds = {}
 	self.observedMin = nil
 	self.observedMax = nil

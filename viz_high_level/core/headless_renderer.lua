@@ -102,7 +102,7 @@ end
 function Renderer.render(runtime, palette, now)
 	assert(runtime and runtime.window, "runtime with window() required")
 	local window = runtime:window()
-	local visualsTTL = runtime.visualsTTL or runtime.adjustInterval or DEFAULT_ADJUST_INTERVAL
+	local visualsTTL = runtime.visualsTTL or DEFAULT_ADJUST_INTERVAL
 	local currentTime = now or runtime.lastIngestTime or 0
 	local snapshot = {
 		window = window,

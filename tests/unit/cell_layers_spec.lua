@@ -39,22 +39,22 @@ describe("cell_layers helper", function()
 		local border1 = composite:getBorder(1)
 		border1:addLayer({ color = { 1, 0, 0, 1 }, ts = 0, ttl = 1, id = "border1" })
 
-		composite:update(0)
+		composite:update(0.11)
 		local innerColor = select(1, inner:getColor())
 		local borderColor = select(1, border1:getColor())
 		assert.is_true(innerColor[2] > 0.5)
 		assert.is_true(borderColor[1] > 0.8)
 
-		composite:update(0.5)
+		composite:update(0.7)
 		local fadedInner = select(1, inner:getColor())
 		local fadedBorder = select(1, border1:getColor())
 		assert.is_true(fadedInner[2] < innerColor[2])
 		assert.is_true(fadedBorder[1] < borderColor[1])
 
-		composite:update(1.1)
+		composite:update(1.4)
 		local finalInner = select(1, inner:getColor())
 		local finalBorder = select(1, border1:getColor())
-		assert.is_true(finalInner[2] <= 0.21) -- back to inner base
-		assert.is_true(finalBorder[1] <= 0.25) -- back to border base
+		assert.is_true(finalInner[2] <= 0.21)
+		assert.is_true(finalBorder[1] <= 0.25)
 	end)
 end)

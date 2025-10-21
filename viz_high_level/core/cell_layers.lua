@@ -114,6 +114,7 @@ function CompositeCell.new(opts)
 	local self = setmetatable({}, CompositeCell)
 	self.ttl = opts.ttl or 1.5
 	self.maxLayers = opts.maxLayers or 2
+	self.lastUpdate = 0
 	self.outer = newLayer(opts.gapColor or { 0.12, 0.12, 0.12, 1 }, self.ttl)
 	self.borders = {}
 	self.gaps = {}
@@ -126,6 +127,10 @@ function CompositeCell.new(opts)
 end
 
 function CompositeCell:update(now)
+	if now - (self.lastUpdate or 0) < 0.1 then
+		return
+	end
+	self.lastUpdate = now
 	self.outer:update(now)
 	self.inner:update(now)
 	for i = 1, self.maxLayers do
