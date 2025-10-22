@@ -2,18 +2,22 @@
 local Draw = {}
 local CellLayers = require("viz_high_level.core.cell_layers")
 
-local SMALL_CELL_SIZE = 26
-local LARGE_CELL_SIZE = 12 -- 50% larger than before to keep 100x100 mode readable
-local SMALL_CELL_PADDING = 3
-local LARGE_CELL_PADDING = 1
-local SMALL_INNER_INSET = 4
-local LARGE_INNER_INSET = 2
-local SMALL_OUTER_INSET = 1
-local LARGE_OUTER_INSET = 1
-local SMALL_BORDER_STEP = 3
-local LARGE_BORDER_STEP = 2
-local SMALL_INNER_OUTLINE = 2
-local LARGE_INNER_OUTLINE = 1
+local SMALL_LAYOUT = {
+	padding = 3,
+	outerInset = 1,
+	innerOutline = 2,
+	innerSize = 16,
+	borderThickness = 2,
+	gapThickness = 1,
+}
+local LARGE_LAYOUT = {
+	padding = 1,
+	outerInset = 1,
+	innerOutline = 1,
+	innerSize = 5,
+	borderThickness = 1,
+	gapThickness = 1,
+}
 local BACKGROUND = { 0.1, 0.1, 0.1, 1 }
 local EMPTY_CELL_COLOR = { 0.2, 0.2, 0.2, 1 }
 local OUTER_BASE_COLOR = { 0.24, 0.24, 0.24, 1 }
@@ -49,23 +53,32 @@ local function lerpColor(from, to, factor)
 	}
 end
 
-local function metricsForWindow(window)
+local function metricsForWindow(window, layersBudget)
 	local columns = window.columns or 10
 	local rows = window.rows or 10
 	local useLarge = columns > 10
-	local cellSize = useLarge and LARGE_CELL_SIZE or SMALL_CELL_SIZE
+	local layout = useLarge and LARGE_LAYOUT or SMALL_LAYOUT
+	local layers = math.max(layersBudget or 0, 0)
+	local layerThickness = layout.borderThickness + layout.gapThickness
+	local contentSize = layout.innerSize + (2 * layers * layerThickness)
+	local cellSize = contentSize + (layout.outerInset * 2) + (layout.padding * 2)
 	return {
 		cellSize = cellSize,
+		contentSize = contentSize,
+		layerThickness = layerThickness,
+		layersBudget = layers,
 		width = columns * cellSize,
 		height = rows * cellSize,
 		columns = columns,
 		rows = rows,
 		rowLabelWidth = ROW_LABEL_WIDTH,
 		columnLabelHeight = COLUMN_LABEL_HEIGHT,
-		padding = useLarge and LARGE_CELL_PADDING or SMALL_CELL_PADDING,
-		innerInset = useLarge and LARGE_INNER_INSET or SMALL_INNER_INSET,
-		outerInset = useLarge and LARGE_OUTER_INSET or SMALL_OUTER_INSET,
-		borderStep = useLarge and LARGE_BORDER_STEP or SMALL_BORDER_STEP,
+		padding = layout.padding,
+		outerInset = layout.outerInset,
+		borderThickness = layout.borderThickness,
+		gapThickness = layout.gapThickness,
+		innerSize = layout.innerSize,
+		innerOutline = layout.innerOutline,
 	}
 end
 
@@ -96,32 +109,36 @@ local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCoun
 			maxLayers = maxLayers or 1,
 		})
 	end
-	local padding = metrics.padding or SMALL_CELL_PADDING
-	local baseSize = metrics.cellSize - padding * 2
-	if baseSize < 2 then
-		baseSize = 2
-	end
+	local padding = metrics.padding or 0
+	local baseSize = metrics.contentSize or (metrics.cellSize - padding * 2)
 	local x = (col - 1) * metrics.cellSize + padding
 	local y = (row - 1) * metrics.cellSize + padding
 	composite:update(renderTime)
-	local outerInset = metrics.outerInset or 1
+	local outerInset = metrics.outerInset or 0
 	local currentInset = outerInset
-	local currentSize = baseSize - outerInset * 2
+	local currentSize = baseSize
 	if currentSize <= 0 then
 		return
 	end
 	local outerColor = regionColor(composite:getOuter(), NEUTRAL_GAP_COLOR)
 	rect(x + currentInset, y + currentInset, currentSize, outerColor, nil, "fill")
-	-- Explainer: border/gap thickness is derived from cell size so inner fills remain
-	-- readable on both the 10x10 and 100x100 grids. Thicker borders in small grids
-	-- make matches obvious without drowning out the center.
-	local borderThickness = math.max(1, math.floor((metrics.cellSize / metrics.columns) * 0.4))
-	local gapThickness = math.max(1, math.floor(borderThickness / 3))
 	local joins = joinCount or 0
+	local layersBudget = math.max(metrics.layersBudget or 0, 0)
+	local layerThickness = metrics.layerThickness or ((metrics.borderThickness or 1) + (metrics.gapThickness or 1))
 	local layersToDraw = math.min(joins, maxLayers or 0, composite.maxLayers or 0)
+	layersToDraw = math.min(layersToDraw, layersBudget)
+	local unusedLayers = math.max(layersBudget - layersToDraw, 0)
+	if unusedLayers > 0 then
+		local skip = unusedLayers * layerThickness
+		currentInset = currentInset + skip
+		currentSize = currentSize - (skip * 2)
+	end
+	if currentSize <= 0 then
+		return
+	end
+	local borderThickness = metrics.borderThickness or 1
+	local gapThickness = metrics.gapThickness or 1
 	for depth = 1, layersToDraw do
-		-- TODO: add regression test that exercises expanding borderThickness when runtime.maxLayers grows
-		-- so we know the inner dimensions still shrink gracefully.
 		local borderRegion = composite:getBorder(depth)
 		local gapRegion = composite:getGap(depth)
 		local borderColor = regionColor(borderRegion, NEUTRAL_BORDER_COLOR)
@@ -139,9 +156,12 @@ local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCoun
 			break
 		end
 	end
+	if currentSize <= 0 then
+		return
+	end
 	local innerColor = regionColor(composite:getInner(), EMPTY_CELL_COLOR)
 	rect(x + currentInset, y + currentInset, currentSize, innerColor, nil, "fill")
-	local outline = (metrics.cellSize > 20) and SMALL_INNER_OUTLINE or LARGE_INNER_OUTLINE
+	local outline = metrics.innerOutline or 1
 	rect(x + currentInset, y + currentInset, currentSize, { 0.3, 0.3, 0.3, 0.6 }, outline, "line")
 end
 
@@ -172,10 +192,11 @@ function Draw.drawSnapshot(snapshot, opts)
 		lg.pop()
 		return
 	end
-	local metrics = metricsForWindow(window)
 	local meta = snapshot.meta or {}
 	local maxLayers = meta.maxLayers or 1
-	local joinCount = #(meta.header and meta.header.joins or {} )
+	local joinCount = #(meta.header and meta.header.joins or {})
+	local layerBudget = math.min(joinCount, maxLayers)
+	local metrics = metricsForWindow(window, layerBudget)
 	local renderTime = meta.renderTime or (love and love.timer and love.timer.getTime()) or os.clock()
 	for col = 1, metrics.columns do
 		for row = 1, metrics.rows do
@@ -205,10 +226,12 @@ end
 
 function Draw.metrics(snapshot)
 	local window = snapshot.window or (snapshot.meta and snapshot.meta.header and snapshot.meta.header.window)
-	if not window then
-		return { cellSize = SMALL_CELL_SIZE, width = SMALL_CELL_SIZE * 10, height = SMALL_CELL_SIZE * 10 }
-	end
-	return metricsForWindow(window)
+	local meta = snapshot.meta or {}
+	local maxLayers = meta.maxLayers or 1
+	local joinCount = #(meta.header and meta.header.joins or {})
+	local layerBudget = math.min(joinCount, maxLayers)
+	window = window or { columns = 10, rows = 10 }
+	return metricsForWindow(window, layerBudget)
 end
 
 return Draw

@@ -50,6 +50,15 @@ function CellLayer:hide()
 	return self
 end
 
+local function sortLayers(a, b)
+	local aTs = (a.layer and a.layer.ts) or 0
+	local bTs = (b.layer and b.layer.ts) or 0
+	if aTs ~= bTs then
+		return aTs < bTs
+	end
+	return tostring(a.key) < tostring(b.key)
+end
+
 local function logFade(layer, reason)
 	if Log.isEnabled("debug") then
 		Log.debug(
@@ -76,22 +85,45 @@ end
 
 function CellLayer:update(now)
 	now = now or nowSeconds()
-	local r, g, b, a = self.bgColor[1], self.bgColor[2], self.bgColor[3], self.bgColor[4] or 1
+	local bgR, bgG, bgB, bgA = self.bgColor[1], self.bgColor[2], self.bgColor[3], self.bgColor[4] or 1
+	local sumR, sumG, sumB = 0, 0, 0
+	local totalWeight = 0
 	local active = 0
+	local ordered = {}
 	for key, layer in pairs(self.layers) do
-		local elapsed = now - layer.ts
+		ordered[#ordered + 1] = { key = key, layer = layer }
+	end
+	table.sort(ordered, sortLayers)
+	for _, entry in ipairs(ordered) do
+		local key = entry.key
+		local layer = entry.layer
+		local elapsed = now - (layer.ts or 0)
 		if elapsed >= layer.ttl then
 			logFade(layer, "expired")
 			self.layers[key] = nil
 		else
 			active = active + 1
 			local alpha = 1 - (elapsed / layer.ttl)
-			r = layer.color[1] * alpha + r * (1 - alpha)
-			g = layer.color[2] * alpha + g * (1 - alpha)
-			b = layer.color[3] * alpha + b * (1 - alpha)
+			if alpha > 0 then
+				totalWeight = totalWeight + alpha
+				sumR = sumR + (layer.color[1] or 0) * alpha
+				sumG = sumG + (layer.color[2] or 0) * alpha
+				sumB = sumB + (layer.color[3] or 0) * alpha
+			end
 		end
 	end
-	self.calcColor = { r, g, b, a }
+	local bgWeight = math.max(1 - totalWeight, 0)
+	local denom = totalWeight + bgWeight
+	if denom <= 0 then
+		self.calcColor = { bgR, bgG, bgB, bgA }
+	else
+		self.calcColor = {
+			(sumR + bgR * bgWeight) / denom,
+			(sumG + bgG * bgWeight) / denom,
+			(sumB + bgB * bgWeight) / denom,
+			bgA,
+		}
+	end
 	self.activeLayers = active
 	return self
 end
