@@ -163,3 +163,16 @@
 - Exercise the Love2D viz against real (non-deterministic) streams to validate mixing/zoom heuristics; tune half-life/buffer defaults as needed.
 - Reintroduce “outer layer” annotations from the low-level viz so anti joins and expirations have more expressive outlines.
 - Expand documentation/headless trace guidance to explain how to read the new grid, labels, and decay behavior, potentially with annotated snapshots.
+
+## Day 11 – Composite sizing + deterministic blending
+
+### Highlights
+- **Bottom-up cell sizing:** The high-level drawer now derives every cell dimension from fixed per-zoom specs (inner core, border, gap, padding) instead of trimming from a hard-coded box. This keeps the inner payload readable even when multiple join layers fire in 10×10 mode and shrinks gracefully in 100×100 mode.
+- **Deterministic color mixing:** `CellLayer` sorts overlapping layers by timestamp and blends them with decay-aware weights before reintroducing the neutral background. Match/expire bursts no longer flicker between solid colors; simultaneous events settle into stable mixes that fade smoothly over their TTL.
+- **Replayable fidelity:** With stable geometry and blending, snapshots from the headless renderer now look identical to the Love2D viz, so we can ship/record traces that accurately reflect on-screen behavior—something we couldn’t promise yesterday when zooming or overlapping events.
+- **Stronger regression coverage:** New busted specs capture the draw metrics, confirm inner fill thickness stays constant across zooms, and assert the blending math stays stable as TTLs decay. Headless renderer tests now see the same behavior as the Love2D front-end.
+
+### Key learnings
+1. **Geometric invariants beat heuristics:** Encoding border/gap sizes explicitly gives predictable visuals and makes tests independent of magic numbers—future layout tweaks simply adjust the layout table.
+2. **Order-independent blending avoids surprises:** Treating each layer as a weighted contribution (rather than sequential overrides) keeps the viz believable when multiple schemas light up a cell at the same time.
+3. **Tests should match concepts, not literals:** By computing expectations from the layout metadata we eliminated brittle pixel constants and made the suite track the intent (fixed inner core, per-layer growth) instead of accidents of the old implementation.
