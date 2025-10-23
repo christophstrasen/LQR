@@ -50,24 +50,26 @@ describe("viz_high_level runtime", function()
 		assert.are.equal(1, runtime.events.expire[1].layer)
 	end)
 
-	it("auto zooms between 10x10 and 100x100", function()
-		local runtime = Runtime.new({ adjustInterval = 0.1, visualsTTL = 5 })
-		for i = 1, 20 do
-			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.11)
+	it("auto zooms between 10x10 and 100x100 based on span only", function()
+		-- adjustInterval=0 disables hysteresis so the span-based zoom reacts immediately,
+		-- avoiding timing noise in this unit test. Production defaults use >0 to prevent thrash.
+		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 0.2 })
+		for i = 1, 50 do
+			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.1)
 		end
 		local window = runtime:window()
 		assert.are.equal(10, window.columns)
 		assert.are.equal(10, window.rows)
 
-		for i = 21, 140 do
-			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, 2 + i * 0.01)
-		end
+		-- Stretch the span so min/max exceed the small visible span -> zoom to large.
+		runtime:ingest({ type = "source", id = 1, projectionKey = 1, projectable = true }, 6)
+		runtime:ingest({ type = "source", id = 200, projectionKey = 200, projectable = true }, 6.1)
 		window = runtime:window()
 		assert.are.equal(100, window.columns)
 		assert.are.equal(100, window.rows)
 
-		-- Move time far forward so earlier ids expire and we shrink again.
-		runtime:ingest({ type = "source", id = 1000, projectionKey = 1000, projectable = true }, 100)
+		-- Advance time so earlier ids fade and span collapses -> zoom back to small.
+		runtime:ingest({ type = "source", id = 5, projectionKey = 5, projectable = true }, 10)
 		window = runtime:window()
 		assert.are.equal(10, window.columns)
 		assert.are.equal(10, window.rows)
@@ -75,23 +77,15 @@ describe("viz_high_level runtime", function()
 
 	it("compresses window to latest ids when span exceeds capacity", function()
 		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 100 })
-		-- Populate more than 10*10 ids to force switch to large grid.
-		for i = 1, 200 do
-			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i)
-		end
+		-- Minimal span that exceeds 100x100 range forces compressed mode immediately.
+		runtime:ingest({ type = "source", id = 0, projectionKey = 0, projectable = true }, 0)
+		runtime:ingest({ type = "source", id = 20000, projectionKey = 20000, projectable = true }, 0.1)
 		local window = runtime:window()
 		assert.are.equal(100, window.columns)
 		assert.are.equal(100, window.rows)
-		-- Now ingest a huge spike so span exceeds even 100x100.
-		for i = 10000, 10550 do
-			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i)
-		end
-		window = runtime:window()
-		assert.are.equal(100, window.columns)
-		assert.are.equal(100, window.rows)
-		assert.is_true(window.startId >= 0)
+		assert.are.equal("compressed", window.zoomState)
 		assert.are.equal(window.startId + (window.columns * window.rows) - 1, window.endId)
-		assert.is_true(window.startId >= 10000 - (window.columns * window.rows))
+		assert.is_true(window.startId >= 0)
 	end)
 
 	it("derives margin from grid size when percent configured", function()

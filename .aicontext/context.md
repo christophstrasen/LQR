@@ -92,6 +92,9 @@ tbd
 - Local Lua runtime 5.1 ist installed and exists
 - Treat the workspace as sandboxed; only the repository under `~/projects/Lua-ReactiveX-exploration` is writable unless instructed otherwise.
 - Shell startup emits benign `gpg-agent` warnings; ignore them unless the user flags an issue.
+- do NOT run love/löve/love2d yourself
+- do NOT any modifying git commands unless instructed or before asking permission from me.
+- After every code-change, run `busted tests/unit` and check the result
 
 ## 11) Project Glossary
 - **record**: Single emission flowing through Rx graphs. Always a Lua table carrying payload fields plus `record.RxMeta` metadata (`schema`, optional `schemaVersion`/`sourceTime`, mandatory `id/idField`, and the join’s `joinKey` once computed).

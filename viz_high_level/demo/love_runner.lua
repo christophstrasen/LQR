@@ -168,6 +168,7 @@ function LoveRunner.bootstrap(opts)
 	local defaults = scenario.loveDefaults or {}
 	local visualsTTL = opts.visualsTTL or defaults.visualsTTL or 3
 	local ticksPerSecond = opts.ticksPerSecond or defaults.ticksPerSecond or 0
+	local adjustInterval = opts.adjustInterval or defaults.adjustInterval or 1.5
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
 	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
@@ -189,7 +190,7 @@ function LoveRunner.bootstrap(opts)
 		app.runtime = Runtime.new({
 			maxLayers = app.attachment.maxLayers,
 			palette = app.attachment.palette,
-			adjustInterval = 1.5,
+			adjustInterval = adjustInterval,
 			header = app.attachment.header,
 			visualsTTL = visualsTTL,
 		})

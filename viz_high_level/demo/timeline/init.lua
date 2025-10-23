@@ -261,7 +261,7 @@ TimelineDemo.timeline = TIMELINE_EVENTS
 TimelineDemo.loveDefaults = {
 	label = "timeline",
 	ticksPerSecond = 2.5,
-	visualsTTL = 3,
+	visualsTTL = 10,
 }
 
 return TimelineDemo

@@ -131,16 +131,13 @@ local function manualAdjust(self, now)
 		span = maxSpan
 	end
 	local start = desiredMin
-	local finish = desiredMin + span - 1
-
-	if finish < desiredMax then
+	if (start + span - 1) < desiredMax then
 		start = desiredMax - span + 1
-		finish = desiredMax
 	end
 
 	local rowBase = self.windowConfig.rows or 10
 	start = math.floor(start / rowBase) * rowBase
-	finish = start + (self.windowConfig.columns * self.windowConfig.rows) - 1
+	local finish = start + (self.windowConfig.columns * self.windowConfig.rows) - 1
 	self.gridStart = start
 	self.gridEnd = finish
 	self.lastAdjust = now
@@ -148,6 +145,7 @@ end
 
 -- Auto zoom driver: resize between 10x10 and 100x100, slide the window to keep recent ids
 -- visible, and fall back to a "compressed" mode when even the large grid overflows.
+-- Span-only rule: we ignore active count and choose size purely on (activeMax - activeMin + 1).
 function Runtime:_maybeAdjust(now)
 	if not now then
 		return
@@ -161,38 +159,61 @@ function Runtime:_maybeAdjust(now)
 		return
 	end
 
-	local activeMin, activeMax, activeCount = collectActiveIds(self, now)
+	local activeMin, activeMax = collectActiveIds(self, now)
 	if not activeMin or not activeMax then
 		self.lastAdjust = now
 		return
 	end
-	local function fitsIn(width)
-		return activeCount <= width * width
+	local desiredSpan = activeMax - activeMin + 1
+
+	local function visibleSpan(columns, rows)
+		local range = (columns or 0) * (rows or 0)
+		local buffer = math.floor(range * SLIDE_BUFFER_PERCENT)
+		local span = range - buffer
+		if span < 1 then
+			span = range
+		end
+		return span, range
 	end
 
-	local resized = false
-	if self.windowConfig.columns == ZOOM_SMALL.columns and not fitsIn(ZOOM_SMALL.columns) then
-		self.windowConfig = { columns = ZOOM_LARGE.columns, rows = ZOOM_LARGE.rows }
-		self.zoomState = "large"
-		resized = true
-	elseif self.windowConfig.columns == ZOOM_LARGE.columns and fitsIn(ZOOM_SMALL.columns) then
-		self.windowConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
-		self.zoomState = "small"
-		resized = true
+	-- Decide zoom purely by span: if min/max no longer fit in 10x10 (with buffer), expand to
+	-- 100x100; if even that cannot fit, stay large but flag compressed so renderers know.
+	local smallVisible, smallRange = visibleSpan(ZOOM_SMALL.columns, ZOOM_SMALL.rows)
+	local largeVisible, largeRange = visibleSpan(ZOOM_LARGE.columns, ZOOM_LARGE.rows)
+
+	local targetConfig
+	local targetState
+	if desiredSpan > largeRange then
+		targetConfig = { columns = ZOOM_LARGE.columns, rows = ZOOM_LARGE.rows }
+		targetState = "compressed"
+	elseif desiredSpan > smallVisible then
+		targetConfig = { columns = ZOOM_LARGE.columns, rows = ZOOM_LARGE.rows }
+		targetState = "large"
+	else
+		targetConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
+		targetState = "small"
+	end
+
+	local resized = targetConfig.columns ~= self.windowConfig.columns or targetConfig.rows ~= self.windowConfig.rows
+	if resized then
+		self.windowConfig = targetConfig
+		self.zoomState = targetState
+	elseif targetState ~= self.zoomState then
+		self.zoomState = targetState
 	end
 
 	local range = windowSize(self)
 	local buffer = math.floor(range * SLIDE_BUFFER_PERCENT)
-	local visibleSpan = range - buffer
-	if visibleSpan < 1 then
-		visibleSpan = range
+	local visibleSpanBudget = range - buffer
+	if visibleSpanBudget < 1 then
+		visibleSpanBudget = range
 	end
 	-- Buffer shrinks the effective span we try to display so the window doesn't thrash.
 	-- If active ids overshoot even this reduced span we pin the start near the latest id.
 
 	local start = activeMin
-	if (activeMax - start + 1) > visibleSpan then
-		start = activeMax - visibleSpan + 1
+	if (activeMax - start + 1) > visibleSpanBudget then
+		start = activeMax - visibleSpanBudget + 1
 	end
 	if start < 0 then
 		start = 0
@@ -207,8 +228,6 @@ function Runtime:_maybeAdjust(now)
 		start = math.floor(start / rowBase) * rowBase
 		finish = start + range - 1
 		self.zoomState = "compressed"
-	elseif resized then
-		self.zoomState = (self.windowConfig.columns == ZOOM_LARGE.columns) and "large" or "small"
 	end
 
 	self.gridStart = start

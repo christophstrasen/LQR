@@ -15,7 +15,7 @@ local function normalizeChoice(raw)
 		return nil
 	end
 	raw = string.lower(tostring(raw))
-	if raw == "simple" or raw == "timeline" then
+	if raw == "simple" or raw == "timeline" or raw == "window_zoom" then
 		return raw
 	end
 	return nil
@@ -58,6 +58,8 @@ local choice = detectChoice()
 local scenarioModule
 if choice == "simple" then
 	scenarioModule = "viz_high_level.demo.simple"
+elseif choice == "window_zoom" then
+	scenarioModule = "viz_high_level.demo.window_zoom"
 else
 	scenarioModule = "viz_high_level.demo.timeline"
 end
