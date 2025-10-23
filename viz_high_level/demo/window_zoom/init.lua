@@ -60,31 +60,45 @@ local function buildTimeline()
 		return tick
 	end
 
-	-- Explainer: ten gentle bursts of 11 orders push the active id count above 100 to
-	-- trigger the large 100x100 zoom without overwhelming the viewer.
+	-- Explainer: emit a sparse burst of orders spaced ~idStep apart so span crosses the
+	-- 10x10 window and forces the large zoom without flooding the stream. Spacing accelerates
+	-- from spacingStart to spacingEnd to ease the viewer in.
 	local function addLargeBurst(opts)
 		opts = opts or {}
 		local tick = opts.startTick or 0
 		local startOrderId = opts.startOrderId or 200
-		local customerBase = opts.customerBase or 4000
-		local bursts = opts.bursts or 10
-		local perBurst = opts.perBurst or 11
-		local burstSpacing = opts.burstSpacing or 1
-		local intraSpacing = opts.intraSpacing or 0.03
+		local startCustomerId = opts.startCustomerId or 5000
+		local count = opts.count or 10
+		if count <= 0 then
+			return tick
+		end
+		local idStep = opts.idStep or 10
+		local spacingStart = opts.spacingStart or 0.5
+		local spacingEnd = opts.spacingEnd or 0.1
 
-		for burst = 0, bursts - 1 do
-			local baseTick = tick + burst * burstSpacing
-			local offset = burst * perBurst
-			for i = 0, perBurst - 1 do
-				emit(baseTick + (i * intraSpacing), "orders", {
-					id = startOrderId + offset + i,
-					customerId = customerBase + offset + i,
-					total = 40 + ((i + burst) % 5) * 4,
-				})
+		local function lerp(a, b, t)
+			if t < 0 then
+				t = 0
+			elseif t > 1 then
+				t = 1
 			end
+			return a + (b - a) * t
 		end
 
-		return tick + (bursts - 1) * burstSpacing + 0.6
+		for i = 0, count - 1 do
+			local t = (count <= 1) and 0 or (i / (count - 1))
+			local spacing = lerp(spacingStart, spacingEnd, t)
+			local id = startOrderId + (i * idStep)
+			emit(tick, "orders", {
+				id = id,
+				-- Project onto a tight customer band: offset by position, not by full order id.
+				customerId = startCustomerId + (i * idStep),
+				total = 40 + ((i % 5) * 4),
+			})
+			tick = tick + spacing
+		end
+
+		return tick
 	end
 
 	-- Explainer: after the big burst has faded, sprinkle a handful of higher ids so the
@@ -109,24 +123,27 @@ local function buildTimeline()
 		return tick + (count - 1) * spacing
 	end
 
-	-- Stage A: short, fully matched flow that stays inside the 10x10 view.
+	-- Stage A: short, fully matched flow that stays inside the 10x10 view. Emits 16 records
+	-- (8 customers + 8 orders).
 	local afterPairs = addMatchedPairs(0)
 	snapshots[#snapshots + 1] = { tick = afterPairs + 0.2, label = "small_start" }
 
-	-- Stage B: controlled burst that trips auto-zoom to 100x100.
+	-- Stage B: accelerating span-stretch to trip auto-zoom to 100x100. Emits 25 orders spaced
+	-- 3 ids apart; spacing eases from 0.5s down to 0.1s.
 	local afterBurst = addLargeBurst({
 		startTick = afterPairs + 1.2,
-		bursts = 10,
-		perBurst = 11,
-		burstSpacing = 1,
-		intraSpacing = 0.05,
 		startOrderId = 200,
-		customerBase = 5000,
+		startCustomerId = 50,
+		count = 25,
+		idStep = 3,
+		spacingStart = 0.5,
+		spacingEnd = 0.1,
 	})
 	snapshots[#snapshots + 1] = { tick = afterBurst, label = "large_burst" }
 
 	-- Stage C: idle long enough for the burst to decay, then nudge the window forward.
-	local afterCooldown = afterBurst + 12
+	-- Emits 12 orders spaced in time.
+	local afterCooldown = afterBurst + 3
 	snapshots[#snapshots + 1] = { tick = afterCooldown, label = "cooled_small" }
 	local afterSlide = addSlideProbers({
 		startTick = afterCooldown + 0.5,

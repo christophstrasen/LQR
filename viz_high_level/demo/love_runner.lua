@@ -8,6 +8,7 @@ local Draw = require("viz_high_level.core.draw")
 local LoveRunner = {}
 
 local DEFAULT_BACKGROUND = { 0.08, 0.08, 0.08, 1 }
+local GRID_Y_OFFSET = -12
 
 local function cloneColor(color)
 	if not color then
@@ -157,7 +158,7 @@ local function drawSnapshot(snapshot, background)
 	local headerBase = drawHeader(snapshot, lg, background)
 	local metrics = Draw.metrics(snapshot)
 	lg.translate(12 + (metrics.rowLabelWidth or 0), headerBase + 10 + (metrics.columnLabelHeight or 0))
-	Draw.drawSnapshot(snapshot, { showLabels = true })
+	Draw.drawSnapshot(snapshot, { showLabels = true, gridYOffset = GRID_Y_OFFSET })
 end
 
 ---@param opts table

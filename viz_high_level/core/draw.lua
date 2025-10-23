@@ -18,39 +18,23 @@ local LARGE_LAYOUT = {
 	borderThickness = 1,
 	gapThickness = 1,
 }
-local BACKGROUND = { 0.1, 0.1, 0.1, 1 }
+
 local EMPTY_CELL_COLOR = { 0.2, 0.2, 0.2, 1 }
 local OUTER_BASE_COLOR = { 0.24, 0.24, 0.24, 1 }
-local OUTER_SHADOW_COLOR = { 0.12, 0.12, 0.12, 1 }
 local NEUTRAL_BORDER_COLOR = OUTER_BASE_COLOR
-local BORDER_COLORS = {
-	match = { 0, 1, 0, 1 },
-	expire = { 1, 0, 0, 1 },
-}
 local ROW_LABEL_WIDTH = 40
 local COLUMN_LABEL_HEIGHT = 18
 local COLUMN_LABEL_GAP = 10
 
-local function clamp01(value)
-	if value < 0 then
-		return 0
-	end
-	if value > 1 then
-		return 1
-	end
-	return value
-end
-
-local function lerpColor(from, to, factor)
-	factor = clamp01(factor or 1)
-	local inv = 1 - factor
-	local src = from or to
-	return {
-		(src[1] or 0) * factor + (to[1] or 0) * inv,
-		(src[2] or 0) * factor + (to[2] or 0) * inv,
-		(src[3] or 0) * factor + (to[3] or 0) * inv,
-		(src[4] or 1) * factor + (to[4] or 1) * inv,
-	}
+local function columnDigitCount(window)
+	local startId = window.startId or 0
+	local columns = window.columns or 10
+	local rows = window.rows or 10
+	local range = columns * rows
+	local endId = window.endId or (startId + range - 1)
+	local maxCol = math.floor(endId / rows)
+	local digits = #tostring(math.abs(maxCol))
+	return math.max(1, digits)
 end
 
 local function metricsForWindow(window, layersBudget)
@@ -62,6 +46,7 @@ local function metricsForWindow(window, layersBudget)
 	local layerThickness = layout.borderThickness + layout.gapThickness
 	local contentSize = layout.innerSize + (2 * layers * layerThickness)
 	local cellSize = contentSize + (layout.outerInset * 2) + (layout.padding * 2)
+	local colDigits = columnDigitCount(window)
 	return {
 		cellSize = cellSize,
 		contentSize = contentSize,
@@ -72,7 +57,7 @@ local function metricsForWindow(window, layersBudget)
 		columns = columns,
 		rows = rows,
 		rowLabelWidth = ROW_LABEL_WIDTH,
-		columnLabelHeight = COLUMN_LABEL_HEIGHT,
+		columnLabelHeight = COLUMN_LABEL_HEIGHT * colDigits,
 		padding = layout.padding,
 		outerInset = layout.outerInset,
 		borderThickness = layout.borderThickness,
@@ -100,7 +85,7 @@ local function regionColor(region, fallback)
 	return color or fallback
 end
 
-local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount)
+local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount, gridYOffset)
 	local composite = cell and cell.composite
 	if not composite then
 		-- Explainer: even empty cells get a composite at draw time so the visuals
@@ -112,7 +97,7 @@ local function drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCoun
 	local padding = metrics.padding or 0
 	local baseSize = metrics.contentSize or (metrics.cellSize - padding * 2)
 	local x = (col - 1) * metrics.cellSize + padding
-	local y = (row - 1) * metrics.cellSize + padding
+	local y = (row - 1) * metrics.cellSize + padding + (gridYOffset or 0)
 	composite:update(renderTime)
 	local outerInset = metrics.outerInset or 0
 	local currentInset = outerInset
@@ -168,7 +153,12 @@ end
 local function columnLabel(window, col)
 	local rowBase = window.rows or 10
 	local baseCol = math.floor(window.startId / rowBase) + (col - 1)
-	return tostring(baseCol)
+	local digits = {}
+	local text = tostring(baseCol)
+	for i = 1, #text do
+		digits[#digits + 1] = text:sub(i, i)
+	end
+	return table.concat(digits, "\n")
 end
 
 local function rowLabel(window, row)
@@ -197,11 +187,12 @@ function Draw.drawSnapshot(snapshot, opts)
 	local joinCount = #(meta.header and meta.header.joins or {})
 	local layerBudget = math.min(joinCount, maxLayers)
 	local metrics = metricsForWindow(window, layerBudget)
+	local gridYOffset = (opts and opts.gridYOffset) or 0
 	local renderTime = meta.renderTime or (love and love.timer and love.timer.getTime()) or os.clock()
 	for col = 1, metrics.columns do
 		for row = 1, metrics.rows do
 			local cell = snapshot.cells[col] and snapshot.cells[col][row]
-			drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount)
+			drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount, gridYOffset)
 		end
 	end
 	if opts and opts.showLabels then
@@ -211,14 +202,20 @@ function Draw.drawSnapshot(snapshot, opts)
 			lg.printf(
 				colText,
 				(col - 1) * metrics.cellSize,
-				-(COLUMN_LABEL_HEIGHT + COLUMN_LABEL_GAP),
+				-(metrics.columnLabelHeight + COLUMN_LABEL_GAP),
 				metrics.cellSize,
 				"center"
 			)
 		end
 		for row = 1, metrics.rows do
 			local rowText = rowLabel(window, row)
-			lg.printf(rowText, -ROW_LABEL_WIDTH, (row - 1) * metrics.cellSize, ROW_LABEL_WIDTH - 4, "right")
+			lg.printf(
+				rowText,
+				-ROW_LABEL_WIDTH,
+				gridYOffset + (row - 1) * metrics.cellSize,
+				ROW_LABEL_WIDTH - 4,
+				"right"
+			)
 		end
 	end
 	lg.pop()

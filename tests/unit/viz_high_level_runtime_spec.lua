@@ -53,7 +53,11 @@ describe("viz_high_level runtime", function()
 	it("auto zooms between 10x10 and 100x100 based on span only", function()
 		-- adjustInterval=0 disables hysteresis so the span-based zoom reacts immediately,
 		-- avoiding timing noise in this unit test. Production defaults use >0 to prevent thrash.
-		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 0.2 })
+		local runtime = Runtime.new({
+			adjustInterval = 0,
+			visualsTTL = 0.2,
+			activeCellTTLFactor = 4, -- keep actives visible long enough for span jump in test
+		})
 		for i = 1, 50 do
 			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.1)
 		end
@@ -76,7 +80,11 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("compresses window to latest ids when span exceeds capacity", function()
-		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 100 })
+		local runtime = Runtime.new({
+			adjustInterval = 0,
+			visualsTTL = 100,
+			activeCellTTLFactor = 4,
+		})
 		-- Minimal span that exceeds 100x100 range forces compressed mode immediately.
 		runtime:ingest({ type = "source", id = 0, projectionKey = 0, projectable = true }, 0)
 		runtime:ingest({ type = "source", id = 20000, projectionKey = 20000, projectable = true }, 0.1)
@@ -89,7 +97,11 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("derives margin from grid size when percent configured", function()
-		local runtime = Runtime.new({ adjustInterval = 0, visualsTTL = 5 })
+		local runtime = Runtime.new({
+			adjustInterval = 0,
+			visualsTTL = 5,
+			activeCellTTLFactor = 4,
+		})
 		for i = 1, 15 do
 			runtime:ingest({ type = "source", id = i, projectionKey = i, projectable = true }, i * 0.1)
 		end
@@ -104,7 +116,11 @@ describe("viz_high_level runtime", function()
 	end)
 
 	it("honors explicit absolute margin override", function()
-		local runtime = Runtime.new({ adjustInterval = 0, margin = 5 })
+		local runtime = Runtime.new({
+			adjustInterval = 0,
+			margin = 5,
+			activeCellTTLFactor = 4,
+		})
 		runtime:ingest({ type = "source", id = 10, projectionKey = 10, projectable = true }, 0)
 		runtime:ingest({ type = "source", id = 20, projectionKey = 20, projectable = true }, 1)
 		local window = runtime:window()

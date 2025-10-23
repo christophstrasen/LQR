@@ -8,7 +8,6 @@ Runtime.__index = Runtime
 
 local DEFAULT_ADJUST_INTERVAL = 2
 local DEFAULT_MARGIN_COLUMNS_PERCENT = 0.2
-local DEFAULT_MIX_HALF_LIFE = DEFAULT_ADJUST_INTERVAL
 local ZOOM_SMALL = { columns = 10, rows = 10 }
 local ZOOM_LARGE = { columns = 100, rows = 100 }
 local SLIDE_BUFFER_PERCENT = 0.2
@@ -56,7 +55,14 @@ local function new(opts)
 	self.maxLayers = opts.maxLayers or math.max(joinCount, 2)
 	self.palette = opts.palette or {}
 	self.header = opts.header or {}
-	self.visualsTTL = opts.visualsTTL or opts.adjustInterval or DEFAULT_MIX_HALF_LIFE
+	self.visualsTTL = opts.visualsTTL or opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
+	local ttlFactor = opts.activeCellTTLFactor
+	if ttlFactor == nil then
+		ttlFactor = 1
+	elseif ttlFactor < 0 then
+		ttlFactor = 0
+	end
+	self.activeCellTTLFactor = ttlFactor
 	self.activeIds = {}
 	self.observedMin = nil
 	self.observedMax = nil
@@ -81,7 +87,7 @@ end
 -- currently visible rows. We reuse the mix half-life as a rough TTL for activity.
 local function collectActiveIds(self, now)
 	local minId, maxId, count = nil, nil, 0
-	local ttl = (self.visualsTTL or DEFAULT_MIX_HALF_LIFE) * 4
+	local ttl = (self.visualsTTL or DEFAULT_ADJUST_INTERVAL) * (self.activeCellTTLFactor or 1)
 	for id, lastSeen in pairs(self.activeIds) do
 		if now - lastSeen <= ttl then
 			minId = minId and math.min(minId, id) or id
