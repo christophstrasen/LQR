@@ -168,6 +168,38 @@ local function rowLabel(window, row)
 	return string.format(formatStr, rowVal)
 end
 
+local function drawCells(snapshot, metrics, renderTime, maxLayers, joinCount, gridYOffset)
+	for col = 1, metrics.columns do
+		local columnCells = snapshot.cells[col]
+		for row = 1, metrics.rows do
+			local cell = columnCells and columnCells[row]
+			drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount, gridYOffset)
+		end
+	end
+end
+
+local function drawLabels(window, metrics, gridYOffset, zoomcorrect)
+	gridYOffset = gridYOffset + zoomcorrect
+	local lg = love.graphics
+	lg.setColor(1, 1, 1, 1)
+	local columnLabelY = -(metrics.columnLabelHeight or 0) + zoomcorrect
+	for col = 1, metrics.columns do
+		local colText = columnLabel(window, col)
+		lg.printf(colText, (col - 1) * metrics.cellSize, columnLabelY, metrics.cellSize, "center")
+	end
+	local rowLabelX = -ROW_LABEL_WIDTH
+	for row = 1, metrics.rows do
+		local rowText = rowLabel(window, row)
+		lg.printf(
+			rowText,
+			rowLabelX,
+			gridYOffset + (metrics.cellSize * 0.5) - 8 + ((row - 1) * metrics.cellSize),
+			ROW_LABEL_WIDTH - 4,
+			"right"
+		)
+	end
+end
+
 ---Draws a snapshot at the current origin.
 ---@param snapshot table from headless_renderer.render
 ---@param opts table|nil
@@ -188,35 +220,11 @@ function Draw.drawSnapshot(snapshot, opts)
 	local layerBudget = math.min(joinCount, maxLayers)
 	local metrics = metricsForWindow(window, layerBudget)
 	local gridYOffset = (opts and opts.gridYOffset) or 0
+	local zoomCorrect = (opts and opts.zoomCorrect) or 1
 	local renderTime = meta.renderTime or (love and love.timer and love.timer.getTime()) or os.clock()
-	for col = 1, metrics.columns do
-		for row = 1, metrics.rows do
-			local cell = snapshot.cells[col] and snapshot.cells[col][row]
-			drawCell(col, row, cell, metrics, renderTime, maxLayers, joinCount, gridYOffset)
-		end
-	end
+	drawCells(snapshot, metrics, renderTime, maxLayers, joinCount, gridYOffset)
 	if opts and opts.showLabels then
-		lg.setColor(1, 1, 1, 1)
-		for col = 1, metrics.columns do
-			local colText = columnLabel(window, col)
-			lg.printf(
-				colText,
-				(col - 1) * metrics.cellSize,
-				-(metrics.columnLabelHeight + COLUMN_LABEL_GAP),
-				metrics.cellSize,
-				"center"
-			)
-		end
-		for row = 1, metrics.rows do
-			local rowText = rowLabel(window, row)
-			lg.printf(
-				rowText,
-				-ROW_LABEL_WIDTH,
-				gridYOffset + (row - 1) * metrics.cellSize,
-				ROW_LABEL_WIDTH - 4,
-				"right"
-			)
-		end
+		drawLabels(window, metrics, gridYOffset, zoomCorrect)
 	end
 	lg.pop()
 end

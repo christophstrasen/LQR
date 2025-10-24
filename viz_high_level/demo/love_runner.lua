@@ -8,7 +8,6 @@ local Draw = require("viz_high_level.core.draw")
 local LoveRunner = {}
 
 local DEFAULT_BACKGROUND = { 0.08, 0.08, 0.08, 1 }
-local GRID_Y_OFFSET = -12
 
 local function cloneColor(color)
 	if not color then
@@ -157,8 +156,10 @@ local function drawSnapshot(snapshot, background)
 	lg.setColor(1, 1, 1, 1)
 	local headerBase = drawHeader(snapshot, lg, background)
 	local metrics = Draw.metrics(snapshot)
-	lg.translate(12 + (metrics.rowLabelWidth or 0), headerBase + 10 + (metrics.columnLabelHeight or 0))
-	Draw.drawSnapshot(snapshot, { showLabels = true, gridYOffset = GRID_Y_OFFSET })
+	local originX = 12 + (metrics.rowLabelWidth or 0)
+	local originY = headerBase + 10 + (metrics.columnLabelHeight or 0)
+	lg.translate(originX, originY)
+	Draw.drawSnapshot(snapshot, { showLabels = true })
 end
 
 ---@param opts table
@@ -174,41 +175,36 @@ function LoveRunner.bootstrap(opts)
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
 	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
 
-	local app = {
+	local state = {
 		attachment = nil,
 		runtime = nil,
 		driver = nil,
-		scenario = scenario,
 		background = background,
-		ticksPerSecond = ticksPerSecond,
 	}
 
 	local function startScenario()
 		local demo = assert(scenario.build(), "scenario build() must return subjects + builder")
 		assert(demo.builder, "scenario build() result missing builder")
 		assert(demo.subjects, "scenario build() result missing subjects")
-		app.attachment = QueryVizAdapter.attach(demo.builder)
-		app.runtime = Runtime.new({
-			maxLayers = app.attachment.maxLayers,
-			palette = app.attachment.palette,
+		state.attachment = QueryVizAdapter.attach(demo.builder)
+		state.runtime = Runtime.new({
+			maxLayers = state.attachment.maxLayers,
+			palette = state.attachment.palette,
 			adjustInterval = adjustInterval,
-			header = app.attachment.header,
+			header = state.attachment.header,
 			visualsTTL = visualsTTL,
 		})
 
-		app.attachment.normalized:subscribe(function(event)
-			app.runtime:ingest(event, love.timer.getTime())
+		state.attachment.normalized:subscribe(function(event)
+			state.runtime:ingest(event, love.timer.getTime())
 		end)
 
-		app.attachment.query:subscribe(function() end)
+		state.attachment.query:subscribe(function() end)
 
-		if scenario.start then
-			app.driver = scenario.start(demo.subjects, {
-				ticksPerSecond = ticksPerSecond,
-			})
-		end
-
-		if not app.driver and scenario.complete then
+		state.driver = scenario.start and scenario.start(demo.subjects, {
+			ticksPerSecond = ticksPerSecond,
+		})
+		if (not state.driver) and scenario.complete then
 			scenario.complete(demo.subjects)
 		end
 	end
@@ -220,18 +216,21 @@ function LoveRunner.bootstrap(opts)
 	end
 
 	function love.update(dt)
-		if app.driver and app.driver.update then
-			app.driver:update(dt)
+		local driver = state.driver
+		if driver and driver.update then
+			driver:update(dt)
 		end
 	end
 
 	function love.draw()
-		if not app.runtime then
+		local runtime = state.runtime
+		local attachment = state.attachment
+		if not runtime then
 			return
 		end
-		local snapshot = Renderer.render(app.runtime, app.attachment.palette, love.timer.getTime())
+		local snapshot = Renderer.render(runtime, attachment.palette, love.timer.getTime())
 		DebugViz.snapshot(snapshot, { label = "love-frame" })
-		drawSnapshot(snapshot, app.background)
+		drawSnapshot(snapshot, state.background)
 	end
 
 	function love.quit()
