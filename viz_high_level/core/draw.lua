@@ -178,25 +178,29 @@ local function drawCells(snapshot, metrics, renderTime, maxLayers, joinCount, gr
 	end
 end
 
-local function drawLabels(window, metrics, gridYOffset, zoomcorrect)
-	gridYOffset = gridYOffset + zoomcorrect
+local function rowLabelY(row, metrics, gridYOffset, labelNudge)
+	local base = gridYOffset + (row - 0.5) * metrics.cellSize
+	return base + (labelNudge or 0)
+end
+
+local function columnLabelY(metrics, zoomCorrect)
+	return -(metrics.columnLabelHeight or 0) + (zoomCorrect or 0)
+end
+
+local function drawLabels(window, metrics, gridYOffset, zoomCorrect)
 	local lg = love.graphics
 	lg.setColor(1, 1, 1, 1)
-	local columnLabelY = -(metrics.columnLabelHeight or 0) + zoomcorrect
+	local colY = columnLabelY(metrics, zoomCorrect)
 	for col = 1, metrics.columns do
 		local colText = columnLabel(window, col)
-		lg.printf(colText, (col - 1) * metrics.cellSize, columnLabelY, metrics.cellSize, "center")
+		lg.printf(colText, (col - 1) * metrics.cellSize, colY, metrics.cellSize, "center")
 	end
 	local rowLabelX = -ROW_LABEL_WIDTH
+	local rowNudge = (zoomCorrect or 0) - 8
 	for row = 1, metrics.rows do
 		local rowText = rowLabel(window, row)
-		lg.printf(
-			rowText,
-			rowLabelX,
-			gridYOffset + (metrics.cellSize * 0.5) - 8 + ((row - 1) * metrics.cellSize),
-			ROW_LABEL_WIDTH - 4,
-			"right"
-		)
+		local rowY = rowLabelY(row, metrics, gridYOffset, rowNudge)
+		lg.printf(rowText, rowLabelX, rowY, ROW_LABEL_WIDTH - 4, "right")
 	end
 end
 
