@@ -10,59 +10,92 @@ require("bootstrap")
 
 local LoveRunner = require("viz_high_level.demo.love_runner")
 
+local function addIfHasInit(root, entry, dest)
+	local initPath = string.format("%s/%s/init.lua", root, entry)
+	local fh = io.open(initPath, "r")
+	if fh then
+		fh:close()
+		dest[#dest + 1] = entry
+	end
+end
+
+local function listDemoFolders()
+	local root = "viz_high_level/demo"
+	local found = {}
+
+	local ok, lfs = pcall(require, "lfs")
+	if ok and lfs then
+		for entry in lfs.dir(root) do
+			if entry ~= "." and entry ~= ".." then
+				local path = root .. "/" .. entry
+				local attr = lfs.attributes(path)
+				if attr and attr.mode == "directory" then
+					addIfHasInit(root, entry, found)
+				end
+			end
+		end
+		if #found > 0 then
+			return found
+		end
+	end
+
+	local handle = io.popen(string.format("ls -1 %s 2>/dev/null", root))
+	if handle then
+		for entry in handle:lines() do
+			addIfHasInit(root, entry, found)
+		end
+		handle:close()
+		if #found > 0 then
+			return found
+		end
+	end
+
+	-- Fallback to known demos if discovery fails.
+	local known = { "timeline", "simple", "window_zoom", "two_zones" }
+	for _, name in ipairs(known) do
+		addIfHasInit(root, name, found)
+	end
+
+	return found
+end
+local function buildAllowedSet(list)
+	local set = {}
+	for _, name in ipairs(list or {}) do
+		set[string.lower(name)] = true
+	end
+	return set
+end
+
+local AVAILABLE_DEMOS = listDemoFolders()
+local ALLOWED = buildAllowedSet(AVAILABLE_DEMOS)
+
 local function normalizeChoice(raw)
 	if not raw then
 		return nil
 	end
 	raw = string.lower(tostring(raw))
-	if raw == "simple" or raw == "timeline" or raw == "window_zoom" then
+	if ALLOWED[raw] then
 		return raw
 	end
 	return nil
 end
 
-local function parseArgChoice(args)
-	if not args then
-		return nil
-	end
-	local afterSeparator = false
-	for i = 1, #args do
-		local value = args[i]
-		if value == "--" then
-			afterSeparator = true
-		elseif value == "--demo" then
-			return normalizeChoice(args[i + 1])
-		elseif value and value:match("^%-%-demo=") then
-			local choice = value:match("^%-%-demo=(.+)")
-			return normalizeChoice(choice)
-		elseif afterSeparator or (value and not value:match("^%-%-")) then
-			local choice = normalizeChoice(value)
+local function detectChoice()
+	local args = rawget(_G, "arg")
+	if args then
+		for i = 1, #args do
+			local choice = normalizeChoice(args[i])
 			if choice then
 				return choice
 			end
 		end
 	end
-	return nil
-end
-
-local function detectChoice()
-	local envChoice = normalizeChoice(os.getenv("VIZ_VIZ_DEMO") or os.getenv("VIZ_DEMO"))
-	if envChoice then
-		return envChoice
-	end
-	return parseArgChoice(rawget(_G, "arg")) or "timeline"
+	return "timeline"
 end
 
 local choice = detectChoice()
 
-local scenarioModule
-if choice == "simple" then
-	scenarioModule = "viz_high_level.demo.simple"
-elseif choice == "window_zoom" then
-	scenarioModule = "viz_high_level.demo.window_zoom"
-else
-	scenarioModule = "viz_high_level.demo.timeline"
-end
+local scenarioModule = string.format("viz_high_level.demo.%s", choice)
 
 LoveRunner.bootstrap({
 	scenarioModule = scenarioModule,
