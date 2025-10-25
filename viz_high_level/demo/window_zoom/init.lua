@@ -101,22 +101,21 @@ local function buildTimeline()
 		return tick
 	end
 
-	-- Explainer: after the big burst has faded, sprinkle a handful of higher ids so the
-	-- 10x10 window slides forward with its 20% buffer clearly visible.
+	-- Explainer: after the big burst has faded, sprinkle higher-id customers to pull the
+	-- 10x10 window forward while staying in the customer domain.
 	local function addSlideProbers(opts)
 		opts = opts or {}
 		local tick = opts.startTick or 0
-		local startId = opts.startId or 320
-		local step = opts.step or 12
-		local count = opts.count or 12
+		local startId = opts.startId or 50000
+		local step = opts.step or 150
+		local count = opts.count or 10
 		local spacing = opts.spacing or 0.6
 
 		for i = 0, count - 1 do
 			local id = startId + (i * step)
-			emit(tick + (i * spacing), "orders", {
+			emit(tick + (i * spacing), "customers", {
 				id = id,
-				customerId = id + 10000,
-				total = 15 + (i % 3) * 3,
+				name = string.format("Cust %d", id),
 			})
 		end
 
@@ -133,29 +132,53 @@ local function buildTimeline()
 	local afterBurst = addLargeBurst({
 		startTick = afterPairs + 1.2,
 		startOrderId = 200,
-		startCustomerId = 50,
-		count = 25,
-		idStep = 3,
-		spacingStart = 0.5,
-		spacingEnd = 0.1,
+		startCustomerId = 61,
+		count = 90,
+		idStep = 4,
+		spacingStart = 0.2,
+		spacingEnd = 0.0001,
 	})
 	snapshots[#snapshots + 1] = { tick = afterBurst, label = "large_burst" }
 
-	-- Stage C: idle long enough for the burst to decay, then nudge the window forward.
-	-- Emits 12 orders spaced in time.
+	-- Stage C: idle long enough for the burst to decay, then nudge the window forward with
+	-- high-id customers. Emits 10 customers spaced in time.
 	local afterCooldown = afterBurst + 3
 	snapshots[#snapshots + 1] = { tick = afterCooldown, label = "cooled_small" }
 	local afterSlide = addSlideProbers({
 		startTick = afterCooldown + 0.5,
-		startId = 320,
-		step = 14,
-		count = 12,
-		spacing = 0.7,
+		startId = 50003,
+		step = 153,
+		count = 10,
+		spacing = 0.6,
 	})
 	snapshots[#snapshots + 1] = { tick = afterSlide, label = "slide_buffer" }
 
-	-- Stage D: final lull to let everything fade, showing the 10x10 zoom return.
-	local finishTick = afterSlide + 10
+	-- Stage D: tight mixed trickle that fits 10x10 regardless of offset.
+	local afterFinalLull = afterSlide + 16
+	local finalTick = afterFinalLull
+	local finalEvents = {
+		{ schema = "customers", payload = { id = 10, name = "Final A" } },
+		{ schema = "orders", payload = { id = 501, customerId = 10, total = 10 } },
+		{ schema = "orders", payload = { id = 502, customerId = 42, total = 12 } }, -- unmatched
+		{ schema = "customers", payload = { id = 20, name = "Final B" } },
+		{ schema = "orders", payload = { id = 601, customerId = 20, total = 14 } },
+		{ schema = "customers", payload = { id = 35, name = "Final C" } },
+		{ schema = "orders", payload = { id = 602, customerId = 35, total = 16 } },
+		{ schema = "orders", payload = { id = 603, customerId = 62, total = 18 } }, -- unmatched
+		{ schema = "customers", payload = { id = 48, name = "Final D" } },
+		{ schema = "orders", payload = { id = 604, customerId = 48, total = 20 } },
+		{ schema = "customers", payload = { id = 60, name = "Final E" } },
+		{ schema = "orders", payload = { id = 605, customerId = 60, total = 22 } },
+		{ schema = "orders", payload = { id = 606, customerId = 70, total = 24 } }, -- unmatched
+		{ schema = "customers", payload = { id = 68, name = "Final F" } },
+		{ schema = "orders", payload = { id = 607, customerId = 68, total = 26 } },
+	}
+	for i, evt in ipairs(finalEvents) do
+		finalTick = afterFinalLull + (i - 1) * 0.9
+		emit(finalTick, evt.schema, evt.payload)
+	end
+
+	local finishTick = finalTick + 2
 	command(finishTick, "complete")
 	snapshots[#snapshots + 1] = { tick = finishTick, label = "final_small" }
 
@@ -274,10 +297,9 @@ WindowZoomDemo.snapshots = WINDOW_SNAPSHOTS
 WindowZoomDemo.timeline = WINDOW_EVENTS
 WindowZoomDemo.loveDefaults = {
 	label = "window zoom",
-	ticksPerSecond = 1.2,
-	visualsTTL = 2.5,
+	ticksPerSecond = 2,
+	visualsTTL = 5,
 	adjustInterval = 0.5,
-	visualsTTLCooldown = 12,
 }
 
 return WindowZoomDemo
