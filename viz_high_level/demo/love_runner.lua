@@ -174,6 +174,7 @@ function LoveRunner.bootstrap(opts)
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
 	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
+	local lockWindow = defaults.lockWindow or opts.lockWindow
 
 	local state = {
 		attachment = nil,
@@ -193,6 +194,10 @@ function LoveRunner.bootstrap(opts)
 			adjustInterval = adjustInterval,
 			header = state.attachment.header,
 			visualsTTL = visualsTTL,
+			maxColumns = defaults.maxColumns,
+			maxRows = defaults.maxRows,
+			startId = defaults.startId,
+			lockWindow = lockWindow,
 		})
 
 		state.attachment.normalized:subscribe(function(event)

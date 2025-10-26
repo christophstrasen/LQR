@@ -51,31 +51,63 @@ local function buildPayload(zone, id)
 	return { [idField] = id }
 end
 
+local function ensureCircleRange(zone, warnings)
+	local shape = zone.shape or "flat"
+	local isCircle = shape:match("^circle%d+$")
+	if not isCircle then
+		return zone
+	end
+	if not zone.range then
+		warnings[#warnings + 1] = string.format("circle zone '%s' missing range; defaulting to 20", tostring(zone.label or zone.schema))
+		zone.range = 20
+	end
+	if zone.range and zone.range > 80 then
+		warnings[#warnings + 1] = string.format("circle zone '%s' has large range (%s)", tostring(zone.label or zone.schema), tostring(zone.range))
+	end
+	return zone
+end
+
+local function buildProjectionOffsets(count, stride)
+	local offsets = {}
+	local x, y = 0, 0
+	local step = 1
+	local dirs = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
+	local dirIdx = 1
+	offsets[#offsets + 1] = 0
+	while #offsets < count do
+		for _ = 1, 2 do
+			local dx, dy = dirs[dirIdx][1], dirs[dirIdx][2]
+			for _ = 1, step do
+				if #offsets >= count then
+					break
+				end
+				x = x + dx
+				y = y + dy
+				offsets[#offsets + 1] = (x) + (y * stride)
+			end
+			dirIdx = dirIdx % 4 + 1
+		end
+		step = step + 1
+	end
+	return offsets
+end
+
+local function applyCoverage(cells, coverage)
+	local keep = math.max(1, math.floor(#cells * coverage + 0.5))
+	local selected = {}
+	for i = 1, math.min(keep, #cells) do
+		selected[#selected + 1] = cells[i]
+	end
+	return selected
+end
+
 local function pickSpatialIds(zone)
-	local density = clamp01(assertNumber(zone.density or 1, "zone.density"))
+	local coverage = clamp01(assertNumber(zone.coverage or zone.density or 1, "zone.coverage"))
 	local weights = ShapeWeights.build(zone)
-	if #weights == 0 or density <= 0 then
+	if #weights == 0 or coverage <= 0 then
 		return {}
 	end
-
-	table.sort(weights, function(a, b)
-		if a.weight == b.weight then
-			return a.id < b.id
-		end
-		return a.weight > b.weight
-	end)
-
-	local count = math.max(1, math.floor(#weights * density + 0.5))
-	local selected = {}
-	for i = 1, math.min(count, #weights) do
-		selected[#selected + 1] = weights[i]
-	end
-
-	table.sort(selected, function(a, b)
-		return a.id < b.id
-	end)
-
-	return selected
+	return applyCoverage(weights, coverage)
 end
 
 local function buildTimeSlots(zone, eventCount, opts)
@@ -179,31 +211,86 @@ end
 function Generator.generate(zones, opts)
 	opts = opts or {}
 	assertNumber(opts.totalPlaybackTime, "opts.totalPlaybackTime")
+	local grid = opts.grid or {}
+	local startId = grid.startId or 0
+	local columns = grid.columns or 10
+	local rows = grid.rows or 10
+	local windowSize = columns * rows
 
 	local events = {}
 	local summaries = {}
 	local warnings = {}
 	local seen = {}
+	local mappingHint = "linear"
 
 	for idx, zone in ipairs(zones or {}) do
+		zone = ensureCircleRange(zone, warnings)
 		local zoneLabel = zone.label or string.format("zone_%d", idx)
+		local shape = zone.shape or "flat"
 		local spatial = pickSpatialIds(zone)
-		local times = buildTimeSlots(zone, #spatial, opts)
+		local mode = zone.mode or "random"
+		local tSpan = (clamp01(zone.t1 or 1) - clamp01(zone.t0 or 0)) * opts.totalPlaybackTime
+		if tSpan <= 0 then
+			tSpan = 1
+		end
+		local rate = zone.rate or (#spatial / tSpan)
+		local targetCount = math.max(1, math.floor(rate * tSpan + 0.5))
 
-		local eventCount = math.min(#spatial, #times)
+		-- Build indices into spatial according to mode.
+		local indices = {}
+		if mode == "monotonic" then
+			for i = 1, targetCount do
+				indices[#indices + 1] = ((i - 1) % #spatial) + 1
+			end
+		else
+			local order = {}
+			for i = 1, #spatial do
+				order[i] = i
+			end
+			local a, c, m = 1664525, 1013904223, 2 ^ 32
+			local seed = 42
+			for i = #order, 2, -1 do
+				seed = (a * seed + c) % m
+				local j = (seed % i) + 1
+				order[i], order[j] = order[j], order[i]
+			end
+			for i = 1, targetCount do
+				indices[#indices + 1] = order[((i - 1) % #order) + 1]
+			end
+		end
+
+		local times = buildTimeSlots(zone, #indices, opts)
+		local eventCount = math.min(#indices, #times)
+		local shape = zone.shape or "flat"
+		local needsProjection = not (shape == "continuous" or shape == "linear_in" or shape == "linear_out")
+		if needsProjection then
+			mappingHint = "spiral"
+		end
 		for i = 1, eventCount do
-			local idInfo = spatial[i]
+			local idInfo = spatial[indices[i]]
 			local tick = times[i]
-			local payload = buildPayload(zone, idInfo.id)
-			local event = {
-				tick = tick,
-				schema = zone.schema,
-				payload = payload,
-				zone = zoneLabel,
-			}
-			warnDuplicates(seen, event, warnings)
-			events[#events + 1] = event
-			summarizeSchema(summaries, zone.schema, event, zoneLabel)
+			local effectiveId = idInfo.id
+			if idInfo.colOffset and idInfo.rowOffset then
+				local baseCol = math.floor((zone.center or startId) / rows)
+				local baseRow = (zone.center or startId) % rows
+				local col = baseCol + idInfo.colOffset
+				local row = baseRow + idInfo.rowOffset
+				if col >= 0 and col < columns and row >= 0 and row < rows then
+					effectiveId = startId + (col * rows) + row
+				end
+			end
+			if effectiveId then
+				local payload = buildPayload(zone, effectiveId)
+				local event = {
+					tick = tick,
+					schema = zone.schema,
+					payload = payload,
+					zone = zoneLabel,
+				}
+				warnDuplicates(seen, event, warnings)
+				events[#events + 1] = event
+				summarizeSchema(summaries, zone.schema, event, zoneLabel)
+			end
 		end
 	end
 
@@ -221,6 +308,7 @@ function Generator.generate(zones, opts)
 		total = #events,
 		schemas = summaries,
 		warnings = warnings,
+		mappingHint = mappingHint,
 	}
 end
 

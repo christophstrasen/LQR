@@ -24,7 +24,30 @@ local function bumpCount(map, key)
 end
 
 -- Project a logical id (projection key) into a column/row inside the window.
--- We lay out ids column-major: each column spans "rows" ids.
+-- Default: column-major (linear). When mapping="scramble", use a deterministic
+-- permutation to preserve locality-free placement for non-monotonic shapes.
+local permCache = {}
+
+local function scrambledIndex(columns, rows, offset)
+	local size = columns * rows
+	local key = string.format("%dx%d", columns, rows)
+	if not permCache[key] then
+		local idxs = {}
+		for i = 0, size - 1 do
+			idxs[#idxs + 1] = i
+		end
+		local a, c, m = 1664525, 1013904223, 2 ^ 32
+		local seed = 42
+		for i = #idxs, 2, -1 do
+			seed = (a * seed + c) % m
+			local j = (seed % i) + 1
+			idxs[i], idxs[j] = idxs[j], idxs[i]
+		end
+		permCache[key] = idxs
+	end
+	return permCache[key][offset + 1] or offset
+end
+
 local function mapIdToCell(window, id)
 	if not id then
 		return nil, nil
@@ -33,6 +56,10 @@ local function mapIdToCell(window, id)
 	local rows = window.rows or 10
 	local offset = id - window.startId
 	if offset < 0 then
+		return nil, nil
+	end
+	local size = columns * rows
+	if offset >= size then
 		return nil, nil
 	end
 	local col = math.floor(offset / rows) + 1

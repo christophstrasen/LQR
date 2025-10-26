@@ -12,8 +12,8 @@ describe("zone generator", function()
 	it("builds simple flat weights centered on an id", function()
 		local weights = ShapeWeights.build({
 			center = 10,
-			radius = 2,
-			shape = "flat",
+			range = 2,
+			shape = "continuous",
 		})
 
 		local ids = {}
@@ -36,12 +36,13 @@ describe("zone generator", function()
 				label = "a",
 				schema = "customers",
 				center = 10,
-				radius = 2,
-				shape = "flat",
-				density = 0.5, -- selects 3 of 5 ids: 8,9,10
+				range = 2,
+				shape = "continuous",
+				density = 0.5, -- selects 3 of 5 ids
 				t0 = 0,
 				t1 = 1,
 				rate_shape = "linear_up",
+				mode = "monotonic",
 			},
 		}, {
 			totalPlaybackTime = 10,
@@ -49,7 +50,9 @@ describe("zone generator", function()
 		})
 
 		assert.are.equal(3, #events)
-		assert.are.same({ 8, 9, 10 }, { events[1].payload.id, events[2].payload.id, events[3].payload.id })
+		local ids = { events[1].payload.id, events[2].payload.id, events[3].payload.id }
+		table.sort(ids)
+		assert.are.same({ 8, 9, 10 }, ids)
 		-- Rate weights 1,2,3 over span -> ticks ~ 1.67, 5.00, 10.00
 		assert.is_true(events[1].tick < events[2].tick)
 		assert.is_true(events[2].tick < events[3].tick)
@@ -57,6 +60,30 @@ describe("zone generator", function()
 		assert.are.same(3, summary.total)
 		assert.are.same(3, summary.schemas.customers.count)
 		assert.are.same({ a = 3 }, summary.schemas.customers.perZone)
+		assert.are.same("linear", summary.mappingHint)
+	end)
+
+	it("warns and defaults range for circle when missing", function()
+		local events, summary = Generator.generate({
+			{
+				label = "circle_no_range",
+				schema = "customers",
+				center = 0,
+				shape = "circle10",
+				density = 0.2,
+				t0 = 0,
+				t1 = 0.1,
+				rate_shape = "constant",
+			},
+		}, {
+			totalPlaybackTime = 1,
+			playStart = 0,
+			grid = { startId = 0, columns = 10, rows = 10 },
+		})
+
+		assert.is_true(#events > 0)
+		assert.is_true(#summary.warnings >= 1)
+		assert.are.same("spiral", summary.mappingHint)
 	end)
 
 	it("emits warnings on duplicate schema/id/tick combinations", function()
@@ -65,8 +92,8 @@ describe("zone generator", function()
 				label = "z1",
 				schema = "orders",
 				center = 5,
-				radius = 0,
-				shape = "flat",
+				range = 0,
+				shape = "continuous",
 				density = 1,
 				t0 = 0.2,
 				t1 = 0.3,
@@ -76,8 +103,8 @@ describe("zone generator", function()
 				label = "z2",
 				schema = "orders",
 				center = 5,
-				radius = 0,
-				shape = "flat",
+				range = 0,
+				shape = "continuous",
 				density = 1,
 				t0 = 0.2,
 				t1 = 0.3,

@@ -13,10 +13,12 @@ function ZonesTimeline.build(zones, opts)
 	local totalPlaybackTime = opts.totalPlaybackTime or 10
 	local playStart = opts.playStart or 0
 
-	local events, summary = Zones.generator.generate(zones or {}, {
+	local genOpts = {
 		totalPlaybackTime = totalPlaybackTime,
 		playStart = playStart,
-	})
+		grid = opts.grid,
+	}
+	local events, summary = Zones.generator.generate(zones or {}, genOpts)
 
 	events[#events + 1] = { tick = playStart + totalPlaybackTime + (opts.completeDelay or 0.5), kind = "complete" }
 

@@ -37,15 +37,16 @@ local function new(opts)
 	local self = setmetatable({}, Runtime)
 	self.autoZoom = not (opts.maxColumns or opts.maxRows)
 	if self.autoZoom then
-		self.windowConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
-		self.zoomState = "small"
-	else
-		self.windowConfig = {
-			columns = opts.maxColumns or ZOOM_SMALL.columns,
-			rows = opts.maxRows or ZOOM_SMALL.rows,
-		}
-		self.zoomState = "manual"
-	end
+	self.windowConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
+	self.zoomState = "small"
+else
+	self.windowConfig = {
+		columns = opts.maxColumns or ZOOM_SMALL.columns,
+		rows = opts.maxRows or ZOOM_SMALL.rows,
+	}
+	self.zoomState = "manual"
+end
+self.windowConfig.mapping = opts.mapping or "linear"
 	self.adjustInterval = opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
 	self.marginAbsolute = opts.margin
 	self.marginPercent = opts.marginPercent or DEFAULT_MARGIN_COLUMNS_PERCENT
@@ -70,6 +71,7 @@ local function new(opts)
 	self.gridEnd = self.gridStart + (self.windowConfig.columns * self.windowConfig.rows) - 1
 	self.lastAdjust = opts.now or 0
 	self.lastIngestTime = opts.now or 0
+	self.lockWindow = opts.lockWindow or false
 	self.events = {
 		source = {},
 		match = {},
@@ -154,6 +156,9 @@ end
 -- Span-only rule: we ignore active count and choose size purely on (activeMax - activeMin + 1).
 function Runtime:_maybeAdjust(now)
 	if not now then
+		return
+	end
+	if self.lockWindow then
 		return
 	end
 	if self.lastAdjust and (now - self.lastAdjust) < self.adjustInterval then
@@ -285,6 +290,7 @@ function Runtime:window()
 		endId = self.gridEnd,
 		columns = self.windowConfig.columns,
 		rows = self.windowConfig.rows,
+		mapping = self.windowConfig.mapping,
 		margin = effectiveMargin(self),
 		marginPercent = self.marginPercent,
 		zoomState = self.zoomState,
