@@ -2,12 +2,12 @@ local TwoZonesDemo = {}
 
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local Scheduler = require("viz_high_level.demo.scheduler")
-local Zones = require("viz_high_level.zones")
+local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
+local Driver = require("viz_high_level.demo.common.driver")
 
 local PLAY_DURATION = 12
 
-local function buildSubjects()
+local function build()
 	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
 	local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
 
@@ -17,11 +17,11 @@ local function buildSubjects()
 		:window({ count = 16 })
 
 	return {
-		builder = builder,
 		subjects = {
 			customers = customersSubject,
 			orders = ordersSubject,
 		},
+		builder = builder,
 	}
 end
 
@@ -89,27 +89,22 @@ end
 
 local function buildTimeline()
 	local zones = buildZones()
-	local events, summary = Zones.generator.generate(zones, {
+	return ZonesTimeline.build(zones, {
 		totalPlaybackTime = PLAY_DURATION,
-		playStart = 0,
+		completeDelay = 0.5,
+		snapshots = {
+			{ tick = PLAY_DURATION * 0.25, label = "early_overlap" },
+			{ tick = PLAY_DURATION * 0.6, label = "mid_blend" },
+			{ tick = PLAY_DURATION * 0.95, label = "late_shift" },
+		},
 	})
-
-	events[#events + 1] = { tick = PLAY_DURATION + 0.5, kind = "complete" }
-
-	local snapshots = {
-		{ tick = PLAY_DURATION * 0.25, label = "early_overlap" },
-		{ tick = PLAY_DURATION * 0.6, label = "mid_blend" },
-		{ tick = PLAY_DURATION * 0.95, label = "late_shift" },
-	}
-
-	return events, snapshots, summary
 end
 
-local TWO_ZONES_EVENTS, TWO_ZONES_SNAPSHOTS = buildTimeline()
+local TWO_ZONES_EVENTS, TWO_ZONES_SNAPSHOTS, TWO_ZONES_SUMMARY = buildTimeline()
 
 ---@return table
 function TwoZonesDemo.build()
-	return buildSubjects()
+	return build()
 end
 
 ---@param subjects table
@@ -129,92 +124,19 @@ function TwoZonesDemo.start(subjects, opts)
 	local ticksPerSecond = opts.ticksPerSecond or 2
 	local clock = opts.clock
 
-	local scheduler
-	local function stampTick(event)
-		if clock and clock.set then
-			local tick = event.tick or (scheduler and scheduler:currentTick()) or 0
-			clock:set(tick)
-		end
-	end
-
-	scheduler = Scheduler.new({
+	return Driver.new({
 		events = TWO_ZONES_EVENTS,
-		handlers = {
-			emit = function(event)
-				stampTick(event)
-				local subject = subjects[event.schema]
-				assert(subject, string.format("Unknown schema %s in two_zones demo", tostring(event.schema)))
-				subject:onNext(event.payload)
-			end,
-			complete = function(event)
-				stampTick(event)
-				if event.schema then
-					local subject = subjects[event.schema]
-					if subject and subject.onCompleted then
-						subject:onCompleted()
-					end
-					return
-				end
-				TwoZonesDemo.complete(subjects)
-			end,
-		},
+		subjects = subjects,
+		ticksPerSecond = ticksPerSecond,
+		clock = clock,
+		label = "two_zones",
+		onCompleteAll = TwoZonesDemo.complete,
 	})
-
-	local driver = {
-		scheduler = scheduler,
-		finished = scheduler:isFinished(),
-	}
-
-	local function finalize()
-		if driver.finished then
-			return
-		end
-		TwoZonesDemo.complete(subjects)
-		driver.finished = true
-	end
-
-	function driver:update(dt)
-		if driver.finished then
-			return
-		end
-		local deltaTicks = math.max(0, (dt or 0) * ticksPerSecond)
-		scheduler:advance(deltaTicks)
-		if scheduler:isFinished() then
-			finalize()
-		end
-	end
-
-	function driver:runUntil(targetTick)
-		if driver.finished then
-			return
-		end
-		scheduler:runUntil(targetTick)
-		if scheduler:isFinished() then
-			finalize()
-		end
-	end
-
-	function driver:runAll()
-		if driver.finished then
-			return
-		end
-		scheduler:drain()
-		finalize()
-	end
-
-	function driver:isFinished()
-		return driver.finished
-	end
-
-	function driver:currentTick()
-		return scheduler:currentTick()
-	end
-
-	return driver
 end
 
 TwoZonesDemo.snapshots = TWO_ZONES_SNAPSHOTS
 TwoZonesDemo.timeline = TWO_ZONES_EVENTS
+TwoZonesDemo.summary = TWO_ZONES_SUMMARY
 TwoZonesDemo.loveDefaults = {
 	label = "two zones",
 	ticksPerSecond = 2,
