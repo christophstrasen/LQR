@@ -21,11 +21,14 @@ local clock = {
 	end,
 }
 
+local visualsTTL = (defaults.visualsTTL or 2.5) * (defaults.visualsTTLFactor or 1)
+
 local runtime = Runtime.new({
 	maxLayers = 1,
 	adjustInterval = defaults.adjustInterval or 0.5,
 	header = adapter.header,
-	visualsTTL = defaults.visualsTTL or 2.5,
+	visualsTTL = visualsTTL,
+	visualsTTLFactor = 1,
 	maxColumns = defaults.maxColumns,
 	maxRows = defaults.maxRows,
 	startId = defaults.startId,

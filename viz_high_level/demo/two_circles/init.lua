@@ -146,6 +146,7 @@ end
 
 TwoCirclesDemo.loveDefaults = {
 	label = "two circles",
+	visualsTTLFactor = 1.2,
 	ticksPerSecond = 1,
 	visualsTTL = JOINT_TTL,
 	adjustInterval = 0.25,

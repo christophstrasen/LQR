@@ -169,6 +169,8 @@ function LoveRunner.bootstrap(opts)
 	local scenario = require(opts.scenarioModule)
 	local defaults = scenario.loveDefaults or {}
 	local visualsTTL = opts.visualsTTL or defaults.visualsTTL or 3
+	local visualsTTLFactor = opts.visualsTTLFactor or defaults.visualsTTLFactor or 1
+	local effectiveVisualsTTL = visualsTTL * visualsTTLFactor
 	local ticksPerSecond = opts.ticksPerSecond or defaults.ticksPerSecond or 0
 	local adjustInterval = opts.adjustInterval or defaults.adjustInterval or 1.5
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
@@ -177,7 +179,7 @@ function LoveRunner.bootstrap(opts)
 	local lockWindow = defaults.lockWindow or opts.lockWindow
 	local clockMode = opts.clockMode or defaults.clockMode or "love" -- "driver" keeps time in scenario/driver, "love" advances per frame
 	local clockRate = opts.clockRate or defaults.clockRate or ticksPerSecond or 1
-	local fadeBudget = visualsTTL * 1.2
+	local fadeBudget = effectiveVisualsTTL * 1.2
 	local clock = {
 		value = 0,
 		now = function(self)
@@ -195,7 +197,7 @@ function LoveRunner.bootstrap(opts)
 		background = background,
 		clock = clock,
 		fadeStop = nil,
-		visualsTTL = visualsTTL,
+		visualsTTL = effectiveVisualsTTL,
 	}
 
 	local scenarioClock = (clockMode == "driver") and clock or nil
@@ -210,7 +212,8 @@ function LoveRunner.bootstrap(opts)
 			palette = state.attachment.palette,
 			adjustInterval = adjustInterval,
 			header = state.attachment.header,
-			visualsTTL = visualsTTL,
+			visualsTTL = effectiveVisualsTTL,
+			visualsTTLFactor = 1,
 			maxColumns = defaults.maxColumns,
 			maxRows = defaults.maxRows,
 			startId = defaults.startId,

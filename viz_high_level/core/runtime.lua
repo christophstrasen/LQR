@@ -56,7 +56,11 @@ self.windowConfig.mapping = opts.mapping or "linear"
 	self.maxLayers = opts.maxLayers or math.max(joinCount, 2)
 	self.palette = opts.palette or {}
 	self.header = opts.header or {}
-	self.visualsTTL = opts.visualsTTL or opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
+	local visualsTTLFactor = opts.visualsTTLFactor or 1
+	if visualsTTLFactor < 0 then
+		visualsTTLFactor = 0
+	end
+	self.visualsTTL = (opts.visualsTTL or opts.adjustInterval or DEFAULT_ADJUST_INTERVAL) * visualsTTLFactor
 	local ttlFactor = opts.activeCellTTLFactor
 	if ttlFactor == nil then
 		ttlFactor = 1
