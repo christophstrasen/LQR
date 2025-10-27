@@ -6,6 +6,7 @@ local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
 
 local PLAY_DURATION = 10
+local JOINT_TTL = 3
 local demoClock = {
 	value = 0,
 	now = function(self)
@@ -26,7 +27,7 @@ local function build()
 		:innerJoin(orders, "orders")
 		:onSchemas({ customers = "id", orders = "customerId" })
 		:window({
-			time = PLAY_DURATION,
+			time = JOINT_TTL,
 			field = "sourceTime",
 			currentFn = function()
 				return demoClock:now()
@@ -54,9 +55,9 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 0.3,
 			mode = "random",
-			rate = 8,
+			rate = 2,
 			t0 = 0.0,
-			t1 = 0.5,
+			t1 = 0.7,
 			rate_shape = "bell",
 			idField = "id",
 		},
@@ -69,9 +70,9 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 0.2,
 			mode = "random",
-			rate = 8,
+			rate = 2,
 			t0 = 0.1,
-			t1 = 0.6,
+			t1 = 0.98,
 			rate_shape = "linear_down",
 			idField = "id",
 			payloadForId = function(id)
@@ -89,13 +90,15 @@ local function buildTimeline()
 		grid = { startId = 0, columns = 10, rows = 10 },
 		stampSourceTime = true,
 		clock = demoClock,
-		debug = { logger = function(msg)
-			if Log and Log.debug then
-				Log.debug(msg)
-			else
-				print(msg)
-			end
-		end },
+		debug = {
+			logger = function(msg)
+				if Log and Log.debug then
+					Log.debug(msg)
+				else
+					print(msg)
+				end
+			end,
+		},
 		snapshots = {
 			{ tick = PLAY_DURATION * 0.2, label = "rise" },
 			{ tick = PLAY_DURATION * 0.55, label = "mix" },
@@ -143,9 +146,11 @@ end
 
 TwoCirclesDemo.loveDefaults = {
 	label = "two circles",
-	ticksPerSecond = 2,
-	visualsTTL = PLAY_DURATION,
-	adjustInterval = 0.5,
+	ticksPerSecond = 1,
+	visualsTTL = JOINT_TTL,
+	adjustInterval = 0.25,
+	clockMode = "driver",
+	clockRate = 1,
 	totalPlaybackTime = PLAY_DURATION,
 	maxColumns = 10,
 	maxRows = 10,

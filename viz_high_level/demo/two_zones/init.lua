@@ -150,6 +150,8 @@ TwoZonesDemo.loveDefaults = {
 	ticksPerSecond = 2,
 	visualsTTL = 4,
 	adjustInterval = 0.5,
+	clockMode = "driver",
+	clockRate = 2,
 	totalPlaybackTime = PLAY_DURATION,
 }
 

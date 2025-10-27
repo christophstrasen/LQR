@@ -78,6 +78,9 @@ function Driver.new(args)
 			return
 		end
 		local deltaTicks = math.max(0, (dt or 0) * ticksPerSecond)
+		if clock and clock.set and clock.now then
+			clock:set(clock:now() + deltaTicks)
+		end
 		scheduler:advance(deltaTicks)
 		if scheduler:isFinished() then
 			finalize()
@@ -87,6 +90,9 @@ function Driver.new(args)
 	function driver:runUntil(targetTick)
 		if driver.finished then
 			return
+		end
+		if clock and clock.set then
+			clock:set(targetTick)
 		end
 		scheduler:runUntil(targetTick)
 		if scheduler:isFinished() then
@@ -99,6 +105,9 @@ function Driver.new(args)
 			return
 		end
 		scheduler:drain()
+		if clock and clock.set and scheduler and scheduler:currentTick() then
+			clock:set(scheduler:currentTick())
+		end
 		finalize()
 	end
 

@@ -175,16 +175,33 @@ function LoveRunner.bootstrap(opts)
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
 	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
 	local lockWindow = defaults.lockWindow or opts.lockWindow
+	local clockMode = opts.clockMode or defaults.clockMode or "love" -- "driver" keeps time in scenario/driver, "love" advances per frame
+	local clockRate = opts.clockRate or defaults.clockRate or ticksPerSecond or 1
+	local fadeBudget = visualsTTL * 1.2
+	local clock = {
+		value = 0,
+		now = function(self)
+			return self.value or 0
+		end,
+		set = function(self, v)
+			self.value = v or 0
+		end,
+	}
 
 	local state = {
 		attachment = nil,
 		runtime = nil,
 		driver = nil,
 		background = background,
+		clock = clock,
+		fadeStop = nil,
+		visualsTTL = visualsTTL,
 	}
 
+	local scenarioClock = (clockMode == "driver") and clock or nil
+
 	local function startScenario()
-		local demo = assert(scenario.build(), "scenario build() must return subjects + builder")
+		local demo = assert(scenario.build(scenarioClock), "scenario build() must return subjects + builder")
 		assert(demo.builder, "scenario build() result missing builder")
 		assert(demo.subjects, "scenario build() result missing subjects")
 		state.attachment = QueryVizAdapter.attach(demo.builder)
@@ -201,13 +218,14 @@ function LoveRunner.bootstrap(opts)
 		})
 
 		state.attachment.normalized:subscribe(function(event)
-			state.runtime:ingest(event, love.timer.getTime())
+			state.runtime:ingest(event, state.clock:now())
 		end)
 
 		state.attachment.query:subscribe(function() end)
 
 		state.driver = scenario.start and scenario.start(demo.subjects, {
 			ticksPerSecond = ticksPerSecond,
+			clock = scenarioClock,
 		})
 		if (not state.driver) and scenario.complete then
 			scenario.complete(demo.subjects)
@@ -222,6 +240,22 @@ function LoveRunner.bootstrap(opts)
 
 	function love.update(dt)
 		local driver = state.driver
+
+		if clockMode == "driver" then
+			-- In driver mode the scheduler advances the shared clock until it finishes.
+			-- After completion, we continue to advance time for a short fade so visuals expire.
+			if driver and driver.isFinished and driver:isFinished() then
+				if not state.fadeStop then
+					state.fadeStop = state.clock:now() + fadeBudget
+				end
+				if state.clock:now() < state.fadeStop then
+					state.clock:set(state.clock:now() + (dt or 0) * clockRate)
+				end
+			end
+		else
+			state.clock:set(state.clock:now() + (dt or 0) * clockRate)
+		end
+
 		if driver and driver.update then
 			driver:update(dt)
 		end
@@ -233,7 +267,7 @@ function LoveRunner.bootstrap(opts)
 		if not runtime then
 			return
 		end
-		local snapshot = Renderer.render(runtime, attachment.palette, love.timer.getTime())
+		local snapshot = Renderer.render(runtime, attachment.palette, state.clock:now())
 		DebugViz.snapshot(snapshot, { label = "love-frame" })
 		drawSnapshot(snapshot, state.background)
 	end
