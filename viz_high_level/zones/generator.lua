@@ -205,7 +205,7 @@ end
 
 ---Generate deterministic events from zone specs.
 ---@param zones table[] list of zone specs
----@param opts table additional options (totalPlaybackTime required, playStart optional)
+---@param opts table additional options (totalPlaybackTime required, playStart optional, grid optional, stampSourceTime optional, clock optional)
 ---@return table events sorted by tick
 ---@return table summary
 function Generator.generate(zones, opts)
@@ -281,6 +281,24 @@ function Generator.generate(zones, opts)
 			end
 			if effectiveId then
 				local payload = buildPayload(zone, effectiveId)
+				if opts.stampSourceTime and type(payload) == "table" then
+					payload.RxMeta = payload.RxMeta or {}
+					payload.RxMeta.sourceTime = tick
+					payload.RxMeta.schema = payload.RxMeta.schema or zone.schema
+					payload.RxMeta.id = payload.RxMeta.id or payload.id
+					if opts.debug then
+						local logger = opts.debug.logger or print
+						logger(
+							string.format(
+								"[zone_gen] zone=%s schema=%s id=%s tick=%.3f",
+								tostring(zoneLabel),
+								tostring(zone.schema),
+								tostring(effectiveId),
+								tick
+							)
+						)
+					end
+				end
 				local event = {
 					tick = tick,
 					schema = zone.schema,

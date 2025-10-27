@@ -6,6 +6,15 @@ local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
 
 local PLAY_DURATION = 10
+local demoClock = {
+	value = 0,
+	now = function(self)
+		return self.value or 0
+	end,
+	set = function(self, v)
+		self.value = v or 0
+	end,
+}
 
 local function build()
 	-- Subjects are wrapped with schema metadata so QueryVizAdapter can resolve keys.
@@ -16,7 +25,13 @@ local function build()
 	local builder = Query.from(customers, "customers")
 		:innerJoin(orders, "orders")
 		:onSchemas({ customers = "id", orders = "customerId" })
-		:window({ count = 20 })
+		:window({
+			time = PLAY_DURATION,
+			field = "sourceTime",
+			currentFn = function()
+				return demoClock:now()
+			end,
+		})
 
 	return {
 		subjects = {
@@ -72,6 +87,15 @@ local function buildTimeline()
 		totalPlaybackTime = PLAY_DURATION,
 		completeDelay = 0.5,
 		grid = { startId = 0, columns = 10, rows = 10 },
+		stampSourceTime = true,
+		clock = demoClock,
+		debug = { logger = function(msg)
+			if Log and Log.debug then
+				Log.debug(msg)
+			else
+				print(msg)
+			end
+		end },
 		snapshots = {
 			{ tick = PLAY_DURATION * 0.2, label = "rise" },
 			{ tick = PLAY_DURATION * 0.55, label = "mix" },
@@ -79,8 +103,6 @@ local function buildTimeline()
 		},
 	})
 end
-
-local TWO_CIRCLES_EVENTS, TWO_CIRCLES_SNAPSHOTS, TWO_CIRCLES_SUMMARY = buildTimeline()
 
 ---@return table
 function TwoCirclesDemo.build()
@@ -102,10 +124,15 @@ end
 function TwoCirclesDemo.start(subjects, opts)
 	opts = opts or {}
 	local ticksPerSecond = opts.ticksPerSecond or 2
-	local clock = opts.clock
+	local clock = opts.clock or demoClock
+	demoClock = clock
+	local events, snapshots, summary = buildTimeline()
+	TwoCirclesDemo.snapshots = snapshots
+	TwoCirclesDemo.timeline = events
+	TwoCirclesDemo.summary = summary
 
 	return Driver.new({
-		events = TWO_CIRCLES_EVENTS,
+		events = events,
 		subjects = subjects,
 		ticksPerSecond = ticksPerSecond,
 		clock = clock,
@@ -114,13 +141,10 @@ function TwoCirclesDemo.start(subjects, opts)
 	})
 end
 
-TwoCirclesDemo.snapshots = TWO_CIRCLES_SNAPSHOTS
-TwoCirclesDemo.timeline = TWO_CIRCLES_EVENTS
-TwoCirclesDemo.summary = TWO_CIRCLES_SUMMARY
 TwoCirclesDemo.loveDefaults = {
 	label = "two circles",
 	ticksPerSecond = 2,
-	visualsTTL = 15,
+	visualsTTL = PLAY_DURATION,
 	adjustInterval = 0.5,
 	totalPlaybackTime = PLAY_DURATION,
 	maxColumns = 10,

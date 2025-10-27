@@ -17,6 +17,8 @@ function ZonesTimeline.build(zones, opts)
 		totalPlaybackTime = totalPlaybackTime,
 		playStart = playStart,
 		grid = opts.grid,
+		stampSourceTime = opts.stampSourceTime,
+		clock = opts.clock,
 	}
 	local events, summary = Zones.generator.generate(zones or {}, genOpts)
 
