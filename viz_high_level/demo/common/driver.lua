@@ -9,7 +9,7 @@ function Driver.new(args)
 	local events = assert(args.events, "driver requires events")
 	local subjects = assert(args.subjects, "driver requires subjects")
 	local label = args.label or "demo"
-	local ticksPerSecond = args.ticksPerSecond or 2
+	local ticksPerSecond = args.playbackSpeed or args.ticksPerSecond or 2
 	local clock = args.clock
 	local completeAll = args.onCompleteAll
 

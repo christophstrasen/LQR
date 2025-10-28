@@ -171,14 +171,14 @@ function LoveRunner.bootstrap(opts)
 	local visualsTTL = opts.visualsTTL or defaults.visualsTTL or 3
 	local visualsTTLFactor = opts.visualsTTLFactor or defaults.visualsTTLFactor or 1
 	local effectiveVisualsTTL = visualsTTL * visualsTTLFactor
-	local ticksPerSecond = opts.ticksPerSecond or defaults.ticksPerSecond or 0
+	local playbackSpeed = opts.playbackSpeed or defaults.playbackSpeed or defaults.ticksPerSecond or 0
 	local adjustInterval = opts.adjustInterval or defaults.adjustInterval or 1.5
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
 	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
 	local lockWindow = defaults.lockWindow or opts.lockWindow
 	local clockMode = opts.clockMode or defaults.clockMode or "love" -- "driver" keeps time in scenario/driver, "love" advances per frame
-	local clockRate = opts.clockRate or defaults.clockRate or ticksPerSecond or 1
+	local clockRate = opts.clockRate or defaults.clockRate or playbackSpeed or 1
 	local fadeBudget = effectiveVisualsTTL * 1.2
 	local clock = {
 		value = 0,
@@ -227,7 +227,8 @@ function LoveRunner.bootstrap(opts)
 		state.attachment.query:subscribe(function() end)
 
 		state.driver = scenario.start and scenario.start(demo.subjects, {
-			ticksPerSecond = ticksPerSecond,
+			playbackSpeed = playbackSpeed,
+			ticksPerSecond = playbackSpeed,
 			clock = scenarioClock,
 		})
 		if (not state.driver) and scenario.complete then

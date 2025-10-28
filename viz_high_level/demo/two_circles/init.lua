@@ -51,7 +51,7 @@ local function buildZones()
 			schema = "customers",
 			center = 45,
 			range = 1, --invalid for circle shapes
-			radius = 7,
+			radius = 4,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
@@ -66,14 +66,14 @@ local function buildZones()
 			schema = "orders",
 			center = 55,
 			range = 1, --invalid for circle shapes
-			radius = 7,
+			radius = 3,
 			shape = "circle10",
-			coverage = 0.1,
+			coverage = 1,
 			mode = "random",
-			rate = 10,
+			rate = 20,
 			t0 = 0.1,
 			t1 = 0.98,
-			rate_shape = "linear",
+			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)
 				return { id = id, orderId = 500 + id, customerId = id, total = 30 + ((id % 4) * 5) }
@@ -126,7 +126,7 @@ end
 ---@return table driver
 function TwoCirclesDemo.start(subjects, opts)
 	opts = opts or {}
-	local ticksPerSecond = opts.ticksPerSecond or 2
+	local ticksPerSecond = opts.playbackSpeed or opts.ticksPerSecond or 2
 	local clock = opts.clock or demoClock
 	demoClock = clock
 	local events, snapshots, summary = buildTimeline()
@@ -147,7 +147,7 @@ end
 TwoCirclesDemo.loveDefaults = {
 	label = "two circles",
 	visualsTTLFactor = 1.2,
-	ticksPerSecond = 1,
+	playbackSpeed = 0.7,
 	visualsTTL = JOINT_TTL,
 	adjustInterval = 0.25,
 	clockMode = "driver",

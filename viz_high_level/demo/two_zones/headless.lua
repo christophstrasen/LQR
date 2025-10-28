@@ -35,7 +35,7 @@ end)
 adapter.query:subscribe(function() end)
 
 local driver = TwoZonesDemo.start(demo.subjects, {
-	ticksPerSecond = defaults.ticksPerSecond or 2,
+	playbackSpeed = defaults.playbackSpeed or defaults.ticksPerSecond or 2,
 	clock = clock,
 })
 

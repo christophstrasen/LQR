@@ -112,9 +112,29 @@ end
 
 local function applyCoverage(cells, coverage)
 	local keep = math.max(1, math.floor(#cells * coverage + 0.5))
+	if keep >= #cells then
+		return cells
+	end
+	-- Deterministic shuffle of indices so coverage spreads gaps across the whole mask.
+	local indices = {}
+	for i = 1, #cells do
+		indices[i] = i
+	end
+	local a, c, m = 1664525, 1013904223, 2 ^ 32
+	local seed = 42
+	for i = #indices, 2, -1 do
+		seed = (a * seed + c) % m
+		local j = (seed % i) + 1
+		indices[i], indices[j] = indices[j], indices[i]
+	end
+	local picked = {}
+	for i = 1, keep do
+		picked[i] = indices[i]
+	end
+	table.sort(picked) -- preserve original ordering for monotonic modes
 	local selected = {}
-	for i = 1, math.min(keep, #cells) do
-		selected[#selected + 1] = cells[i]
+	for _, idx in ipairs(picked) do
+		selected[#selected + 1] = cells[idx]
 	end
 	return selected
 end

@@ -265,7 +265,13 @@ function ShapeWeights.build(zone)
 
 	local size = shape:match("^circle(%d+)$")
 	if size then
-		local maskSize = tonumber(zone.radius) or tonumber(size)
+		local radiusOverride = tonumber(zone.radius)
+		local maskSize
+		if radiusOverride then
+			-- Interpret radius as actual radius in grid cells; masks operate on side-length.
+			maskSize = math.max(1, math.floor(radiusOverride * 2))
+		end
+		maskSize = maskSize or tonumber(size)
 		return buildCircleMask(maskSize)
 	end
 

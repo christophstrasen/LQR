@@ -129,7 +129,7 @@ end
 ---@return table driver
 function TwoZonesDemo.start(subjects, opts)
 	opts = opts or {}
-	local ticksPerSecond = opts.ticksPerSecond or 2
+	local ticksPerSecond = opts.playbackSpeed or opts.ticksPerSecond or 2
 	local clock = opts.clock
 
 	return Driver.new({
@@ -147,7 +147,7 @@ TwoZonesDemo.timeline = TWO_ZONES_EVENTS
 TwoZonesDemo.summary = TWO_ZONES_SUMMARY
 TwoZonesDemo.loveDefaults = {
 	label = "two zones",
-	ticksPerSecond = 2,
+	playbackSpeed = 2,
 	visualsTTL = 4,
 	adjustInterval = 0.5,
 	clockMode = "driver",

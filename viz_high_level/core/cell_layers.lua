@@ -72,14 +72,17 @@ end
 
 function CellLayer:addLayer(opts)
 	local key = opts.id or opts.key or tostring(nowSeconds())
+	local ts = opts.ts or nowSeconds()
 	self.layers[key] = {
 		id = key,
 		color = cloneColor(opts.color),
-		ts = opts.ts or nowSeconds(),
+		ts = ts,
 		ttl = opts.ttl or self.defaultTTL or 1,
 		label = opts.label,
 	}
 	self.show = (self.show ~= false)
+	-- Refresh computed color immediately so repeat adds restore full intensity.
+	self:update(ts)
 	return self
 end
 
