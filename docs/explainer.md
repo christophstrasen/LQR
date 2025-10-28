@@ -44,6 +44,10 @@ Garbage-collection knobs (`gcOnInsert`, `gcIntervalSeconds`) decide when we actu
 
 Whenever a record leaves the retention window we emit an **expire packet** on `QueryBuilder:expired()`. Treat that stream as visibility into churn: if you see records expiring before they ever matched, consider a larger window or investing into tighter syncing of key orders in your sources.
 
+### 5. Streaming joins and event counts
+
+Joins operate on *events in a window*, not unique ids. A single emission can fan out to multiple join results if the window already contains several matching partners. Example: seven orders sit in a 3s window; one customer event with a matching `customerId` can produce up to seven join events. Re‑emitting the same id later will generate more join events as long as partners remain in the window. Header counters in the viz (`source`, `joined`, `expired`) therefore reflect event counts, not distinct ids currently visible.
+
 ### 5. Visualizing Reactive Joins
 
 Reactive joins are inherently dynamic, but you can still visualize them. We ship a 1‑D “grid” renderer that maps record IDs. It’s ideal when your join keys live in a single numeric domain (e.g., customer IDs).

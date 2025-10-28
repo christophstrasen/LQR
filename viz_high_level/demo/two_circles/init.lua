@@ -5,7 +5,7 @@ local SchemaHelpers = require("tests.support.schema_helpers")
 local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
 
-local PLAY_DURATION = 10
+local PLAY_DURATION = 20
 local JOINT_TTL = 3
 local demoClock = {
 	value = 0,
@@ -50,30 +50,30 @@ local function buildZones()
 			label = "cust_circle",
 			schema = "customers",
 			center = 45,
-			range = 1,
+			range = 1, --invalid for circle shapes
 			radius = 7,
 			shape = "circle10",
-			coverage = 0.3,
+			coverage = 1,
 			mode = "random",
-			rate = 2,
+			rate = 4,
 			t0 = 0.0,
 			t1 = 0.7,
-			rate_shape = "bell",
+			rate_shape = "linear",
 			idField = "id",
 		},
 		{
 			label = "ord_circle",
 			schema = "orders",
 			center = 55,
-			range = 1,
+			range = 1, --invalid for circle shapes
 			radius = 7,
 			shape = "circle10",
-			coverage = 0.2,
+			coverage = 0.1,
 			mode = "random",
-			rate = 2,
+			rate = 10,
 			t0 = 0.1,
 			t1 = 0.98,
-			rate_shape = "linear_down",
+			rate_shape = "linear",
 			idField = "id",
 			payloadForId = function(id)
 				return { id = id, orderId = 500 + id, customerId = id, total = 30 + ((id % 4) * 5) }

@@ -30,7 +30,7 @@ describe("zone generator", function()
 		}, ids)
 	end)
 
-	it("uses density and rate shapes to emit deterministic events", function()
+	it("uses coverage and rate shapes to emit deterministic events without slowing rate", function()
 		local events, summary = Generator.generate({
 			{
 				label = "a",
@@ -38,7 +38,7 @@ describe("zone generator", function()
 				center = 10,
 				range = 2,
 				shape = "continuous",
-				density = 0.5, -- selects 3 of 5 ids
+				density = 0.5, -- selects 3 of 5 ids but keeps rate based on the full span
 				t0 = 0,
 				t1 = 1,
 				rate_shape = "linear_up",
@@ -49,17 +49,22 @@ describe("zone generator", function()
 			playStart = 0,
 		})
 
-		assert.are.equal(3, #events)
-		local ids = { events[1].payload.id, events[2].payload.id, events[3].payload.id }
+		assert.are.equal(5, #events)
+		local ids = {}
+		for i = 1, #events do
+			ids[#ids + 1] = events[i].payload.id
+		end
 		table.sort(ids)
-		assert.are.same({ 8, 9, 10 }, ids)
-		-- Rate weights 1,2,3 over span -> ticks ~ 1.67, 5.00, 10.00
+		assert.are.same({ 8, 8, 9, 9, 10 }, ids)
+		-- Rate weights 1..5 over span -> ticks strictly increasing
 		assert.is_true(events[1].tick < events[2].tick)
 		assert.is_true(events[2].tick < events[3].tick)
+		assert.is_true(events[3].tick < events[4].tick)
+		assert.is_true(events[4].tick < events[5].tick)
 
-		assert.are.same(3, summary.total)
-		assert.are.same(3, summary.schemas.customers.count)
-		assert.are.same({ a = 3 }, summary.schemas.customers.perZone)
+		assert.are.same(5, summary.total)
+		assert.are.same(5, summary.schemas.customers.count)
+		assert.are.same({ a = 5 }, summary.schemas.customers.perZone)
 		assert.are.same("linear", summary.mappingHint)
 	end)
 

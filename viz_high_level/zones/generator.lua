@@ -6,11 +6,29 @@ local RATE_SHAPES = {
 	constant = function(_count, idx)
 		return 1
 	end,
+	linear = function(count, idx)
+		if count <= 1 then
+			return 1
+		end
+		return idx / count
+	end,
+	linear_in = function(count, idx)
+		if count <= 1 then
+			return 1
+		end
+		return idx / count
+	end,
 	linear_up = function(count, idx)
 		if count <= 1 then
 			return 1
 		end
 		return idx / count
+	end,
+	linear_out = function(count, idx)
+		if count <= 1 then
+			return 1
+		end
+		return (count - idx + 1) / count
 	end,
 	linear_down = function(count, idx)
 		if count <= 1 then
@@ -104,10 +122,11 @@ end
 local function pickSpatialIds(zone)
 	local coverage = clamp01(assertNumber(zone.coverage or zone.density or 1, "zone.coverage"))
 	local weights = ShapeWeights.build(zone)
-	if #weights == 0 or coverage <= 0 then
-		return {}
+	local baseCount = #weights
+	if baseCount == 0 or coverage <= 0 then
+		return {}, baseCount
 	end
-	return applyCoverage(weights, coverage)
+	return applyCoverage(weights, coverage), baseCount
 end
 
 local function buildTimeSlots(zone, eventCount, opts)
@@ -227,14 +246,24 @@ function Generator.generate(zones, opts)
 		zone = ensureCircleRange(zone, warnings)
 		local zoneLabel = zone.label or string.format("zone_%d", idx)
 		local shape = zone.shape or "flat"
-		local spatial = pickSpatialIds(zone)
+		local spatial, baseCount = pickSpatialIds(zone)
+		if #spatial == 0 then
+			warnings[#warnings + 1] = string.format("zone '%s' produced no spatial ids", tostring(zoneLabel))
+		end
 		local mode = zone.mode or "random"
 		local tSpan = (clamp01(zone.t1 or 1) - clamp01(zone.t0 or 0)) * opts.totalPlaybackTime
 		if tSpan <= 0 then
 			tSpan = 1
 		end
-		local rate = zone.rate or (#spatial / tSpan)
-		local targetCount = math.max(1, math.floor(rate * tSpan + 0.5))
+		local basis = baseCount
+		if basis <= 0 then
+			basis = #spatial
+		end
+		local rate = zone.rate or (basis / tSpan)
+		local targetCount = 0
+		if #spatial > 0 then
+			targetCount = math.max(1, math.floor(rate * tSpan + 0.5))
+		end
 
 		-- Build indices into spatial according to mode.
 		local indices = {}
