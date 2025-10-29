@@ -176,3 +176,18 @@
 1. **Geometric invariants beat heuristics:** Encoding border/gap sizes explicitly gives predictable visuals and makes tests independent of magic numbers—future layout tweaks simply adjust the layout table.
 2. **Order-independent blending avoids surprises:** Treating each layer as a weighted contribution (rather than sequential overrides) keeps the viz believable when multiple schemas light up a cell at the same time.
 3. **Tests should match concepts, not literals:** By computing expectations from the layout metadata we eliminated brittle pixel constants and made the suite track the intent (fixed inner core, per-layer growth) instead of accidents of the old implementation.
+
+## Day 12 – Zones 2.0: grid-aware shapes, timing, and purity
+
+### Highlights
+- **Grid-aware zone generator:** Zones now map shapes (continuous/flat/bell/circle) directly to grid IDs, dropping projection shims. Coverage thins fills by shuffling the full mask, creating gaps without shrinking the shape.
+- **Deterministic spatial/thin logic:** Coverage no longer slows emission rate or collapses inward; it selects a spread of cells across the mask. Random modes use a fixed seed, and rate shapes support constant/linear/bell aliases to keep schedules predictable.
+- **Time controls made sane:** Introduced `playbackSpeed` as the single pacing knob (ticksPerSecond fallback). Zone timelines use `t0/t1`, `rate`, and `rate_shape` over `PLAY_DURATION`; stamping `sourceTime` aligns joins and visual TTLs. Love runner gained a shared clock with a post-complete fade budget to keep visuals expiring after streams finish.
+- **Cleaner mapping defaults:** Zones own the ID ordering per shape; demos no longer carry mapping hints. Two-circle/two-zone demos lock the window (10×10), build time-based windows on `sourceTime`, and use unified payloads (no custom projection fields).
+- **Color refresh on repeats:** `CellLayer` refreshes and recomputes color on repeated adds, so rapid re-emits stay bright instead of dimming due to TTL decay.
+
+### What we learned
+1. **Uniform rate vs. coverage:** Rate should reflect the intended pace, not how many cells are filled. Separating rate from coverage produces the right “gappy but steady” flows.
+2. **Shape-aware ordering matters:** Emission order belongs to the shape (spiral/Z-order for circles, monotonic for lines); moving mapping into the generator avoids per-demo hacks and keeps joins honest.
+3. **One clock to rule visuals and joins:** Sharing a deterministic clock across scheduler, sourceTime stamps, and renderer is essential to keep fades, expiries, and joins aligned—especially in Love where the first frame’s `dt` can jump.
+4. **Docs and tests must track intent:** Added explainer notes on streaming join counts vs. unique IDs, and adjusted generator tests for the new coverage semantics. This keeps expectations aligned with the deterministic model we want to present.
