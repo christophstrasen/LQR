@@ -1,6 +1,7 @@
 local rx = require("reactivex")
 local ScenarioLoader = require("viz_low_level.scenario_loader")
 local Observables = require("viz_low_level.observables")
+local Log = require("log").withTag("viz-lo")
 local VizConfig = ScenarioLoader.getRecipe(Observables)
 local windowConfig = VizConfig.window or {}
 local PreRender = {}
@@ -214,7 +215,11 @@ function PreRenderState:attachSource(opts)
 	assert(type(opts.extract) == "function", "opts.extract must be a function")
 
 	if DEBUG_SUBS then
-		print(string.format("[viz-sub] subscribe paletteKey=%s layer=%s", opts.paletteKey, tostring(opts.layer or "?")))
+		Log:debug(
+			"[viz-sub] subscribe paletteKey=%s layer=%s",
+			opts.paletteKey,
+			tostring(opts.layer or "?")
+		)
 	end
 	local subscription = opts.observable:subscribe(function(value)
 		local id, info = opts.extract(value)
@@ -222,15 +227,19 @@ function PreRenderState:attachSource(opts)
 			self:ingest(id, opts.paletteKey, info)
 		end
 	end)
-		self.subscriptions[#self.subscriptions + 1] = subscription
-		local function unsubscribe()
-			if DEBUG_SUBS then
-				print(string.format("[viz-sub] unsubscribe paletteKey=%s layer=%s", opts.paletteKey, tostring(opts.layer or "?")))
-			end
-			if subscription and subscription.unsubscribe then
-				subscription:unsubscribe()
-			end
+	self.subscriptions[#self.subscriptions + 1] = subscription
+	local function unsubscribe()
+		if DEBUG_SUBS then
+			Log:debug(
+				"[viz-sub] unsubscribe paletteKey=%s layer=%s",
+				opts.paletteKey,
+				tostring(opts.layer or "?")
+			)
 		end
+		if subscription and subscription.unsubscribe then
+			subscription:unsubscribe()
+		end
+	end
 	return { unsubscribe = unsubscribe }
 end
 

@@ -7,12 +7,28 @@ require("bootstrap")
 local Query = require("Query")
 local JoinObservable = require("JoinObservable")
 local SchemaHelpers = require("tests.support.schema_helpers")
+local Log = require("log")
 
 ---@diagnostic disable: undefined-global
 describe("Join high-level facade", function()
 	after_each(function()
-		JoinObservable.setWarningHandler()
+		Log.setEmitter()
 	end)
+
+	local function withCapturedWarnings(run)
+		local captured = {}
+		local previous = Log.setEmitter(function(level, message, tag)
+			if level == "warn" and (not tag or tag == "join" or tag == "query") then
+				captured[#captured + 1] = message
+			end
+		end)
+		local ok, err = pcall(run, captured)
+		Log.setEmitter(previous)
+		if not ok then
+			error(err)
+		end
+		return captured
+	end
 
 	local function collect(resultStream)
 		local buffer = {}
@@ -23,24 +39,24 @@ describe("Join high-level facade", function()
 	end
 
 	it("warns when onField is missing on incoming records", function()
-		local warnings = {}
-		JoinObservable.setWarningHandler(function(message)
-			warnings[#warnings + 1] = message
+		local warnings
+		local results
+		withCapturedWarnings(function(captured)
+			warnings = captured
+			local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
+			local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
+
+			local joined = Query.from(left, "left")
+				:innerJoin(right, "right")
+				:onField("customerId")
+
+			results = collect(joined)
+
+			leftSubject:onNext({ id = 1 })
+			rightSubject:onNext({ id = 10 })
+			leftSubject:onCompleted()
+			rightSubject:onCompleted()
 		end)
-
-		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
-		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
-
-		local joined = Query.from(left, "left")
-			:innerJoin(right, "right")
-			:onField("customerId")
-
-		local results = collect(joined)
-
-		leftSubject:onNext({ id = 1 })
-		rightSubject:onNext({ id = 10 })
-		leftSubject:onCompleted()
-		rightSubject:onCompleted()
 
 		assert.are.equal(0, #results)
 		assert.is_true(#warnings > 0)

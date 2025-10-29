@@ -1,6 +1,7 @@
 local Driver = {}
 
 local Scheduler = require("viz_high_level.demo.scheduler")
+local Log = require("log").withTag("viz-hi")
 
 ---Create a standard demo driver around Scheduler.
 ---@param args table

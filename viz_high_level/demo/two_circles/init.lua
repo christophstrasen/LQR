@@ -4,6 +4,7 @@ local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
+local Log = require("log").withTag("viz-hi")
 
 local PLAY_DURATION = 20
 local JOINT_TTL = 3
@@ -92,11 +93,7 @@ local function buildTimeline()
 		clock = demoClock,
 		debug = {
 			logger = function(msg)
-				if Log and Log.debug then
-					Log.debug(msg)
-				else
-					print(msg)
-				end
+				Log:debug("%s", msg)
 			end,
 		},
 		snapshots = {

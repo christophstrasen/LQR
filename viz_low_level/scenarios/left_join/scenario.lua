@@ -1,4 +1,5 @@
 local rx = require("reactivex")
+local Log = require("log").withTag("viz-lo")
 local Profiles = require("viz_low_level.scenarios.left_join.profiles")
 local ConfigUtils = require("viz_low_level.config_utils")
 
@@ -54,11 +55,11 @@ local streams = Profiles.streams
 
 local function loveScheduler(delaySeconds, fn)
 	if os.getenv("DEBUG") == "1" then
-		print(string.format("[viz] scheduling GC tick in %.3fs", delaySeconds or 0))
+		Log:debug("[viz] scheduling GC tick in %.3fs", delaySeconds or 0)
 	end
 	local sub = rx.scheduler.schedule(function()
 		if os.getenv("DEBUG") == "1" then
-			print("[viz] executing scheduled GC tick")
+			Log:debug("[viz] executing scheduled GC tick")
 		end
 		fn()
 	end, delaySeconds or 0)

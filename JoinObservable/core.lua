@@ -4,9 +4,7 @@ local Schema = require("JoinObservable.schema")
 local Result = require("JoinObservable.result")
 local Strategies = require("JoinObservable.strategies")
 local Expiration = require("JoinObservable.expiration")
-local warnings = require("JoinObservable.warnings")
-
-local warnf = warnings.warnf
+local Log = require("log").withTag("join")
 
 local JoinObservableCore = {}
 
@@ -190,7 +188,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		end
 		local ok, err = pcall(vizEmit, event)
 		if not ok then
-			warnf("Visualization sink failed: %s", tostring(err))
+			Log:warn("Visualization sink failed: %s", tostring(err))
 		end
 	end
 	if gcOnInsert == nil then
@@ -387,7 +385,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 
 				if not scheduleFn then
 					-- Warn loudly since GC was requested but cannot run.
-					warnf("[JoinObservable] gcIntervalSeconds configured but no scheduler available; GC disabled")
+					Log:warn("[JoinObservable] gcIntervalSeconds configured but no scheduler available; GC disabled")
 					return
 				else
 					debugf("gcIntervalSeconds using custom scheduler")
@@ -418,11 +416,11 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				local schemaName = meta.schema
 				local ok, key = pcall(keySelector, entry, side, schemaName)
 				if not ok then
-					warnf("Dropped %s entry because key selector errored: %s", side, tostring(key))
+					Log:warn("Dropped %s entry because key selector errored: %s", side, tostring(key))
 					return
 				end
 				if key == nil then
-					warnf("Dropped %s entry because join key resolved to nil", side)
+					Log:warn("Dropped %s entry because join key resolved to nil", side)
 					return
 				end
 				meta.joinKey = key
@@ -484,7 +482,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		local subscription
 		subscription = merged:subscribe(function(record)
 			if type(record) ~= "table" then
-				warnf("Ignoring record emitted as %s (expected table)", type(record))
+				Log:warn("Ignoring record emitted as %s (expected table)", type(record))
 				return
 			end
 

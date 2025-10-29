@@ -1,8 +1,7 @@
 -- High-level visualization adapter: taps Query builder joins to emit normalized events
 -- (sources, matches, expirations) for dynamic renderers without touching core scheduling.
 local rx = require("reactivex")
-local warnings = require("JoinObservable.warnings")
-local warnf = warnings and warnings.warnf or function() end
+local Log = require("log").withTag("join")
 
 local QueryVizAdapter = {}
 
@@ -409,7 +408,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	local totalSteps = #(plan.joins or {})
 	local depthForStep = buildDepthResolver(totalSteps, maxLayers)
 	if not planHasSchemaMapping(plan) then
-		warnf("[QueryVizAdapter] Visualization requires Query:onSchemas mappings to derive projection domains")
+		Log:warn("[QueryVizAdapter] Visualization requires Query:onSchemas mappings to derive projection domains")
 	end
 
 	local primaries = queryBuilder.primarySchemas and queryBuilder:primarySchemas() or (plan.from or {})

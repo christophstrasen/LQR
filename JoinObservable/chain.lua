@@ -1,8 +1,6 @@
 local rx = require("reactivex")
 local Result = require("JoinObservable.result")
-local warnings = require("JoinObservable.warnings")
-
-local warnf = warnings.warnf
+local Log = require("log").withTag("join")
 
 local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
 	targetRecord.RxMeta = targetRecord.RxMeta or {}
@@ -19,7 +17,7 @@ local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
 		targetRecord.RxMeta.sourceTime = fallbackMeta and fallbackMeta.sourceTime or nil
 	end
 	if fallbackMeta == nil and targetRecord.RxMeta.joinKey == nil then
-		warnf("JoinObservable.chain emitted record without RxMeta.joinKey; mapper should preserve metadata")
+		Log:warn("JoinObservable.chain emitted record without RxMeta.joinKey; mapper should preserve metadata")
 	end
 end
 
@@ -109,7 +107,7 @@ function Chain.chain(resultStream, opts)
 					copyMetaDefaults(output, fallbackMeta, mapping.renameTo)
 					observer:onNext(output)
 				else
-					warnf("JoinObservable.chain skipping missing schema '%s'", mapping.schema)
+					Log:warn("JoinObservable.chain skipping missing schema '%s'", mapping.schema)
 				end
 			end
 		end, function(err)

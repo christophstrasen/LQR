@@ -1,4 +1,5 @@
 local rx = require("reactivex")
+local Log = require("log").withTag("viz-lo")
 local TimeUtils = require("viz_low_level.time_utils")
 
 local DEBUG_TIMING = os.getenv("DEBUG_TIMING") == "1" or os.getenv("DEBUG") == "1"
@@ -102,7 +103,7 @@ function RandomDelay.withDelay(source, opts)
 						local schema = value.RxMeta.schema or "?"
 						local id = value.RxMeta.id or value.id or "?"
 						local ts = value.RxMeta.sourceTime or -1
-						print(string.format("[timing] emit schema=%s id=%s ts=%.3f", schema, tostring(id), ts))
+						Log:debug("[timing] emit schema=%s id=%s ts=%.3f", schema, tostring(id), ts)
 					end
 				end
 

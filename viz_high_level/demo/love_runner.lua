@@ -1,4 +1,4 @@
-local Log = require("log")
+local Log = require("log").withTag("viz-hi")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local Runtime = require("viz_high_level.core.runtime")
 local Renderer = require("viz_high_level.core.headless_renderer")
@@ -238,7 +238,8 @@ function LoveRunner.bootstrap(opts)
 
 	function love.load()
 		love.window.setMode(windowWidth, windowHeight, { resizable = true })
-		Log.info(string.format("Initializing high-level viz demo (%s)", tostring(opts.scenarioModule)))
+		local scenarioName = tostring(opts.scenarioModule or "unknown")
+		Log:info("Initializing high-level viz demo (%s)", scenarioName)
 		startScenario()
 	end
 

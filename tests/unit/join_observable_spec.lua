@@ -10,6 +10,7 @@ local SchemaHelpers = require("tests.support.schema_helpers")
 local Result = require("JoinObservable.result")
 
 local Schema = require("JoinObservable.schema")
+local Log = require("log")
 
 local function collectValues(observable)
 	local results = {}
@@ -51,6 +52,21 @@ local function summarizePairs(pairs)
 	return summary
 end
 
+local function withCapturedWarnings(fn)
+	local captured = {}
+	local previous = Log.setEmitter(function(level, message, tag)
+		if level == "warn" and (not tag or tag == "join") then
+			table.insert(captured, message)
+		end
+	end)
+	local ok, err = pcall(fn, captured)
+	Log.setEmitter(previous)
+	if not ok then
+		error(err)
+	end
+	return captured
+end
+
 local function expiredEntry(packet)
 	if not packet then
 		return nil, nil
@@ -69,7 +85,7 @@ local ordersCustomersOn = {
 ---@diagnostic disable: undefined-field
 describe("JoinObservable", function()
 	after_each(function()
-		JoinObservable.setWarningHandler()
+		Log.setEmitter()
 	end)
 
 	describe("JoinResult helper", function()
@@ -181,18 +197,17 @@ describe("Schema.wrap id enforcement", function()
 	it("drops records missing the configured id field", function()
 		local subject = rx.Subject.create()
 		local wrapped = Schema.wrap("events", subject, { idField = "uuid" })
-		local seen, warningsRaised = {}, {}
-		JoinObservable.setWarningHandler(function(message)
-			table.insert(warningsRaised, message)
-		end)
+		local seen = {}
+		local warningsRaised = withCapturedWarnings(function(captured)
+			warningsRaised = captured
+			wrapped:subscribe(function(record)
+				table.insert(seen, record)
+			end)
 
-		wrapped:subscribe(function(record)
-			table.insert(seen, record)
+			subject:onNext({ payload = "missing" }) -- dropped
+			subject:onNext({ uuid = "present" })
+			subject:onCompleted()
 		end)
-
-		subject:onNext({ payload = "missing" }) -- dropped
-		subject:onNext({ uuid = "present" })
-		subject:onCompleted()
 
 		assert.are.equal(1, #seen)
 		assert.are.equal("present", seen[1].RxMeta.id)
@@ -611,7 +626,7 @@ end)
 	end)
 
 	it("ignores malformed records emitted by a custom merge observable", function()
-		JoinObservable.setWarningHandler(function() end)
+		Log.setEmitter(function() end)
 
 		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 5 },
@@ -728,7 +743,7 @@ end)
 	end)
 
 	it("drops entries whose key selector returns nil", function()
-		local previousHandler = JoinObservable.setWarningHandler(function() end)
+		local previousEmitter = Log.setEmitter(function() end)
 
 		local left = SchemaHelpers.observableFromTable("left", {
 			{ schema = "left", id = 1 },
@@ -762,7 +777,7 @@ end)
 
 		assert.are.equal(0, #expiredEvents)
 
-		JoinObservable.setWarningHandler(previousHandler)
+		Log.setEmitter(previousEmitter)
 	end)
 
 	it("honors custom merge ordering and validates the merge contract", function()
@@ -934,7 +949,7 @@ end)
 
 	it("supports the time alias for interval-based expiration", function()
 		local currentTime = 0
-		local previousHandler = JoinObservable.setWarningHandler(function() end)
+		local previousEmitter = Log.setEmitter(function() end)
 
 		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
 		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
@@ -988,7 +1003,7 @@ end)
 		end
 		assert.are.same({ 1 }, timeExpired)
 
-		JoinObservable.setWarningHandler(previousHandler)
+		Log.setEmitter(previousEmitter)
 	end)
 
 	it("allows per-side expiration windows", function()
@@ -1312,7 +1327,6 @@ describe("JoinObservable.chain helper", function()
 
 	it("warns and skips mappings for missing schemas", function()
 		local upstreamSubject = rx.Subject.create()
-		local warnings = {}
 		local chained = JoinObservable.chain(upstreamSubject, {
 			from = {
 				{ schema = "orders" },
@@ -1320,9 +1334,8 @@ describe("JoinObservable.chain helper", function()
 			},
 		})
 
-		JoinObservable.withWarningHandler(function(msg)
-			table.insert(warnings, msg)
-		end, function()
+		local warnings = withCapturedWarnings(function(captured)
+			warnings = captured
 			local seen = {}
 			chained:subscribe(function(record)
 				table.insert(seen, record.RxMeta.schema)

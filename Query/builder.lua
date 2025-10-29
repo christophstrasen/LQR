@@ -12,9 +12,7 @@
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
-local warnings = require("JoinObservable.warnings")
-
-local warnf = warnings.warnf
+local Log = require("log").withTag("query")
 
 local DEFAULT_WINDOW_COUNT = 1000
 local schedulerOverride = nil
@@ -226,7 +224,7 @@ local function flattenRecords(observable, allowedSchemas)
 					observer:onNext(value)
 				end
 			else
-				warnf("Query builder dropped emission of type %s (expected table or JoinResult)", type(value))
+				Log:warn("Query builder dropped emission of type %s (expected table or JoinResult)", type(value))
 			end
 		end, function(err)
 			observer:onError(err)
@@ -249,7 +247,7 @@ local function selectorFromField(field)
 		local value = entry and entry[field]
 		if value == nil and schemaName and not warned[schemaName] then
 			warned[schemaName] = true
-			warnf("Query.onField('%s') missing for schema '%s'", field, schemaName)
+			Log:warn("Query.onField('%s') missing for schema '%s'", field, schemaName)
 		end
 		return value
 	end
@@ -263,14 +261,14 @@ local function selectorFromSchemas(map)
 		if not field then
 			if schemaName and not missingWarned[schemaName] then
 				missingWarned[schemaName] = true
-				warnf("Query.onSchemas missing selector for schema '%s'", schemaName)
+				Log:warn("Query.onSchemas missing selector for schema '%s'", schemaName)
 			end
 			return nil
 		end
 		local value = entry and entry[field]
 		if value == nil and schemaName and not missingWarned[schemaName .. "::field"] then
 			missingWarned[schemaName .. "::field"] = true
-			warnf("Query.onSchemas('%s') missing field '%s'", schemaName, field)
+			Log:warn("Query.onSchemas('%s') missing field '%s'", schemaName, field)
 		end
 		return value
 	end
@@ -287,7 +285,7 @@ local function selectorFromId()
 		end
 		if schemaName and not warned[schemaName] then
 			warned[schemaName] = true
-			warnf("Query.onId() missing RxMeta.id for schema '%s'", schemaName)
+			Log:warn("Query.onId() missing RxMeta.id for schema '%s'", schemaName)
 		end
 		return nil
 	end

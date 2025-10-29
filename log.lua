@@ -21,6 +21,7 @@ local LEVEL_NAMES = {
 }
 
 local DEFAULT_LEVEL = "warn"
+local LOGGER_TAG = "LOGGER"
 
 local function normalizeLevel(name)
 	if not name then
@@ -44,17 +45,67 @@ local function envLevel()
 	return DEFAULT_LEVEL
 end
 
-local currentLevel = envLevel()
-
-local function emit(levelName, message)
-	io.stderr:write(string.format("[%s] %s\n", string.upper(levelName), tostring(message)))
+local defaultEmitter = function(levelName, message, tag)
+	local msg = tostring(message)
+	-- Emit a one-off trace if we ever log a nil/\"nil\" message for a specific tag to help locate sources.
+	if tag == "viz-hi" and msg == "nil" and debug and debug.traceback then
+		io.stderr:write(string.format("[WARN][LOGGER] nil log message for tag=%s\n%s\n", tostring(tag), debug.traceback("", 3)))
+	end
+	if tag and tag ~= "" then
+		io.stderr:write(string.format("[%s][%s] %s\n", string.upper(levelName), tag, msg))
+	else
+		io.stderr:write(string.format("[%s] %s\n", string.upper(levelName), msg))
+	end
 end
+
+local emitter = defaultEmitter
+local currentLevel = envLevel()
+local tagInclude
+local tagExclude
 
 local function prefixTag(tag, fmt)
 	if not tag or tag == "" then
 		return fmt
 	end
 	return string.format("[%s] %s", tostring(tag), fmt)
+end
+
+local function emit(levelName, message, tag)
+	if emitter then
+		emitter(levelName, message, tag)
+	end
+end
+
+local function splitTags(raw)
+	if not raw or raw == "" then
+		return nil
+	end
+	local set = {}
+	for token in string.gmatch(raw, "([^,]+)") do
+		local trimmed = token:gsub("^%s+", ""):gsub("%s+$", "")
+		if trimmed ~= "" then
+			set[trimmed] = true
+		end
+	end
+	return next(set) and set or nil
+end
+
+tagInclude = splitTags(os.getenv("LOG_TAG_INCLUDE"))
+tagExclude = splitTags(os.getenv("LOG_TAG_EXCLUDE"))
+
+if tagInclude and tagExclude then
+	defaultEmitter("warn", "LOG_TAG_INCLUDE and LOG_TAG_EXCLUDE both set; ignoring tag filters", LOGGER_TAG)
+	tagInclude, tagExclude = nil, nil
+end
+
+local function tagAllowed(tag)
+	if tagInclude then
+		return tag and tagInclude[tag] == true
+	end
+	if tagExclude and tag and tagExclude[tag] then
+		return false
+	end
+	return true
 end
 
 function Log.getLevel()
@@ -74,9 +125,12 @@ function Log.levels()
 	return LEVEL_NAMES
 end
 
-function Log.isEnabled(levelName)
+function Log.isEnabled(levelName, tag)
 	local normalized = normalizeLevel(levelName)
 	if not normalized then
+		return false
+	end
+	if not tagAllowed(tag) then
 		return false
 	end
 	return LEVEL_ORDER[normalized] <= LEVEL_ORDER[currentLevel]
@@ -90,11 +144,17 @@ function Log.log(levelName, fmt, ...)
 	if not Log.isEnabled(normalized) then
 		return
 	end
+	if fmt == nil and select("#", ...) == 0 then
+		return
+	end
 	local message
 	if select("#", ...) > 0 then
 		message = string.format(fmt, ...)
 	else
 		message = tostring(fmt)
+	end
+	if message == nil then
+		return
 	end
 	emit(normalized, message)
 end
@@ -124,7 +184,17 @@ function Log.trace(fmt, ...)
 end
 
 function Log.tagged(levelName, tag, fmt, ...)
-	Log.log(levelName, prefixTag(tag, fmt), ...)
+	local normalized = normalizeLevel(levelName)
+	if not normalized or not Log.isEnabled(normalized, tag) then
+		return
+	end
+	local message
+	if select("#", ...) > 0 then
+		message = string.format(fmt, ...)
+	else
+		message = tostring(fmt)
+	end
+	emit(normalized, message, tag)
 end
 
 function Log.withTag(tag)
@@ -132,11 +202,32 @@ function Log.withTag(tag)
 	local prefix = tag and tostring(tag) or ""
 	local function wrap(levelName)
 		return function(_, fmt, ...)
-			Log.log(levelName, prefixTag(prefix, fmt), ...)
+			local normalized = normalizeLevel(levelName)
+			if not normalized or not Log.isEnabled(normalized, prefix) then
+				return
+			end
+			-- Avoid logging nil fmt; tag-aware callers should pass a format string.
+			local message
+			if select("#", ...) > 0 then
+				message = string.format(fmt, ...)
+			else
+				message = tostring(fmt)
+			end
+			emit(normalized, message, prefix)
 		end
 	end
 	function tagged:log(levelName, fmt, ...)
-		Log.log(levelName, prefixTag(prefix, fmt), ...)
+		local normalized = normalizeLevel(levelName)
+		if not normalized or not Log.isEnabled(normalized, prefix) then
+			return
+		end
+		local message
+		if select("#", ...) > 0 then
+			message = string.format(fmt, ...)
+		else
+			message = tostring(fmt)
+		end
+		emit(normalized, message, prefix)
 	end
 	tagged.fatal = wrap("fatal")
 	tagged.error = wrap("error")
@@ -144,7 +235,35 @@ function Log.withTag(tag)
 	tagged.info = wrap("info")
 	tagged.debug = wrap("debug")
 	tagged.trace = wrap("trace")
+	tagged.tag = prefix
 	return tagged
+end
+
+---Temporarily suppress logs below a level while running fn, restoring the previous level afterwards.
+---@param levelName string
+---@param fn fun()
+function Log.supressBelow(levelName, fn)
+	local normalized = normalizeLevel(levelName)
+	if not normalized then
+		error(string.format("invalid log level: %s", tostring(levelName)))
+	end
+	assert(type(fn) == "function", "supressBelow expects a function")
+	local previous = currentLevel
+	currentLevel = normalized
+	local ok, err = pcall(fn)
+	currentLevel = previous
+	if not ok then
+		error(err)
+	end
+end
+
+function Log.setEmitter(handler)
+	if handler ~= nil and type(handler) ~= "function" then
+		error("setEmitter expects a function or nil")
+	end
+	local previous = emitter
+	emitter = handler or defaultEmitter
+	return previous
 end
 
 function Log.assert(condition, fmt, ...)

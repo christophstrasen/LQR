@@ -1,7 +1,5 @@
 -- Expiration utilities that prune cached join rows based on count/interval/predicate rules.
-local warnings = require("JoinObservable.warnings")
-
-local warnf = warnings.warnf
+local Log = require("log").withTag("join")
 
 local Expiration = {}
 
@@ -106,7 +104,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 				local meta = entry and entry.RxMeta
 				local value = meta and meta.sourceTime or (entry and entry[field])
 				if type(value) ~= "number" then
-					warnf("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
+					Log:warn("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
 				elseif now - value > offset then
 					cache[key] = nil
 					publishExpirationFn(side, key, record, reason)
@@ -135,7 +133,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 				local keep = true
 				local ok, result = pcall(predicate, record.entry, side, ctx)
 				if not ok then
-					warnf("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
+					Log:warn("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
 				else
 					keep = not not result
 				end

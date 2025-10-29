@@ -171,14 +171,7 @@ By default the join runs retention checks on every insert (`gcOnInsert = true`).
 
 ## Warning & Lifecycle Hooks
 
-### `JoinObservable.setWarningHandler(handler)`
-
-Replaces the warning sink. Pass `nil` to restore the default stderr logger. Warnings fire when:
-
-- Key selector returns `nil`.
-- Merge emits non-table records.
-- Interval fields are missing/non-numeric.
-- Predicate mode throws an error.
+Join warnings now flow through the shared logger (`log.lua`, tag `join`), so adjust `LOG_LEVEL` or use `Log.supressBelow("error", fn)` in tests to mute them temporarily.
 
 ### Observable lifecycle
 
@@ -268,7 +261,7 @@ _(These will live under `examples/` in future work.)_
 
 ## Testing & Debugging Tips
 
-- Use `JoinObservable.setWarningHandler(function() end)` to mute warnings in unit tests; restore it afterward.
+- Use `Log.supressBelow("error", function() ... end)` to mute join warnings during noisy test sections; restore afterwards.
 - The experiment scripts under `experiments/join_lua_events_*` provide runnable scenarios for retention windows and join types.
 - When debugging unexpected expirations, subscribe to the `expired` stream and log both `reason` and any relevant record fields (e.g., timestamps, TTLs).
 - If you see `"mergeSources must return an observable"`, ensure your custom merge returns an object with `.subscribe`.
