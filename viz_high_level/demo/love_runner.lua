@@ -1,8 +1,8 @@
-local Log = require("log").withTag("viz-hi")
+local Log = require("log").withTag("demo")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local Runtime = require("viz_high_level.core.runtime")
 local Renderer = require("viz_high_level.core.headless_renderer")
-local DebugViz = require("viz_high_level.debug")
+local DebugViz = require("viz_high_level.vizLogFormatter")
 local Draw = require("viz_high_level.core.draw")
 
 local LoveRunner = {}

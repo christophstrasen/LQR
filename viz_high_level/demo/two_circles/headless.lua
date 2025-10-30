@@ -3,7 +3,7 @@ require("bootstrap")
 
 local Runtime = require("viz_high_level.core.runtime")
 local Renderer = require("viz_high_level.core.headless_renderer")
-local DebugViz = require("viz_high_level.debug")
+local DebugViz = require("viz_high_level.vizLogFormatter")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local TwoCirclesDemo = require("viz_high_level.demo.two_circles")
 

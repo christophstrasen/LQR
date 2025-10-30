@@ -1,20 +1,20 @@
--- Debug logging helpers for high-level visualization snapshots.
--- Emits detailed cell/border summaries when debug logging is enabled.
-local DebugViz = {}
+-- Snapshot formatter for high-level visualization: logs cells/borders/metadata with a dedicated tag.
 local Log = require("log")
 local CellLayers = require("viz_high_level.core.cell_layers")
-local VizLog = Log.withTag("viz")
+
+local VizLog = Log.withTag("viz-hi")
 local NEUTRAL_BORDER_COLOR = { 0.24, 0.24, 0.24, 1 }
 local lastSignature
 local seenCells = {}
 local lastWindowSignature
 
+local VizLogFormatter = {}
+
 local function logAt(level, fmt, ...)
-	if level == "info" then
-		VizLog:info(fmt, ...)
-	else
-		VizLog:debug(fmt, ...)
+	if not Log.isEnabled(level, "viz-hi") then
+		return
 	end
+	VizLog:log(level, fmt, ...)
 end
 
 local function collectCells(snapshot)
@@ -108,11 +108,11 @@ local function cellKey(window, entry, id)
 	)
 end
 
----Logs detailed cell/border information for a snapshot when DEBUG is enabled.
+---Logs detailed cell/border information for a snapshot when debug/info logging is enabled for viz-debug.
 ---@param snapshot table
 ---@param opts table|nil
-function DebugViz.snapshot(snapshot, opts)
-	if not (Log.isEnabled("debug") or Log.isEnabled("info")) then
+function VizLogFormatter.snapshot(snapshot, opts)
+	if not (Log.isEnabled("debug", "viz-hi") or Log.isEnabled("info", "viz-hi")) then
 		return
 	end
 	if not snapshot or not snapshot.window then
@@ -240,4 +240,4 @@ function DebugViz.snapshot(snapshot, opts)
 	end
 end
 
-return DebugViz
+return VizLogFormatter
