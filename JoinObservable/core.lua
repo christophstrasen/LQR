@@ -223,8 +223,18 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			return
 		end
 
+		local meta = record.entry and record.entry.RxMeta
+		Log:info(
+			"[unmatched] side=%s schema=%s key=%s id=%s sourceTime=%s",
+			side,
+			tostring(record.schemaName),
+			tostring(record.key),
+			meta and tostring(meta.id) or "nil",
+			meta and tostring(meta.sourceTime) or "nil"
+		)
+		Log:debug("[unmatched] side=%s schema=%s key=%s entry=%s", side, tostring(record.schemaName), tostring(record.key), tostring(record.entry))
+
 		if baseViz then
-			local meta = record.entry and record.entry.RxMeta
 			emitViz("unmatched", {
 				side = side,
 				schema = record.schemaName,
@@ -241,8 +251,25 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		if not recordEntry or recordEntry.matched then
 			return
 		end
+		local meta = recordEntry.entry and recordEntry.entry.RxMeta
+		Log:info(
+			"[expire] side=%s schema=%s key=%s reason=%s id=%s sourceTime=%s",
+			side,
+			tostring(recordEntry.schemaName),
+			tostring(key),
+			tostring(reason),
+			meta and tostring(meta.id) or "nil",
+			meta and tostring(meta.sourceTime) or "nil"
+		)
+		Log:debug(
+			"[expire] side=%s schema=%s key=%s reason=%s entry=%s",
+			side,
+			tostring(recordEntry.schemaName),
+			tostring(key),
+			tostring(reason),
+			tostring(recordEntry.entry)
+		)
 		if baseViz then
-			local meta = recordEntry.entry and recordEntry.entry.RxMeta
 			emitViz("expire", {
 				side = side,
 				schema = recordEntry.schemaName,
@@ -296,6 +323,23 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			local function handleMatch(leftRecord, rightRecord)
 				leftRecord.matched = true
 				rightRecord.matched = true
+				local leftMeta = leftRecord.entry and leftRecord.entry.RxMeta
+				local rightMeta = rightRecord.entry and rightRecord.entry.RxMeta
+				local key = leftRecord and leftRecord.key or rightRecord.key
+				Log:info(
+					"[match] key=%s leftSchema=%s leftId=%s rightSchema=%s rightId=%s",
+					tostring(key),
+					tostring(leftRecord.schemaName),
+					leftMeta and tostring(leftMeta.id) or "nil",
+					tostring(rightRecord.schemaName),
+					rightMeta and tostring(rightMeta.id) or "nil"
+				)
+				Log:debug(
+					"[match] key=%s leftEntry=%s rightEntry=%s",
+					tostring(key),
+					tostring(leftRecord.entry),
+					tostring(rightRecord.entry)
+				)
 				if baseViz then
 					local function brief(record)
 						if not record then
