@@ -154,29 +154,10 @@ local function tokenFor(schema, id)
 end
 
 local function normalizeEventMapper(primarySet, maxLayers)
-	-- Explainer: we remember primary source ids so repeated cache inserts do not spam visualization rows.
-	-- Tokens are released once a row expires or is flushed as unmatched, so future inserts show up as updates.
-	local seenInner = {}
-
-	local function markSeen(schema, id)
-		local token = tokenFor(schema, id)
-		if not token then
-			return false
-		end
-		if seenInner[token] then
-			return true
-		end
-		seenInner[token] = true
-		return false
-	end
-
-	local function release(schema, id)
-		local token = tokenFor(schema, id)
-		if token then
-			seenInner[token] = nil
-		end
-	end
-
+	-- NOTE: we previously deduped repeat source emissions per schema/id (using seenInner)
+	-- to avoid redraw spam. That hides meaningful re-emits for the same id, so we now
+	-- let all inputs through. If we need the filter again, reintroduce the seenInner
+	-- tracking that lived here and skipped repeat inputs until expire/unmatched.
 	return function(event)
 		if not event then
 			return nil
@@ -184,9 +165,6 @@ local function normalizeEventMapper(primarySet, maxLayers)
 		if event.kind == "input" and event.schema and primarySet[event.schema] then
 			local id = event.id or event.key
 			if id == nil then
-				return nil
-			end
-			if markSeen(event.schema, id) then
 				return nil
 			end
 			return {
@@ -198,9 +176,6 @@ local function normalizeEventMapper(primarySet, maxLayers)
 				record = event.entry,
 			}
 		elseif event.kind == "match" or event.kind == "unmatched" then
-			if event.kind == "unmatched" then
-				release(event.schema, event.id)
-			end
 			return {
 				type = "joinresult",
 				kind = event.kind,
@@ -215,7 +190,6 @@ local function normalizeEventMapper(primarySet, maxLayers)
 				unmatched = (event.kind == "unmatched"),
 			}
 		elseif event.kind == "expire" then
-			release(event.schema, event.id)
 			return {
 				type = "expire",
 				layer = clampLayer(event.depth, maxLayers),

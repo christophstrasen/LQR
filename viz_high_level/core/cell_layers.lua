@@ -60,8 +60,8 @@ local function sortLayers(a, b)
 end
 
 local function logFade(layer, reason)
-	if Log.isEnabled("debug") then
-		Log.debug(
+	if Log.isEnabled("trace") then
+		Log.trace(
 			"[viz.layers] fade-complete layer=%s reason=%s ttl=%.2f",
 			tostring(layer.label or layer.id or "?"),
 			reason or "expired",

@@ -120,10 +120,10 @@ function VizLogFormatter.snapshot(snapshot, opts)
 	end
 	opts = opts or {}
 	local cells = collectCells(snapshot)
+	-- NOTE: we used to skip identical snapshots based on a signature to throttle log noise.
+	-- That hid repeated frames in debug runs, so we now always log. To restore throttling,
+	-- reintroduce the signature check that returned early when unchanged.
 	local signature = snapshotSignature(snapshot, cells)
-	if not opts.force and signature == lastSignature then
-		return
-	end
 	lastSignature = signature
 
 	local window = snapshot.window

@@ -6,7 +6,7 @@ local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
 local Log = require("log").withTag("demo")
 
-local PLAY_DURATION = 40
+local PLAY_DURATION = 10
 local JOINT_TTL = 3
 local demoClock = {
 	value = 0,
@@ -50,28 +50,28 @@ local function buildZones()
 		{
 			label = "cust_circle",
 			schema = "customers",
-			center = 45,
+			center = 43,
 			range = 1, --invalid for circle shapes
-			radius = 4,
+			radius = 2,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 4,
+			rate = 2,
 			t0 = 0.0,
 			t1 = 0.7,
-			rate_shape = "linear",
+			rate_shape = "constant",
 			idField = "id",
 		},
 		{
 			label = "ord_circle",
 			schema = "orders",
-			center = 55,
+			center = 46,
 			range = 1, --invalid for circle shapes
-			radius = 3,
+			radius = 2,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 20,
+			rate = 2,
 			t0 = 0.1,
 			t1 = 0.98,
 			rate_shape = "constant",
