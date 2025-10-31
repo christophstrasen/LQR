@@ -6,7 +6,7 @@ local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
 local Log = require("log").withTag("demo")
 
-local PLAY_DURATION = 20
+local PLAY_DURATION = 40
 local JOINT_TTL = 3
 local demoClock = {
 	value = 0,

@@ -468,6 +468,16 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					return
 				end
 				meta.joinKey = key
+				Log:info(
+					"[input] side=%s schema=%s key=%s id=%s sourceTime=%s schemaVersion=%s",
+					side,
+					tostring(schemaName),
+					tostring(key),
+					meta and tostring(meta.id) or "nil",
+					meta and tostring(meta.sourceTime) or "nil",
+					meta and tostring(meta.schemaVersion) or "nil"
+				)
+				Log:debug("[input] side=%s schema=%s key=%s entry=%s", side, tostring(schemaName), tostring(key), tostring(entry))
 				local record = upsertCacheEntry(cache, key, entry, schemaName)
 
 				if baseViz then
