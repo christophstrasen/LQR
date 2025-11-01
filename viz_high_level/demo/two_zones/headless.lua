@@ -8,7 +8,7 @@ local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local TwoZonesDemo = require("viz_high_level.demo.two_zones")
 
 local demo = TwoZonesDemo.build()
-local adapter = QueryVizAdapter.attach(demo.builder)
+local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })
 local defaults = TwoZonesDemo.loveDefaults or {}
 
 local clock = {
@@ -45,7 +45,7 @@ local function capture(label, tick)
 	end
 	clock:set(tick)
 	local snapshot = Renderer.render(runtime, adapter.palette, clock:now())
-	DebugViz.snapshot(snapshot, { label = label })
+	DebugViz.snapshot(snapshot, { label = label, logSnapshots = true })
 	return snapshot
 end
 
@@ -60,4 +60,4 @@ end
 
 clock:set(clock:now() + 0.25)
 local snap = Renderer.render(runtime, adapter.palette, clock:now())
-DebugViz.snapshot(snap, { label = "two_zones_final" })
+DebugViz.snapshot(snap, { label = "two_zones_final", logSnapshots = true })

@@ -11,7 +11,7 @@ local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local TimelineScenario = require("viz_high_level.demo.timeline")
 
 local demo = TimelineScenario.build()
-local adapter = QueryVizAdapter.attach(demo.builder)
+local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })
 local clock = {
 	value = 0,
 	set = function(self, value)
@@ -47,7 +47,7 @@ local function capture(label, tick)
 	end
 	clock:set(tick)
 	local snapshot = Renderer.render(runtime, adapter.palette, clock:now())
-	DebugViz.snapshot(snapshot, { label = label })
+	DebugViz.snapshot(snapshot, { label = label, logSnapshots = true })
 	return snapshot
 end
 
@@ -62,7 +62,7 @@ end
 
 clock:set(clock:now() + 0.5)
 local snap = Renderer.render(runtime, adapter.palette, clock:now())
-DebugViz.snapshot(snap, { label = "timeline_final" })
+DebugViz.snapshot(snap, { label = "timeline_final", logSnapshots = true })
 
 local window = runtime:window()
 Log.info(

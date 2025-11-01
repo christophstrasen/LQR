@@ -485,14 +485,16 @@ end)
 			end
 		end
 
-		assert.are.same(2, #leftExpired)
-		assert.are.same({ "evicted", "evicted" }, {
+		assert.are.same(3, #leftExpired)
+		assert.are.same({ "evicted", "evicted", "completed" }, {
 			leftExpired[1].reason,
 			leftExpired[2].reason,
+			leftExpired[3].reason,
 		})
 		local entryOne = expiredEntry(leftExpired[1])
 		local entryTwo = expiredEntry(leftExpired[2])
-		assert.are.same({ 1, 2 }, { entryOne and entryOne.id, entryTwo and entryTwo.id })
+		local entryThree = expiredEntry(leftExpired[3])
+		assert.are.same({ 1, 2, 3 }, { entryOne and entryOne.id, entryTwo and entryTwo.id, entryThree and entryThree.id })
 	end)
 
 	it("only keeps the newest key available for future matches when entries are evicted", function()
@@ -594,7 +596,7 @@ end)
 		}, matchedKeys)
 	end)
 
-	it("never emits expiration events for matched records", function()
+	it("expires matched records on completion", function()
 		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
 		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
 
@@ -622,7 +624,71 @@ end)
 		assert.are.same({
 			{ left = 42, right = 42 },
 		}, summarizePairs(pairs))
-		assert.are.equal(0, #expiredEvents)
+		local expiredSummaries = {}
+		for _, packet in ipairs(expiredEvents) do
+			local entry, schema = expiredEntry(packet)
+			expiredSummaries[#expiredSummaries + 1] = {
+				schema = schema,
+				id = entry and entry.id or nil,
+				reason = packet.reason,
+			}
+		end
+		table.sort(expiredSummaries, function(a, b)
+			return tostring(a.schema) < tostring(b.schema)
+		end)
+		assert.are.same({
+			{ schema = "left", id = 42, reason = "completed" },
+			{ schema = "right", id = 42, reason = "completed" },
+		}, expiredSummaries)
+	end)
+
+	it("expires matched records when TTL elapses", function()
+		local clock = 0
+		local function now()
+			return clock
+		end
+
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "inner",
+			expirationWindow = {
+				mode = "interval",
+				field = "sourceTime",
+				offset = 1,
+				currentFn = now,
+			},
+		})
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			expiredEvents[#expiredEvents + 1] = packet
+		end)
+
+		join:subscribe(function() end)
+
+		leftSubject:onNext({ schema = "left", id = 1, sourceTime = 0 })
+		rightSubject:onNext({ schema = "right", id = 1, sourceTime = 0 })
+
+		clock = 2
+		leftSubject:onNext({ schema = "left", id = 99, sourceTime = 2 })
+		rightSubject:onNext({ schema = "right", id = 99, sourceTime = 2 })
+
+		assert.are.equal(2, #expiredEvents)
+		local summary = {}
+		for _, packet in ipairs(expiredEvents) do
+			local entry, schema = expiredEntry(packet)
+			summary[#summary + 1] = { schema = schema, id = entry and entry.id or nil, reason = packet.reason }
+		end
+		table.sort(summary, function(a, b)
+			return tostring(a.schema) < tostring(b.schema)
+		end)
+		assert.are.same({
+			{ schema = "left", id = 1, reason = "expired_interval" },
+			{ schema = "right", id = 1, reason = "expired_interval" },
+		}, summary)
 	end)
 
 	it("ignores malformed records emitted by a custom merge observable", function()
@@ -675,7 +741,20 @@ end)
 		assert.are.same({
 			{ left = 5, right = 5 },
 		}, summarizePairs(pairs))
-		assert.are.equal(0, #expiredEvents)
+		-- Matched rows now expire on completion.
+		assert.are.equal(2, #expiredEvents)
+		local summary = {}
+		for _, packet in ipairs(expiredEvents) do
+			local entry, schema = expiredEntry(packet)
+			summary[#summary + 1] = { schema = schema, id = entry and entry.id or nil, reason = packet.reason }
+		end
+		table.sort(summary, function(a, b)
+			return tostring(a.schema) < tostring(b.schema)
+		end)
+		assert.are.same({
+			{ schema = "left", id = 5, reason = "completed" },
+			{ schema = "right", id = 5, reason = "completed" },
+		}, summary)
 	end)
 
 	it("propagates merge errors to both the result and expiration observables", function()
@@ -775,7 +854,10 @@ end)
 			{ left = 2, right = 2 },
 		}, summarizePairs(pairs))
 
-		assert.are.equal(0, #expiredEvents)
+		assert.are.equal(4, #expiredEvents)
+		for _, packet in ipairs(expiredEvents) do
+			assert.are.equal("completed", packet.reason)
+		end
 
 		Log.setEmitter(previousEmitter)
 	end)
@@ -944,7 +1026,7 @@ end)
 				table.insert(predicateExpired, entry and entry.id or nil)
 			end
 		end
-		assert.are.same({ 1 }, predicateExpired)
+			assert.are.same({ 1, 2 }, predicateExpired)
 	end)
 
 	it("supports the time alias for interval-based expiration", function()
@@ -1077,8 +1159,8 @@ end)
 		table.sort(leftExpired)
 		table.sort(rightExpired)
 
-		assert.are.same({ 1, 2 }, leftExpired)
-		assert.are.same({ 1, 2 }, rightExpired)
+		assert.are.same({ 1, 2, 3 }, leftExpired)
+		assert.are.same({ 1, 2, 3 }, rightExpired)
 	end)
 end)
 

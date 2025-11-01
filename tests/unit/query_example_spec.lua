@@ -98,10 +98,23 @@ describe("Query high-level example", function()
 		assert.are.equal(102, unmatched:get("orders").id)
 		assert.is_nil(unmatched:get("refunds"))
 
-		-- Expired packets include the unmatched order on completion.
-		assert.are.equal(1, #expiredPackets)
-		local expiredEntry = expiredPackets[1].result:get(expiredPackets[1].schema)
-		assert.are.equal(102, expiredEntry.id)
-		assert.are.equal("completed", expiredPackets[1].reason)
+		-- Expired packets include the unmatched order on completion (and now also matched rows on flush).
+		assert.is_true(#expiredPackets >= 1)
+		local ids = {}
+		local reasons = {}
+		for _, packet in ipairs(expiredPackets) do
+			local entry = packet.result:get(packet.schema)
+			ids[#ids + 1] = entry and entry.id or nil
+			reasons[#reasons + 1] = packet.reason
+		end
+		-- Ensure the unmatched order 102 is present as completed.
+		local foundUnmatched = false
+		for i = 1, #ids do
+			if ids[i] == 102 and reasons[i] == "completed" then
+				foundUnmatched = true
+				break
+			end
+		end
+		assert.is_true(foundUnmatched)
 	end)
 end)

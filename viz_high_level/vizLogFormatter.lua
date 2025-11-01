@@ -112,13 +112,17 @@ end
 ---@param snapshot table
 ---@param opts table|nil
 function VizLogFormatter.snapshot(snapshot, opts)
+	opts = opts or {}
+	-- Only log snapshots when explicitly requested (e.g., headless renderers set logSnapshots=true).
+	if not opts.logSnapshots then
+		return
+	end
 	if not (Log.isEnabled("debug", "viz-hi") or Log.isEnabled("info", "viz-hi")) then
 		return
 	end
 	if not snapshot or not snapshot.window then
 		return
 	end
-	opts = opts or {}
 	local cells = collectCells(snapshot)
 	-- NOTE: we used to skip identical snapshots based on a signature to throttle log noise.
 	-- That hid repeated frames in debug runs, so we now always log. To restore throttling,

@@ -248,7 +248,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 	end
 
 	local function publishExpiration(side, key, recordEntry, reason)
-		if not recordEntry or recordEntry.matched then
+		if not recordEntry then
 			return
 		end
 		local meta = recordEntry.entry and recordEntry.entry.RxMeta

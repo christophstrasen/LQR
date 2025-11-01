@@ -1,7 +1,8 @@
 -- High-level visualization adapter: taps Query builder joins to emit normalized events
 -- (sources, matches, expirations) for dynamic renderers without touching core scheduling.
 local rx = require("reactivex")
-local Log = require("log").withTag("join")
+local JoinLog = require("log").withTag("join")
+local VizLog = require("log").withTag("viz-hi")
 
 local QueryVizAdapter = {}
 
@@ -151,6 +152,73 @@ local function tokenFor(schema, id)
 		return nil
 	end
 	return tostring(schema) .. "::" .. tostring(id)
+end
+
+local function shouldLogEvents(opts)
+	if opts and opts.logEvents ~= nil then
+		return not not opts.logEvents
+	end
+	-- Env override: VIZ_LOG_EVENTS=0 disables, anything else is enabled by default.
+	if os.getenv("VIZ_LOG_EVENTS") == "0" then
+		return false
+	end
+	return true
+end
+
+local function logEvent(event, logEvents)
+	if not logEvents then
+		return
+	end
+	if not event then
+		return
+	end
+	-- Use explicit strings so callers see why/what is drawn.
+	if event.type == "source" then
+		VizLog:info(
+			"[draw source] schema=%s id=%s key=%s sourceTime=%s",
+			tostring(event.schema),
+			tostring(event.id),
+			tostring(event.key),
+			tostring(event.sourceTime)
+		)
+		VizLog:debug("[draw source] schema=%s id=%s entry=%s", tostring(event.schema), tostring(event.id), tostring(event.record))
+	elseif event.type == "joinresult" then
+		if event.kind == "match" then
+			local leftId = event.left and event.left.id or event.left and event.left.metaId or nil
+			local rightId = event.right and event.right.id or event.right and event.right.metaId or nil
+			VizLog:info(
+				"[draw join] kind=match key=%s leftSchema=%s leftId=%s rightSchema=%s rightId=%s layer=%s",
+				tostring(event.key),
+				event.left and tostring(event.left.schema) or "",
+				tostring(leftId),
+				event.right and tostring(event.right.schema) or "",
+				tostring(rightId),
+				tostring(event.layer)
+			)
+			VizLog:debug("[draw join] key=%s left=%s right=%s", tostring(event.key), tostring(event.left), tostring(event.right))
+		else
+			VizLog:info(
+				"[draw join] kind=%s schema=%s id=%s key=%s side=%s layer=%s",
+				tostring(event.kind),
+				tostring(event.schema),
+				tostring(event.id),
+				tostring(event.key),
+				tostring(event.side),
+				tostring(event.layer)
+			)
+			VizLog:debug("[draw join] kind=%s entry=%s", tostring(event.kind), tostring(event.entry))
+		end
+	elseif event.type == "expire" then
+		VizLog:info(
+			"[draw expire] schema=%s id=%s key=%s reason=%s layer=%s",
+			tostring(event.schema),
+			tostring(event.id),
+			tostring(event.key),
+			tostring(event.reason),
+			tostring(event.layer)
+		)
+		VizLog:debug("[draw expire] entry=%s", tostring(event.entry))
+	end
 end
 
 local function normalizeEventMapper(primarySet, maxLayers)
@@ -377,12 +445,13 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	assert(type(queryBuilder) == "table" and queryBuilder.withVisualizationHook, "attach expects a QueryBuilder")
 
 	opts = opts or {}
+	local logEvents = shouldLogEvents(opts)
 	local maxLayers = opts.maxLayers or DEFAULT_MAX_LAYERS
 	local plan = queryBuilder:describe()
 	local totalSteps = #(plan.joins or {})
 	local depthForStep = buildDepthResolver(totalSteps, maxLayers)
 	if not planHasSchemaMapping(plan) then
-		Log:warn("[QueryVizAdapter] Visualization requires Query:onSchemas mappings to derive projection domains")
+		JoinLog:warn("[QueryVizAdapter] Visualization requires Query:onSchemas mappings to derive projection domains")
 	end
 
 	local primaries = queryBuilder.primarySchemas and queryBuilder:primarySchemas() or (plan.from or {})
@@ -423,6 +492,10 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 				return enrichProjection(event, {
 					domain = projectionDomainSchema or (plan.from and plan.from[1]) or primaries[1],
 				}, projectionFields)
+				end)
+				:map(function(event)
+					logEvent(event, logEvents)
+					return event
 				end)
 				:filter(function(event)
 					return event ~= nil

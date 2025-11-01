@@ -10,7 +10,7 @@ local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local SimpleDemo = require("viz_high_level.demo.simple")
 
 local demo = SimpleDemo.build()
-local adapter = QueryVizAdapter.attach(demo.builder)
+local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })
 local runtime = Runtime.new({
 	maxLayers = 2,
 	adjustInterval = 1,
@@ -27,7 +27,7 @@ adapter.query:subscribe(function() end)
 SimpleDemo.start(demo.subjects)
 
 local snapshot = Renderer.render(runtime, adapter.palette, os.clock())
-DebugViz.snapshot(snapshot, { label = "simple_final" })
+DebugViz.snapshot(snapshot, { label = "simple_final", logSnapshots = true })
 
 local window = runtime:window()
 Log.info(
