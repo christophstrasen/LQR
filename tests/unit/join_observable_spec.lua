@@ -746,14 +746,19 @@ end)
 		local summary = {}
 		for _, packet in ipairs(expiredEvents) do
 			local entry, schema = expiredEntry(packet)
-			summary[#summary + 1] = { schema = schema, id = entry and entry.id or nil, reason = packet.reason }
+			summary[#summary + 1] = {
+				schema = schema,
+				id = entry and entry.id or nil,
+				reason = packet.reason,
+				matched = packet.matched,
+			}
 		end
 		table.sort(summary, function(a, b)
 			return tostring(a.schema) < tostring(b.schema)
 		end)
 		assert.are.same({
-			{ schema = "left", id = 5, reason = "completed" },
-			{ schema = "right", id = 5, reason = "completed" },
+			{ schema = "left", id = 5, reason = "completed", matched = true },
+			{ schema = "right", id = 5, reason = "completed", matched = true },
 		}, summary)
 	end)
 
@@ -1161,6 +1166,50 @@ end)
 
 		assert.are.same({ 1, 2, 3 }, leftExpired)
 		assert.are.same({ 1, 2, 3 }, rightExpired)
+	end)
+
+	it("emits matched flag on expiration and eventually expires all inputs", function()
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left")
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right")
+
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "left",
+		})
+
+		local expiredEvents = {}
+		expired:subscribe(function(packet)
+			expiredEvents[#expiredEvents + 1] = packet
+		end)
+
+		join:subscribe(function() end)
+
+		leftSubject:onNext({ schema = "left", id = 1 })
+		rightSubject:onNext({ schema = "right", id = 1 })
+		leftSubject:onNext({ schema = "left", id = 2 }) -- unmatched
+
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
+
+		local summary = {}
+		for _, packet in ipairs(expiredEvents) do
+			local entry, schema = expiredEntry(packet)
+			summary[#summary + 1] = {
+				schema = schema,
+				id = entry and entry.id or nil,
+				reason = packet.reason,
+				matched = packet.matched,
+			}
+		end
+		table.sort(summary, function(a, b)
+			return (tostring(a.schema) .. tostring(a.id)) < (tostring(b.schema) .. tostring(b.id))
+		end)
+
+		assert.are.same({
+			{ schema = "left", id = 1, reason = "completed", matched = true },
+			{ schema = "left", id = 2, reason = "completed", matched = false },
+			{ schema = "right", id = 1, reason = "completed", matched = true },
+		}, summary)
 	end)
 end)
 

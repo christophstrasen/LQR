@@ -252,8 +252,10 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			return
 		end
 		local meta = recordEntry.entry and recordEntry.entry.RxMeta
+		local matchedFlag = recordEntry.matched == true
 		Log:info(
-			"[expire] side=%s schema=%s key=%s reason=%s id=%s sourceTime=%s",
+			"[expire] matched=%s side=%s schema=%s key=%s reason=%s id=%s sourceTime=%s",
+			tostring(matchedFlag),
 			side,
 			tostring(recordEntry.schemaName),
 			tostring(key),
@@ -262,7 +264,8 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			meta and tostring(meta.sourceTime) or "nil"
 		)
 		Log:debug(
-			"[expire] side=%s schema=%s key=%s reason=%s entry=%s",
+			"[expire] matched=%s side=%s schema=%s key=%s reason=%s entry=%s",
+			tostring(matchedFlag),
 			side,
 			tostring(recordEntry.schemaName),
 			tostring(key),
@@ -275,6 +278,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				schema = recordEntry.schemaName,
 				key = key,
 				reason = reason,
+				matched = matchedFlag,
 				id = meta and meta.id or nil,
 				sourceTime = meta and meta.sourceTime or nil,
 				entry = recordEntry.entry,
@@ -284,6 +288,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			schema = recordEntry.schemaName,
 			key = key,
 			reason = reason,
+			matched = matchedFlag,
 			result = singleSchemaResult(recordEntry),
 		})
 	end

@@ -8,15 +8,19 @@ This project treats every record emission flowing through a join as a **record**
 - **Reactive joins**: each record carries `record.RxMeta = { schema, id, sourceTime, ... }` so downstream operators can reason about provenance. Instead of querying stored rows, we react to live record emissions passing through the join graph.
 - **Implication**: order and timing matter. If the “right” side arrives before the “left” side, the join caches it until a match appears (or expires). There is no global blocking “evaluate a cartesian product” step: the result is a continuous stream of `JoinResult` objects.
 
-### 2. Join Semantics: Match, Unmatched, Expire
 
-Each join step produces several match statuses:
+### 2. Record lifecycle and terminology
 
-- **Matched join result** – analogous to SQL join output rows. Emitted on the main observable whenever a left/right pair satisfies the configured key.
-- **Unmatched join result** – emitted on the same observable when a strategy (e.g., left join or anti join) wants to surface rows that never found a partner. This is the streaming equivalent of SQL’s “left row with NULLs”.
-- **Expiration packets** – emitted on the secondary `builder:expired()` observable when a cached record leaves the retention window without a match, carrying `reason = "evicted" | "completed" | ...`. Some join strategies also emit a corresponding unmatched record emission on the main stream, so you may see the same record referenced twice (once for unmatched in the join, once on expiry).
+- **Source**: a source record enters the cache with its join key (logged as `input` in joins and `source` in viz).
+- **Schemas**: every source is labeled (e.g., `customers`, `orders`, `refunds`) and that label lives in `RxMeta.schema` on each record. Joined records keep their schema-tagged payloads so downstream stages can chain further joins, project/rename fields, or measure latency without losing provenance.
+- **Match emission**: when a left/right pair satisfies the key we consider them matched.
+**Joined record**: the `JoinResult` emitted on the main stream when a join condition is satisfied. It bundles one or more schema payloads (e.g., `customers`, `orders`). For anti joins, positive matches are not emitted at all; only the unmatched side is emitted, so no joined record appears when both sides are present.
+- **Unmatched emission**: only for strategies that want it (left/outer/anti). This is separate from cache removal; it is the “no partner” result on the main joined stream.
+- **Cache removal (“expired”)**: any time a cached record is removed—due to TTL/interval, count GC, predicate GC, or completion/disposal—we emit on `builder:expired()`. Packets carry `schema`, `key`, `reason` (e.g., `expired_interval | evicted | expired_predicate | completed | disposed`) and the removed record. We currently emit all removals (matched or not); if you only care about “never matched,” filter by `matched`/reason in consumers.
 
-The key distinction: the joined stream is your result—every emission there is the record as it currently stands (with or without a partner). The expiration stream simply tells you when cached rows leave the window, helping you reason about churn and whether GC/window settings are too aggressive.
+Joined stream = the results your app consumes (positive matches, plus unmatched where applicable). The expiration stream = observability about cache churn and window/GC behavior.
+
+
 
 ### 3. Observables and the Builder DSL
 
@@ -42,7 +46,7 @@ Every stream is theoretically infinite, so each join must decide **how long to r
 
 Garbage-collection knobs (`gcOnInsert`, `gcIntervalSeconds`) decide when we actually sweep expired entries. Turning off per-insert GC improves throughput but postpones expiration packets until a periodic sweep runs. If you rely on timely “no partner” signals, keep `gcOnInsert = true` and use `gcIntervalSeconds` as a backup sweep.
 
-Whenever a record leaves the retention window we emit an **expire packet** on `QueryBuilder:expired()`. Treat that stream as visibility into churn: if you see records expiring before they ever matched, consider a larger window or investing into tighter syncing of key orders in your sources.
+Whenever a record leaves the retention window we emit an **expire packet** on `QueryBuilder:expired()`. Treat that stream as visibility into churn: if you see records expiring before they ever matched, consider a larger window or investing into tighter syncing of key orders in your sources. If you only care about “never matched,” filter by reason/`matched` when processing the packets.
 
 ### 5. Streaming joins and event counts
 
