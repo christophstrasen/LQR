@@ -191,3 +191,15 @@
 2. **Shape-aware ordering matters:** Emission order belongs to the shape (spiral/Z-order for circles, monotonic for lines); moving mapping into the generator avoids per-demo hacks and keeps joins honest.
 3. **One clock to rule visuals and joins:** Sharing a deterministic clock across scheduler, sourceTime stamps, and renderer is essential to keep fades, expiries, and joins aligned—especially in Love where the first frame’s `dt` can jump.
 4. **Docs and tests must track intent:** Added explainer notes on streaming join counts vs. unique IDs, and adjusted generator tests for the new coverage semantics. This keeps expectations aligned with the deterministic model we want to present.
+
+## Day 13 – Logging clarity, expiration semantics, and coverage
+
+### Highlights
+- **Event-level viz logging:** Added explicit `viz-hi` logs for source/match/unmatched/expire events; join logs now show `[expire] matched=true|false reason=...` to disambiguate cache removals. Snapshot logging is opt-in (`logSnapshots`) to keep Love runs quiet while headless traces still log frames. Dedup suppression was removed so repeat inputs/frames can be seen when enabled.
+- **Expiration semantics tightened:** Matched rows now expire like others; expire packets carry `matched` so consumers can filter “never matched” vs “was matched.” Added a new spec to assert all inputs eventually expire and that matched flags flow through. Expiration/viz events include the flag.
+- **Docs clarified:** Explainer updated with lifecycle terminology (input/match/unmatched/expire), schema provenance via `RxMeta.schema`, and a clear definition of “joined record” including anti-join behavior.
+
+### Takeaways
+1. **Observability with intent:** Logging now differentiates match status on expiration, and viz event logs are explicit (“draw source/join/expire”), making churn analysis and debugging clearer.
+2. **Cache hygiene predictable:** With matched rows expiring and a `matched` flag in packets, downstreams can reconcile positives vs negatives and build retry/backfill logic cleanly.
+3. **Optional noise:** Snapshots/logging are now opt-in per environment (headless vs Love), reducing log spam while preserving the ability to trace everything when needed.
