@@ -39,14 +39,20 @@ local attachment = Query.from(customersObservable, "customers")
 
 ### 4. Windowing, Retention, and GC
 
-Every stream is theoretically infinite, so each join must decide **how long to remember** unmatched records. The `:window` call captures this retention policy:
+Why we need a window: streams are unbounded, but memory is not. A window is the rule for how long we keep unmatched records warm so late partners can still match. Pick a window that reflects your real “how long is this event useful?” tolerance.
 
-- **Count windows** (`{ count = N }`) keep at most `N` records per side. They offer deterministic memory bounds but can create “thrash” if your traffic spikes—new records evict older ones even if those older entries might still find matches soon.
-- **Time windows** (`{ time = seconds, field = "sourceTime" }`) retain records based on timestamps. They better reflect real-world latency tolerances (“orders stick around for 30s”), but you must ensure `sourceTime` is populated and roughly synchronized.
+`:window{ ... }` takes two shapes:
 
-Garbage-collection knobs (`gcOnInsert`, `gcIntervalSeconds`) decide when we actually sweep expired entries. Turning off per-insert GC improves throughput but postpones expiration packets until a periodic sweep runs. If you rely on timely “no partner” signals, keep `gcOnInsert = true` and use `gcIntervalSeconds` as a backup sweep.
+- **Count window** `{ count = N }`: keep up to `N` records per side. Simple, bounded memory. Good when you care more about caps than wall-clock freshness.
+- **Time window** `{ time = seconds, field = "sourceTime", currentFn = os.time }`: keep a record while `currentFn() - entry[field] <= time`. Good when you want “freshness” semantics (“orders stay warm for 3s”). Make sure the chosen `field` exists and is on the same clock as `currentFn()`. You can swap in a demo/test clock with `currentFn`.
 
-Whenever a record leaves the retention window we emit an **expire packet** on `QueryBuilder:expired()`. Treat that stream as visibility into churn: if you see records expiring before they ever matched, consider a larger window or investing into tighter syncing of key orders in your sources. If you only care about “never matched,” filter by reason/`matched` when processing the packets.
+How the builder decides: if `count` is present, it builds a count window. Otherwise it builds a time-based window using `time` (or `offset`) over `field` (default `"sourceTime"`). If you skip `:window` entirely, the builder uses a generous default count window so demo data does not vanish immediately.
+
+GC knobs (when to check for expired records):
+- `gcOnInsert` (default `true`): sweep on every insert for timely expirations/unmatched signals.
+- `gcIntervalSeconds` (optional): periodic sweep to catch expirations even if no new records arrive.
+
+When a record falls out of the window, we emit an **expire packet** on `QueryBuilder:expired()`. Watch that stream to see whether your window is too small (records expire before matching) or large enough. Filter by `matched`/`reason` if you only care about “never matched.”
 
 ### 5. Streaming joins and event counts
 
