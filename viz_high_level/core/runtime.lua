@@ -61,6 +61,8 @@ self.windowConfig.mapping = opts.mapping or "linear"
 		visualsTTLFactor = 0
 	end
 	self.visualsTTL = (opts.visualsTTL or opts.adjustInterval or DEFAULT_ADJUST_INTERVAL) * visualsTTLFactor
+	self.visualsTTLFactors = opts.visualsTTLFactors
+	self.visualsTTLLayerFactors = opts.visualsTTLLayerFactors
 	local ttlFactor = opts.activeCellTTLFactor
 	if ttlFactor == nil then
 		ttlFactor = 1

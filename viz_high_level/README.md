@@ -29,6 +29,13 @@ Primary `source` events are deduplicated by `schema::id` to avoid spamming the g
 - `viz_high_level/demo/timeline/` hosts the lively scheduler-driven scenario (customers → orders → shipments). `love .` (or `love . timeline` / `love . --demo timeline`) runs it, while `viz_high_level/demo/timeline/headless.lua` replays the same timeline headlessly and emits labeled snapshots throughout the run.
 - Shared helper modules (scheduler, future test harnesses, etc.) live directly under `viz_high_level/demo/` so each scenario subfolder only needs to expose `build()/start()` implementations.
 
+## Visual TTL knobs (fades)
+
+- Base TTL: `visualsTTLFactor * (visualsTTL or adjustInterval)` set in `Runtime`. This is the starting fade duration for all layers.
+- Per-kind scaling (optional): `visualsTTLFactors = { source = 1, match = 1, expire = 1 }`. Renderer multiplies the base TTL by these for inner fills (source), match borders (joined), and expire borders.
+- Per-layer scaling (optional): `visualsTTLLayerFactors = { [layer] = factor }`. Applied on top of `match` factors for each border layer so outer joins can linger longer than inner ones.
+- Default behavior stays the same if you omit the maps (all factors = 1). Example from `two_circles`: base TTL tied to the join window, then `match` > `source` > `expire`, with the outermost match layer boosted again via `visualsTTLLayerFactors[2]`.
+
 ## Zone generator (deterministic synthetic data)
 
 We ship a small, deterministic zone generator to synthesize records for demos that opt into it (e.g., `demo/two_circles`, `demo/two_zones`). Timeline/window_zoom/simple still use hand-authored timelines. The generator lives under `viz_high_level/zones/` and is invoked via `viz_high_level/demo/common/zones_timeline.lua`. It only produces payloads; joins and visualization stay native (`QueryVizAdapter` reads the same fields it always did).

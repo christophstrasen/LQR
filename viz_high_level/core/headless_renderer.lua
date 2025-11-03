@@ -130,6 +130,8 @@ function Renderer.render(runtime, palette, now)
 	assert(runtime and runtime.window, "runtime with window() required")
 	local window = runtime:window()
 	local visualsTTL = runtime.visualsTTL or DEFAULT_ADJUST_INTERVAL
+	local ttlFactors = runtime.visualsTTLFactors or {}
+	local layerFactors = runtime.visualsTTLLayerFactors or {}
 	local currentTime = now or runtime.lastIngestTime or 0
 	local snapshot = {
 		window = window,
@@ -166,12 +168,14 @@ function Renderer.render(runtime, palette, now)
 			local cell = ensureCell(snapshot, col, row, runtime.maxLayers, visualsTTL)
 			local innerRegion = cell.composite:getInner()
 			innerRegion:setBackground(DEFAULT_INNER_COLOR)
-			innerRegion:setDefaultTTL(visualsTTL)
+			local ttl = visualsTTL * (ttlFactors.source or 1)
+			innerRegion:setDefaultTTL(ttl)
 			innerRegion:addLayer({
 				color = colorForSchema(palette, evt.schema),
 				ts = evt.ingestTime or currentTime,
 				id = string.format("%s::%s", tostring(evt.schema), tostring(evt.id)),
 				label = evt.schema,
+				ttl = ttl,
 			})
 			cell.innerMeta = {
 				schema = evt.schema,
@@ -194,12 +198,14 @@ function Renderer.render(runtime, palette, now)
 			local borderRegion = cell.composite:getBorder(evt.layer)
 			if borderRegion then
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
-				borderRegion:setDefaultTTL(visualsTTL)
+				local ttl = visualsTTL * (ttlFactors.match or 1) * (layerFactors[evt.layer] or 1)
+				borderRegion:setDefaultTTL(ttl)
 				borderRegion:addLayer({
 					color = colorForKind(palette, "match"),
 					ts = evt.ingestTime or currentTime,
 					id = string.format("match_%s_%s", tostring(evt.layer), tostring(id)),
 					label = evt.kind or "match",
+					ttl = ttl,
 				})
 			end
 			cell.borderMeta = cell.borderMeta or {}
@@ -225,12 +231,14 @@ function Renderer.render(runtime, palette, now)
 			local borderRegion = cell.composite:getBorder(evt.layer)
 			if borderRegion then
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
-				borderRegion:setDefaultTTL(visualsTTL)
+				local ttl = visualsTTL * (ttlFactors.expire or 1)
+				borderRegion:setDefaultTTL(ttl)
 				borderRegion:addLayer({
 					color = colorForKind(palette, "expire"),
 					ts = evt.ingestTime or currentTime,
 					id = string.format("expire_%s_%s", tostring(evt.layer), tostring(id)),
 					label = "expire",
+					ttl = ttl,
 				})
 			end
 			cell.borderMeta = cell.borderMeta or {}

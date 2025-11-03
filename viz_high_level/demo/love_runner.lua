@@ -214,6 +214,8 @@ function LoveRunner.bootstrap(opts)
 			header = state.attachment.header,
 			visualsTTL = effectiveVisualsTTL,
 			visualsTTLFactor = 1,
+			visualsTTLFactors = opts.visualsTTLFactors or defaults.visualsTTLFactors,
+			visualsTTLLayerFactors = opts.visualsTTLLayerFactors or defaults.visualsTTLLayerFactors,
 			maxColumns = defaults.maxColumns,
 			maxRows = defaults.maxRows,
 			startId = defaults.startId,

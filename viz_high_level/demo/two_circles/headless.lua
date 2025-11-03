@@ -4,8 +4,26 @@ require("bootstrap")
 local Runtime = require("viz_high_level.core.runtime")
 local Renderer = require("viz_high_level.core.headless_renderer")
 local DebugViz = require("viz_high_level.vizLogFormatter")
+local Log = require("log")
 local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 local TwoCirclesDemo = require("viz_high_level.demo.two_circles")
+
+-- Headless demo can be noisy at INFO; drop join-tag logs by default.
+-- Opt out with HEADLESS_JOIN_LOGS=1.
+local previousEmitter
+local joinLogs = os.getenv("HEADLESS_JOIN_LOGS")
+if joinLogs ~= "1" then
+	local prev
+	prev = Log.setEmitter(function(level, message, tag)
+		if tag == "join" then
+			return
+		end
+		if prev then
+			prev(level, message, tag)
+		end
+	end)
+	previousEmitter = prev
+end
 
 local demo = TwoCirclesDemo.build()
 local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })
@@ -29,6 +47,8 @@ local runtime = Runtime.new({
 	header = adapter.header,
 	visualsTTL = visualsTTL,
 	visualsTTLFactor = 1,
+	visualsTTLFactors = defaults.visualsTTLFactors,
+	visualsTTLLayerFactors = defaults.visualsTTLLayerFactors,
 	maxColumns = defaults.maxColumns,
 	maxRows = defaults.maxRows,
 	startId = defaults.startId,
@@ -68,3 +88,7 @@ end
 clock:set(clock:now() + 0.25)
 local snap = Renderer.render(runtime, adapter.palette, clock:now())
 DebugViz.snapshot(snap, { label = "two_circles_final", logSnapshots = true })
+
+if previousEmitter then
+	Log.setEmitter(previousEmitter)
+end

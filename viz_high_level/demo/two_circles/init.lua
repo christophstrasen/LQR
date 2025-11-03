@@ -144,6 +144,15 @@ end
 TwoCirclesDemo.loveDefaults = {
 	label = "two circles",
 	visualsTTLFactor = 1.2,
+	visualsTTLFactors = {
+		source = 0.9,
+		match = 2.2,
+		expire = 0.2,
+	},
+	visualsTTLLayerFactors = {
+		[1] = 1.0,
+		[2] = 1.3,
+	},
 	playbackSpeed = 0.7,
 	visualsTTL = JOINT_TTL,
 	adjustInterval = 0.25,
