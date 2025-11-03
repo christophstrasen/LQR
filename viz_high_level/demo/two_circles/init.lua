@@ -4,6 +4,7 @@ local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
+local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 local Log = require("log").withTag("demo")
 
 local PLAY_DURATION = 10
@@ -141,7 +142,7 @@ function TwoCirclesDemo.start(subjects, opts)
 	})
 end
 
-TwoCirclesDemo.loveDefaults = {
+TwoCirclesDemo.loveDefaults = LoveDefaults.merge({
 	label = "two circles",
 	visualsTTLFactor = 1.2,
 	visualsTTLFactors = {
@@ -163,6 +164,6 @@ TwoCirclesDemo.loveDefaults = {
 	maxRows = 10,
 	startId = 0,
 	lockWindow = true,
-}
+})
 
 return TwoCirclesDemo

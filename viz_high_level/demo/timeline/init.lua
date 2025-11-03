@@ -3,6 +3,7 @@ local TimelineDemo = {}
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local Scheduler = require("viz_high_level.demo.scheduler")
+local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 
 local function buildSubjects()
 	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
@@ -258,10 +259,10 @@ end
 
 TimelineDemo.snapshots = TIMELINE_SNAPSHOTS
 TimelineDemo.timeline = TIMELINE_EVENTS
-TimelineDemo.loveDefaults = {
+TimelineDemo.loveDefaults = LoveDefaults.merge({
 	label = "timeline",
 	ticksPerSecond = 2.5,
 	visualsTTL = 10,
-}
+})
 
 return TimelineDemo

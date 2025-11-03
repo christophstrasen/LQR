@@ -1,110 +1,61 @@
 # High-Level Visualization
 
-This folder now splits into a `core/` package (adapter, runtime, renderer, draw helpers) and `demo/` wiring (Love2D app + headless script + deterministic data generator) so the reusable pieces stay separate from sample entrypoints.
+This package visualizes streaming joins by turning normalized events into grid snapshots. It separates reusable core pieces from demo wiring so you can reuse the runtime/renderer without dragging along Love2D entrypoints.
 
-## Adapter expectations
+## Architecture
+- **core/**: houses the mechanics. `query_adapter` hooks into joins and emits normalized events the viz can consume. `runtime` maintains projection/grid state so we know where to place things. `headless_renderer` + `draw` turn that state into snapshots and pixels.
+- **demo/**: contains Love runners, headless scripts, and data generators. These feed the core but are optional if you just want the visualization plumbing.
 
-- `QueryVizAdapter.attach` instruments `Query.Builder` joins via `withVisualizationHook`. We currently **require** every join step to call `:onSchemas` with explicit schema → field mappings. Those maps are how we determine projection domains and grid anchoring, so the adapter prints a warning if the plan falls back to `onField`/`onId`.
-- Primary sources are derived from `QueryBuilder:primarySchemas()`. If a schema does not appear there we skip its `input` events entirely.
+## Core concepts and flow
+1) **Adapter expectations**  
+   The adapter is the bridge from joins to viz. Call `QueryVizAdapter.attach(builder)` on your query builder. Always supply `:onSchemas` with explicit schema→field maps so we can compute projection domains (what ids live on the grid). Falling back to `onField`/`onId` warns because we lose that certainty. Primary schemas come from `QueryBuilder:primarySchemas()`; anything else is skipped for `input` events.
 
-## Normalized events
+2) **Normalized events (what the renderer consumes)**  
+   - `source`: “a record arrived.” Includes `schema/id`, the `projectionKey` we’ll place on the grid, whether it’s `projectable` (key resolved), and the original `record`.  
+   - `joinresult`: “a join emission happened.” Carries `kind` (`"match"` or `"unmatched"`), which border `layer` to draw, the join `key`, the participating payloads (`left/right`), and projection metadata so we know where to show it.  
+   - `expire`: “a cached record aged out.” Includes `schema/id`, `reason`, the removed `entry`, and projection info so the viz can show the expiry burst on the right cell.  
+   The `kind` field keeps matches and anti-joins on the same pipeline while allowing different styling.
 
-The adapter exposes `attachment.normalized`, an observable made up of deterministic tables:
+3) **No deduplication of sources**  
+   We now let every `source` emission through, even if it reuses the same `schema::id`. Re-emits often carry meaningful changes and should redraw; the renderer will simply refresh the same cell instead of dropping the event.
 
-| `type`       | Additional fields                                                                                     |
-|--------------|--------------------------------------------------------------------------------------------------------|
-| `source`     | `schema`, `id`, `projectionKey`, `projectable`, `record`                                               |
-| `joinresult` | `kind` (`"match"` or `"unmatched"`), `layer`, `key`, `left`, `right`, `schema`, `entry`, projections   |
-| `expire`     | `schema`, `id`, `reason`, `entry`, projections                                                         |
+4) **Runtime → Renderer → Draw**  
+   Runtime ingests normalized events, tracks the window and projection grid, and the headless renderer builds a snapshot (cells, layers, legend). The Love runner draws that snapshot; headless scripts log it for tests and snapshots.
 
-`joinresult.kind` lets the runtime treat matched rows and anti-join rows consistently while still allowing different styling later on.
+## Visual fades (TTL)
+- Base TTL = `(visualsTTL or adjustInterval) * visualsTTLFactor`; if you omit `visualsTTL`, we fall back to the adjust cadence so fades still have a duration.
+- Per-kind scaling (optional): `visualsTTLFactors = { source, match, expire }` multiplies the base for inner fills (sources), match borders (joined), and expire borders.
+- Per-layer scaling (optional): `visualsTTLLayerFactors = { [layer] = factor }` multiplies match borders per join depth so outer joins can linger differently than inner ones.
+- Leave the maps out to keep all factors at 1. Example: two_circles boosts match TTLs, shortens expire TTLs, and lifts the outermost match layer via `visualsTTLLayerFactors[2]`.
 
-## Source deduplication
+## Demo defaults (Love/headless)
+Each demo exports `loveDefaults`; `demo/common/love_defaults.lua` just merges the table. These defaults configure how the runner plays and renders:
+- `label`: window title shown by the runner.
+- `visualsTTL`: base fade duration; defaults to `adjustInterval` if unset.
+- `visualsTTLFactor`: multiplies `visualsTTL` to stretch or shrink all fades.
+- `visualsTTLFactors`: optional per-kind multipliers for source/match/expire layers.
+- `visualsTTLLayerFactors`: optional per-border-layer multipliers on top of `match` TTLs.
+- `adjustInterval`: how often the layout/zoom logic can run; also used as TTL fallback when `visualsTTL` is nil.
+- `playbackSpeed` / `ticksPerSecond`: pacing of demo events; pick one style per demo.
+- `clockMode`: whether the clock is driven by Love frames or the demo driver.
+- `clockRate`: multiplier applied to the chosen clock mode.
+- `totalPlaybackTime`: optional total duration for timeline-based demos.
+- `maxColumns`, `maxRows`, `startId`: grid dimensions and origin.
+- `lockWindow`: keep the grid anchored instead of auto-zooming.
+- `backgroundColor`: optional RGBA background for Love runs.
+- `windowSize`: optional Love window size.
+- Other scenario knobs live beside the defaults in each demo `init.lua`.
 
-Primary `source` events are deduplicated by `schema::id` to avoid spamming the grid whenever a join replays cached inserts. Tokens are released once that id expires or gets flushed as unmatched, so future inserts show up as "updates". If you re-emit a record (same schema/id) before its window cycles, the adapter intentionally keeps only the first visual row to prevent flicker.
+## Demos at a glance
+- `demo/simple/`: eight-event snapshot; quick smoke test. Run headless (`demo/simple/headless.lua`) or Love (`love . simple`).
+- `demo/timeline/`: customers→orders→shipments with a scheduler; `love .` (or `love . timeline`) or headless replay (`demo/timeline/headless.lua`).
+- `demo/window_zoom/`: auto-zoom behavior over a sliding window.
+- `demo/two_circles/` and `demo/two_zones/`: grid-locked shapes via the zone generator; headless scripts emit labeled snapshots.
+- Shared plumbing (driver, scheduler, zone timeline, defaults) lives under `demo/common/`.
 
-## Demo layout
-
-- `viz_high_level/demo/simple/` keeps the original eight-event snapshot demo for smoke testing. Run `viz_high_level/demo/simple/headless.lua` to trace it without Love2D, or launch the Love app via `love . simple` (same UI as the lively demo).
-- `viz_high_level/demo/timeline/` hosts the lively scheduler-driven scenario (customers → orders → shipments). `love .` (or `love . timeline` / `love . --demo timeline`) runs it, while `viz_high_level/demo/timeline/headless.lua` replays the same timeline headlessly and emits labeled snapshots throughout the run.
-- Shared helper modules (scheduler, future test harnesses, etc.) live directly under `viz_high_level/demo/` so each scenario subfolder only needs to expose `build()/start()` implementations.
-
-## Visual TTL knobs (fades)
-
-- Base TTL: `visualsTTLFactor * (visualsTTL or adjustInterval)` set in `Runtime`. This is the starting fade duration for all layers.
-- Per-kind scaling (optional): `visualsTTLFactors = { source = 1, match = 1, expire = 1 }`. Renderer multiplies the base TTL by these for inner fills (source), match borders (joined), and expire borders.
-- Per-layer scaling (optional): `visualsTTLLayerFactors = { [layer] = factor }`. Applied on top of `match` factors for each border layer so outer joins can linger longer than inner ones.
-- Default behavior stays the same if you omit the maps (all factors = 1). Example from `two_circles`: base TTL tied to the join window, then `match` > `source` > `expire`, with the outermost match layer boosted again via `visualsTTLLayerFactors[2]`.
-
-## Zone generator (deterministic synthetic data)
-
-We ship a small, deterministic zone generator to synthesize records for demos that opt into it (e.g., `demo/two_circles`, `demo/two_zones`). Timeline/window_zoom/simple still use hand-authored timelines. The generator lives under `viz_high_level/zones/` and is invoked via `viz_high_level/demo/common/zones_timeline.lua`. It only produces payloads; joins and visualization stay native (`QueryVizAdapter` reads the same fields it always did).
-
-### Shapes
-
-Supported shapes:
-
-- `continuous`: linear span across `center ± range`, ordered ascending.
-- `linear_in` / `linear_out`: weighted ramps across the span.
-- `bell`: center-heavy ordering across the span.
-- `flatField`: deterministic shuffle of the span (seeded).
-- `circle10` / `circle100`: mask on a 10×10 or 100×100 grid; mapped to absolute ids using the provided grid config and `radius` (mask size).
-
-### Core knobs
-
-- `center` (number): anchor id for linear shapes; for circles we convert mask offsets around this anchor using the fixed grid.
-- `range` (number): half-span for linear shapes (required for non-circles).
-- `radius` (number): mask size for circles (default from shape name, e.g., `circle10` → 10).
-- `coverage` (0..1): fraction of shape cells eligible for emission.
-- `mode`: `"random"` (default, seeded deterministic shuffle) or `"monotonic"` (cycle through ordered cells, wrap as needed).
-- `rate`: events per second over the zone’s time window (`t0..t1`). Total events ≈ `rate * (t1 - t0) * totalPlaybackTime`.
-- `t0`/`t1` (0..1): normalized start/end of emission window.
-- `rate_shape`: `"constant" | "linear_up" | "linear_down" | "bell"` to space timestamps over the window.
-- `grid`: passed via `zones_timeline` opts: `{ startId, columns, rows }`. Circles map mask offsets into this grid; linear shapes still use absolute ids around `center`.
-- `payloadForId` (function): optional; build a native payload from the chosen id. If omitted, defaults to `{ [idField] = id }`.
-- `idField`: only used when `payloadForId` is absent (default `"id"`).
-
-### Determinism and mapping
-
-- No projection keys are injected. The generator produces plain payloads; projection/join keys are resolved by `QueryVizAdapter` via `onSchemas`.
-- Random mode uses a fixed seed (LCG) so runs are repeatable.
-- Circles are grid-aware: mask cells carry row/col offsets, converted to ids via `startId + col*rows + row`. The window should be locked for these demos to keep shapes stable.
-
-### Modes and wrap
-
-- Random mode: build a deterministic shuffle of eligible cells; if `rate` drives the count past the number of cells, we wrap through the shuffled list again.
-- Monotonic mode: walk the ordered list and wrap as needed. High rates will revisit cells in order.
-
-### Usage in demos
-
-`viz_high_level/demo/common/zones_timeline.lua` calls the generator with the demo’s zones and grid config, appends a completion event, and returns events/snapshots/summary. Demos that use zones (currently the circle and two-zone examples) supply zones plus a fixed grid (e.g., `startId=0, columns=10, rows=10`) when they need shapes to align to the window. Other demos (timeline/window_zoom/simple) keep their hand-authored timelines. The demo `build()` still sets up schema-aware subjects via `SchemaHelpers.subjectWithSchema`, so emitted payloads are native.
-
-Example zone (orders circle aligned with customers):
-
-```lua
-{
-  label = "ord_circle",
-  schema = "orders",
-  center = 55,
-  radius = 7,
-  shape = "circle10",
-  coverage = 0.3,
-  mode = "random",
-  rate = 8,
-  t0 = 0.1,
-  t1 = 0.6,
-  rate_shape = "linear_down",
-  idField = "id",
-  payloadForId = function(id)
-    return { id = id, orderId = 500 + id, customerId = id, total = 30 + ((id % 4) * 5) }
-  end,
-}
-```
-
-### Grid and window locking
-
-For shape demos, we fix the window in `loveDefaults` (`maxColumns`, `maxRows`, `startId`, `lockWindow=true`) so ids land predictably. Auto-zoom is suppressed when `lockWindow` is set; the runtime still honors adjustInterval/visualsTTL for fades only.
-
-### Summary fields
-
-`ZonesTimeline.build` returns `events`, `snapshots`, and a summary with totals, per-schema counts, and warnings (e.g., missing circle range). It also carries a `mappingHint` (currently `"linear"`/`"spiral"`) for debugging only; renderers do not consume it.
+## Zone generator (circle/zone demos)
+Lives in `viz_high_level/zones/`, invoked via `demo/common/zones_timeline.lua`. It synthesizes payloads only; joins/projection stay native.
+- Shapes: `continuous`, `linear_in/out`, `bell`, `flatField`, `circle10/100`—pick how ids spread across the grid.
+- Knobs: `center`, `range` (linear), `radius` (circles), `coverage`, `mode` (`random` seeded / `monotonic`), `rate`, `t0/t1`, `rate_shape`, `grid { startId, columns, rows }`, `payloadForId` (optional), `idField`.
+- Determinism: seeded LCG; circles map mask offsets into the fixed grid; lock the window in `loveDefaults` for stable shapes.
+- Output: events, snapshots, summary (counts, warnings, `mappingHint` for debugging only).

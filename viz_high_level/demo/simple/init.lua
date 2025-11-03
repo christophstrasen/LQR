@@ -2,6 +2,7 @@ local SimpleDemo = {}
 
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
+local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 
 local function buildSubjects()
 	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
@@ -80,9 +81,9 @@ function SimpleDemo.start(subjects)
 	return driver
 end
 
-SimpleDemo.loveDefaults = {
+SimpleDemo.loveDefaults = LoveDefaults.merge({
 	label = "simple snapshot",
 	visualsTTL = 2,
-}
+})
 
 return SimpleDemo

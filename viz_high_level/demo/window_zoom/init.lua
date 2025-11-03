@@ -3,6 +3,7 @@ local WindowZoomDemo = {}
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local Scheduler = require("viz_high_level.demo.scheduler")
+local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 
 local function buildSubjects()
 	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", {
@@ -295,11 +296,11 @@ end
 
 WindowZoomDemo.snapshots = WINDOW_SNAPSHOTS
 WindowZoomDemo.timeline = WINDOW_EVENTS
-WindowZoomDemo.loveDefaults = {
+WindowZoomDemo.loveDefaults = LoveDefaults.merge({
 	label = "window zoom",
 	ticksPerSecond = 2,
 	visualsTTL = 5,
 	adjustInterval = 0.5,
-}
+})
 
 return WindowZoomDemo

@@ -4,6 +4,7 @@ local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local ZonesTimeline = require("viz_high_level.demo.common.zones_timeline")
 local Driver = require("viz_high_level.demo.common.driver")
+local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 
 local PLAY_DURATION = 12
 
@@ -145,7 +146,7 @@ end
 TwoZonesDemo.snapshots = TWO_ZONES_SNAPSHOTS
 TwoZonesDemo.timeline = TWO_ZONES_EVENTS
 TwoZonesDemo.summary = TWO_ZONES_SUMMARY
-TwoZonesDemo.loveDefaults = {
+TwoZonesDemo.loveDefaults = LoveDefaults.merge({
 	label = "two zones",
 	playbackSpeed = 2,
 	visualsTTL = 4,
@@ -153,6 +154,6 @@ TwoZonesDemo.loveDefaults = {
 	clockMode = "driver",
 	clockRate = 2,
 	totalPlaybackTime = PLAY_DURATION,
-}
+})
 
 return TwoZonesDemo
