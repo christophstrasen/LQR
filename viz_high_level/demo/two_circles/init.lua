@@ -26,7 +26,7 @@ local function build()
 	local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
 
 	local builder = Query.from(customers, "customers")
-		:innerJoin(orders, "orders")
+		:leftJoin(orders, "orders")
 		:onSchemas({ customers = "id", orders = "customerId" })
 		:window({
 			time = JOINT_TTL,
@@ -146,9 +146,9 @@ TwoCirclesDemo.loveDefaults = LoveDefaults.merge({
 	label = "two circles",
 	visualsTTLFactor = 1.2,
 	visualsTTLFactors = {
-		source = 0.9,
-		match = 2.2,
-		expire = 0.2,
+		source = 1.1,
+		match = 7.2,
+		expire = 0.1,
 	},
 	visualsTTLLayerFactors = {
 		[1] = 1.0,

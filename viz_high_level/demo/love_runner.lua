@@ -171,6 +171,27 @@ function LoveRunner.bootstrap(opts)
 	local visualsTTL = opts.visualsTTL or defaults.visualsTTL or 3
 	local visualsTTLFactor = opts.visualsTTLFactor or defaults.visualsTTLFactor or 1
 	local effectiveVisualsTTL = visualsTTL * visualsTTLFactor
+	local ttlFactors = opts.visualsTTLFactors or defaults.visualsTTLFactors or {}
+	local layerFactors = opts.visualsTTLLayerFactors or defaults.visualsTTLLayerFactors or {}
+	local function maxLayerFactor()
+		local max = 1
+		for _, factor in pairs(layerFactors) do
+			if type(factor) == "number" and factor > max then
+				max = factor
+			end
+		end
+		return max
+	end
+	local function maxKindFactor()
+		local max = 1
+		for _, factor in pairs({ ttlFactors.source, ttlFactors.match, ttlFactors.expire }) do
+			if type(factor) == "number" and factor > max then
+				max = factor
+			end
+		end
+		return max
+	end
+	local maxEffectiveTTL = effectiveVisualsTTL * maxKindFactor() * maxLayerFactor()
 	local playbackSpeed = opts.playbackSpeed or defaults.playbackSpeed or defaults.ticksPerSecond or 0
 	local adjustInterval = opts.adjustInterval or defaults.adjustInterval or 1.5
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
@@ -179,7 +200,7 @@ function LoveRunner.bootstrap(opts)
 	local lockWindow = defaults.lockWindow or opts.lockWindow
 	local clockMode = opts.clockMode or defaults.clockMode or "love" -- "driver" keeps time in scenario/driver, "love" advances per frame
 	local clockRate = opts.clockRate or defaults.clockRate or playbackSpeed or 1
-	local fadeBudget = effectiveVisualsTTL * 1.2
+	local fadeBudget = maxEffectiveTTL * 1.1
 	local clock = {
 		value = 0,
 		now = function(self)
