@@ -138,4 +138,43 @@ describe("viz_high_level headless renderer", function()
 		assert.is_true(finalColor[3] > finalColor[1])
 		assert.is_true(finalColor[3] > fadedColor[3])
 	end)
+
+	it("counts matches per layer and uses provided layer colors", function()
+		local runtime = Runtime.new({
+			maxLayers = 2,
+			maxColumns = 2,
+			maxRows = 1,
+			startId = 0,
+			visualsTTL = 1,
+			header = {
+				joinColors = {
+					[1] = { 1, 0, 0, 1 },
+					[2] = { 0, 1, 0, 1 },
+				},
+			},
+		})
+
+		runtime:ingest({
+			type = "match",
+			layer = 1,
+			projectionKey = 0,
+			projectable = true,
+		}, 0)
+		runtime:ingest({
+			type = "match",
+			layer = 2,
+			projectionKey = 1,
+			projectable = true,
+		}, 0)
+
+		local snap = Renderer.render(runtime, {}, 0)
+		assert.is_table(snap.meta.outerLegend)
+		assert.are.equal(3, #snap.meta.outerLegend) -- two match layers + expire
+		local first = snap.meta.outerLegend[1]
+		assert.are.same({ 1, 0, 0, 1 }, first.color)
+		assert.are.equal(1, first.total)
+		local second = snap.meta.outerLegend[2]
+		assert.are.same({ 0, 1, 0, 1 }, second.color)
+		assert.are.equal(1, second.total)
+	end)
 end)

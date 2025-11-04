@@ -133,6 +133,9 @@ function Renderer.render(runtime, palette, now)
 	local ttlFactors = runtime.visualsTTLFactors or {}
 	local layerFactors = runtime.visualsTTLLayerFactors or {}
 	local currentTime = now or runtime.lastIngestTime or 0
+	local matchCountsByLayer = {}
+	local projectableMatchCountsByLayer = {}
+	local joinColors = (runtime.header and runtime.header.joinColors) or {}
 	local snapshot = {
 		window = window,
 		cells = {},
@@ -145,14 +148,13 @@ function Renderer.render(runtime, palette, now)
 			expireCount = 0,
 			projectableMatchCount = 0,
 			projectableExpireCount = 0,
+			matchCountsByLayer = matchCountsByLayer,
+			projectableMatchCountsByLayer = projectableMatchCountsByLayer,
 			maxLayers = runtime.maxLayers or 2,
 			palette = palette,
 			header = runtime.header or {},
 			legend = {},
-			outerLegend = {
-				{ kind = "match", label = "Joined", color = colorForKind(palette, "match") },
-				{ kind = "expire", label = "Expired", color = colorForKind(palette, "expire") },
-			},
+			outerLegend = {},
 		},
 	}
 	snapshot.meta.header.window = window
@@ -198,10 +200,11 @@ function Renderer.render(runtime, palette, now)
 			local borderRegion = cell.composite:getBorder(evt.layer)
 			if borderRegion then
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
+				local layerColor = joinColors[evt.layer] or colorForKind(palette, "match")
 				local ttl = visualsTTL * (ttlFactors.match or 1) * (layerFactors[evt.layer] or 1)
 				borderRegion:setDefaultTTL(ttl)
 				borderRegion:addLayer({
-					color = colorForKind(palette, "match"),
+					color = layerColor,
 					ts = evt.ingestTime or currentTime,
 					id = string.format("match_%s_%s", tostring(evt.layer), tostring(id)),
 					label = evt.kind or "match",
@@ -217,8 +220,11 @@ function Renderer.render(runtime, palette, now)
 			}
 			snapshot.meta.matchCount = snapshot.meta.matchCount + 1
 			snapshot.meta.projectableMatchCount = snapshot.meta.projectableMatchCount + 1
+			matchCountsByLayer[evt.layer] = (matchCountsByLayer[evt.layer] or 0) + 1
+			projectableMatchCountsByLayer[evt.layer] = (projectableMatchCountsByLayer[evt.layer] or 0) + 1
 		else
 			snapshot.meta.matchCount = snapshot.meta.matchCount + 1
+			matchCountsByLayer[evt.layer] = (matchCountsByLayer[evt.layer] or 0) + 1
 		end
 	end
 
@@ -254,6 +260,29 @@ function Renderer.render(runtime, palette, now)
 			snapshot.meta.expireCount = snapshot.meta.expireCount + 1
 		end
 	end
+
+	-- Build outer legend entries per match layer and global expire.
+	for layer = 1, snapshot.meta.maxLayers do
+		local count = matchCountsByLayer[layer] or 0
+		if count > 0 or joinColors[layer] then
+			local layerColor = joinColors[layer] or colorForKind(palette, "match")
+			snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = {
+				kind = "match",
+				label = string.format("Joined (layer %d)", layer),
+				color = layerColor,
+				layer = layer,
+				total = count,
+				projectable = projectableMatchCountsByLayer[layer] or 0,
+			}
+		end
+	end
+	snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = {
+		kind = "expire",
+		label = "Expired",
+		color = colorForKind(palette, "expire"),
+		total = snapshot.meta.expireCount,
+		projectable = snapshot.meta.projectableExpireCount,
+	}
 
 	for _, column in pairs(snapshot.cells) do
 		for _, cell in pairs(column) do

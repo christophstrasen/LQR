@@ -18,7 +18,8 @@ end
 
 local function fieldLabel(join)
 	local keyDesc = join.displayKey or "id"
-	return string.format("%s join %s on %s", join.type or "join", join.source or "right", keyDesc)
+	local layer = join.layer and string.format(" [layer %d]", join.layer) or ""
+	return string.format("%s join %s on %s%s", join.type or "join", join.source or "right", keyDesc, layer)
 end
 
 local function drawHeader(snapshot, lg, backgroundColor)
@@ -116,11 +117,7 @@ local function drawHeader(snapshot, lg, backgroundColor)
 			lg.setColor(1, 1, 1, 1)
 			local countLabel = ""
 			if entry.kind == "match" then
-				countLabel = string.format(
-					" (%d projectable/%d total)",
-					snapshot.meta.projectableMatchCount or 0,
-					snapshot.meta.matchCount or 0
-				)
+				countLabel = string.format(" (%d projectable/%d total)", entry.projectable or 0, entry.total or 0)
 			elseif entry.kind == "expire" then
 				countLabel = string.format(
 					" (%d projectable/%d total)",

@@ -280,7 +280,19 @@ local function buildDepthResolver(totalSteps, maxLayers)
 	end
 end
 
-local function describeJoins(plan)
+local function schemasForKey(key)
+	if type(key) == "table" and key.map then
+		local names = {}
+		for schema in pairs(key.map) do
+			names[#names + 1] = schema
+		end
+		table.sort(names)
+		return names
+	end
+	return {}
+end
+
+local function describeJoins(plan, depthResolver)
 	local joins = {}
 	local function keyLabel(key)
 		if type(key) == "string" then
@@ -302,6 +314,7 @@ local function describeJoins(plan)
 		return "id"
 	end
 	for _, join in ipairs(plan.joins or {}) do
+		local layer = depthResolver and depthResolver(#joins + 1) or nil
 		joins[#joins + 1] = {
 			type = join.type,
 			source = join.source,
@@ -309,6 +322,8 @@ local function describeJoins(plan)
 			displayKey = keyLabel(join.key),
 			window = join.window,
 			projectionFields = join.projectionFields,
+			schemas = schemasForKey(join.key),
+			layer = layer,
 		}
 	end
 	return joins
@@ -458,6 +473,31 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	local primarySet = toSet(primaries)
 	local palette = opts.palette or rainbowPalette(primaries)
 	local projectionFields, projectionDomainSchema, projectionField = buildProjectionMap(plan)
+	local joins = describeJoins(plan, depthForStep)
+	local joinColors = {}
+	for _, join in ipairs(joins) do
+		local layer = join.layer
+		if layer then
+			local colors = {}
+			for _, schema in ipairs(join.schemas or {}) do
+				local c = palette[schema]
+				if c then
+					colors[#colors + 1] = c
+				end
+			end
+			if #colors > 0 then
+				local sumR, sumG, sumB, sumA = 0, 0, 0, 0
+				for _, c in ipairs(colors) do
+					sumR = sumR + (c[1] or 0)
+					sumG = sumG + (c[2] or 0)
+					sumB = sumB + (c[3] or 0)
+					sumA = sumA + (c[4] or 1)
+				end
+				local count = #colors
+				joinColors[layer] = { sumR / count, sumG / count, sumB / count, sumA / count }
+			end
+		end
+	end
 
 	local sink = rx.Subject.create()
 	local instrumented = queryBuilder:withVisualizationHook(function(context)
@@ -478,9 +518,10 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		primarySchemas = primaries,
 		header = {
 			window = nil, -- filled by runtime snapshot
-			joins = describeJoins(plan),
+			joins = joins,
 			from = plan.from or primaries,
 			gc = plan.gc,
+			joinColors = joinColors,
 			projection = {
 				domain = projectionDomainSchema or (plan.from and plan.from[1]) or primaries[1],
 				field = projectionField,
