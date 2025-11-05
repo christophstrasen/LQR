@@ -7,7 +7,7 @@ local Driver = require("viz_high_level.demo.common.driver")
 local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 local Log = require("log").withTag("demo")
 
-local PLAY_DURATION = 10
+local PLAY_DURATION = 20
 local JOINT_TTL = 3
 local demoClock = {
 	value = 0,
@@ -26,8 +26,11 @@ local function build()
 	local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
 
 	local builder = Query.from(customers, "customers")
-		:leftJoin(orders, "orders")
-		:onSchemas({ customers = "id", orders = "customerId" })
+		:innerJoin(orders, "orders")
+		:onSchemas({
+			customers = { field = "id", bufferSize = 10 },
+			orders = { field = "customerId", bufferSize = 10 },
+		})
 		:window({
 			time = JOINT_TTL,
 			field = "sourceTime",
@@ -51,14 +54,14 @@ local function buildZones()
 		{
 			label = "cust_circle",
 			schema = "customers",
-			center = 43,
+			center = 44,
 			range = 1, --invalid for circle shapes
 			radius = 2,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 2,
-			t0 = 0.0,
+			rate = 8,
+			t0 = 0.1,
 			t1 = 0.7,
 			rate_shape = "constant",
 			idField = "id",
@@ -72,9 +75,9 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 2,
+			rate = 8,
 			t0 = 0.1,
-			t1 = 0.98,
+			t1 = 0.7,
 			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)

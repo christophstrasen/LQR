@@ -15,6 +15,7 @@ local Result = require("JoinObservable.result")
 local Log = require("log").withTag("query")
 
 local DEFAULT_WINDOW_COUNT = 1000
+local DEFAULT_PER_KEY_BUFFER_SIZE = 10
 local schedulerOverride = nil
 
 local QueryBuilder = {}
@@ -240,19 +241,6 @@ local function flattenRecords(observable, allowedSchemas)
 	end)
 end
 
--- Explainer: selectorFromField warns on missing fields but keeps processing.
-local function selectorFromField(field)
-	local warned = {}
-	return function(entry, _, schemaName)
-		local value = entry and entry[field]
-		if value == nil and schemaName and not warned[schemaName] then
-			warned[schemaName] = true
-			Log:warn("Query.onField('%s') missing for schema '%s'", field, schemaName)
-		end
-		return value
-	end
-end
-
 -- Explainer: selectorFromSchemas drives per-schema key lookups with soft warnings for gaps.
 local function selectorFromSchemas(map)
 	local missingWarned = {}
@@ -275,35 +263,48 @@ local function selectorFromSchemas(map)
 	return selector
 end
 
--- Explainer: selectorFromId pulls keys from RxMeta.id and warns when absent.
-local function selectorFromId()
-	local warned = {}
-	return function(entry, _, schemaName)
-		local meta = entry and entry.RxMeta
-		if meta and meta.id ~= nil then
-			return meta.id
-		end
-		if schemaName and not warned[schemaName] then
-			warned[schemaName] = true
-			Log:warn("Query.onId() missing RxMeta.id for schema '%s'", schemaName)
-		end
-		return nil
-	end
-end
-
 -- Explainer: normalizeKeySelector converts builder specs into the callable expected by the core join.
 local function normalizeKeySelector(step)
 	local spec = step.keySpec
-	if not spec or spec.kind == "id" then
-		return selectorFromId()
+	assert(spec and spec.kind == "schemas", "onSchemas(...) is required for join keys")
+	local normalized = {}
+	local bufferSizes = {}
+	for schema, value in pairs(spec.map) do
+		if type(schema) ~= "string" or schema == "" then
+			error("onSchemas keys must be non-empty schema names")
+		end
+		local field = value
+		local perKeyBufferSize
+		if type(value) == "table" then
+			field = value.field or value.selector and value.field
+			if value.bufferSize ~= nil and value.perKeyBufferSize ~= nil then
+				Log:warn("onSchemas[%s]: both bufferSize and perKeyBufferSize provided; bufferSize wins", tostring(schema))
+			end
+			perKeyBufferSize = value.bufferSize or value.perKeyBufferSize
+			local distinct = value.distinct
+			if distinct ~= nil and perKeyBufferSize ~= nil then
+				Log:warn("onSchemas[%s]: both distinct and bufferSize provided; distinct wins", tostring(schema))
+			end
+			if distinct == true then
+				perKeyBufferSize = 1
+			elseif distinct == false and perKeyBufferSize == nil then
+				perKeyBufferSize = DEFAULT_PER_KEY_BUFFER_SIZE
+			end
+		end
+		if type(field) ~= "string" or field == "" then
+			error(("onSchemas entry for '%s' must define a field (string)"):format(schema))
+		end
+		normalized[schema] = field
+		if perKeyBufferSize then
+			assert(type(perKeyBufferSize) == "number", "perKeyBufferSize must be a positive number")
+			if perKeyBufferSize < 1 then
+				Log:warn("onSchemas[%s]: bufferSize < 1; clamping to 1", tostring(schema))
+				perKeyBufferSize = 1
+			end
+			bufferSizes[schema] = perKeyBufferSize
+		end
 	end
-	if spec.kind == "field" then
-		return selectorFromField(spec.field)
-	end
-	if spec.kind == "schemas" then
-		return selectorFromSchemas(spec.map)
-	end
-	return selectorFromId()
+	return selectorFromSchemas(normalized), bufferSizes
 end
 
 -- Explainer: normalizeWindow defaults to a large count window and threads scheduler into GC if available.
@@ -450,7 +451,7 @@ end
 -- Explainer: ensureStep prevents configuring keys/windows before any join is staged.
 local function ensureStep(builder)
 	if #builder._steps == 0 then
-		error("Call innerJoin/leftJoin before onField/onId/onSchemas/window")
+		error("Call innerJoin/leftJoin before onSchemas/window")
 	end
 end
 
@@ -480,6 +481,20 @@ end
 local function deriveSchemasFromSelection(selection)
 	local targets = selectionTargets(selection)
 	return targets
+end
+
+local function resolveBufferSize(bufferSizes, schemas)
+	if not schemas or not bufferSizes then
+		return DEFAULT_PER_KEY_BUFFER_SIZE
+	end
+	local size = nil
+	for _, name in ipairs(schemas) do
+		local configured = bufferSizes[name]
+		if configured and (not size or configured > size) then
+			size = configured
+		end
+	end
+	return size or DEFAULT_PER_KEY_BUFFER_SIZE
 end
 
 local function collectPrimarySchemas(builder, set)
@@ -572,26 +587,6 @@ function QueryBuilder:withVisualizationHook(vizHook)
 	return nextBuilder
 end
 
----Configures the key selector to use a single field for all schemas.
----@param field string
----@return QueryBuilder
-function QueryBuilder:onField(field)
-	assert(type(field) == "string" and field ~= "", "onField expects a non-empty string")
-	ensureStep(self)
-	local nextBuilder = self:_clone()
-	nextBuilder._steps[#nextBuilder._steps].keySpec = { kind = "field", field = field }
-	return nextBuilder
-end
-
----Configures the key selector to use RxMeta.id per schema.
----@return QueryBuilder
-function QueryBuilder:onId()
-	ensureStep(self)
-	local nextBuilder = self:_clone()
-	nextBuilder._steps[#nextBuilder._steps].keySpec = { kind = "id" }
-	return nextBuilder
-end
-
 ---Configures explicit schema->field mappings for join keys.
 ---@param map table
 ---@return QueryBuilder
@@ -600,6 +595,14 @@ function QueryBuilder:onSchemas(map)
 	ensureStep(self)
 	local hasEntries = next(map) ~= nil
 	assert(hasEntries, "onSchemas expects at least one mapping")
+	for schemaName, selector in pairs(map) do
+		assert(type(schemaName) == "string" and schemaName ~= "", "onSchemas keys must be non-empty schema names")
+		local selectorType = type(selector)
+		assert(
+			selectorType == "string" or selectorType == "table",
+			("onSchemas[%s] must be a string field name or table"):format(schemaName)
+		)
+	end
 	local nextBuilder = self:_clone()
 	local step = nextBuilder._steps[#nextBuilder._steps]
 	local rightSchemas = step and step.sourceSchema and { step.sourceSchema } or nil
@@ -662,18 +665,21 @@ function QueryBuilder:_build()
 		end
 
 		local keySpec = step.keySpec
+		assert(keySpec and keySpec.kind == "schemas", "onSchemas(...) is required for each join step")
 		local leftFilter, rightFilter
-		if keySpec and keySpec.kind == "schemas" then
-			leftFilter = filterFromMap(keySpec.map, schemaSet(currentSchemas))
-			rightFilter = filterFromMap(keySpec.map, schemaSet(rightSchemas or (step.sourceSchema and { step.sourceSchema })))
-		end
+		leftFilter = filterFromMap(keySpec.map, schemaSet(currentSchemas))
+		rightFilter = filterFromMap(keySpec.map, schemaSet(rightSchemas or (step.sourceSchema and { step.sourceSchema })))
 
 		local leftRecords = flattenRecords(current, leftFilter)
 		local rightRecords = flattenRecords(rightObservable, rightFilter)
 
+		local keySelector, bufferSizes = normalizeKeySelector(step)
+
 		local options = normalizeWindow(step, self._defaultWindowCount, self._scheduler)
 		options.joinType = step.joinType
-		options.on = normalizeKeySelector(step)
+		options.on = keySelector
+		options.perKeyBufferSizeLeft = resolveBufferSize(bufferSizes, currentSchemas)
+		options.perKeyBufferSizeRight = resolveBufferSize(bufferSizes, rightSchemas or (step.sourceSchema and { step.sourceSchema }))
 		if self._vizHook then
 			local vizOptions = self._vizHook({
 				stepIndex = stepIndex,
@@ -755,20 +761,18 @@ end
 
 local function keyDescription(step)
 	local spec = step.keySpec
-	if not spec or spec.kind == "id" then
-		return "RxMeta.id"
-	end
-	if spec.kind == "field" then
-		return { field = spec.field }
-	end
-	if spec.kind == "schemas" then
+	if spec and spec.kind == "schemas" then
 		local mapCopy = {}
 		for schema, field in pairs(spec.map) do
-			mapCopy[schema] = field
+			if type(field) == "table" then
+				mapCopy[schema] = field.field
+			else
+				mapCopy[schema] = field
+			end
 		end
 		return { map = mapCopy }
 	end
-	return "RxMeta.id"
+	error("Unexpected keySpec in describe()")
 end
 
 local function windowDescription(window, defaultWindowCount)

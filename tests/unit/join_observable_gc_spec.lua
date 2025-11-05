@@ -147,7 +147,7 @@ describe("JoinObservable periodic GC", function()
 		end
 
 		assert.are.same({ 1, 2 }, expiredIds)
-		assert.are.same({ "evicted", "completed" }, expiredReasons)
+		assert.are.same({ "evicted", "evicted" }, expiredReasons)
 
 		assert.are.same({
 			{ left = 1, right = nil },

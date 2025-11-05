@@ -144,7 +144,7 @@ Each record emitted via `expiredStream` has the shape:
 }
 ```
 
-Matched records are never expired. Unmatched records emit at most once per side: once a record expires (or the streams complete), we emit a single `{ left = record, right = nil }` or `{ left = nil, right = record }` value and remove it from the cache.
+Matched records can still expire once they age past the retention window; expiration events tell you when cache entries leave, regardless of match status. Unmatched emissions still happen at most once per side when a cached record expires or on completion/flush.
 
 ### Periodic GC (`gcIntervalSeconds`, `gcScheduleFn`)
 
@@ -168,6 +168,14 @@ end
 ### Per-insert GC toggle (`gcOnInsert`)
 
 By default the join runs retention checks on every insert (`gcOnInsert = true`). Set `gcOnInsert = false` to skip per-insert sweeps and rely on periodic GC (or opportunistic checks on completion/disposal). This reduces CPU at the cost of higher peak memory and delayed expirations/unmatched emissions between GC ticks—use only when you provide a periodic scheduler and can tolerate the latency.
+
+### Per-key buffers, distinct vs. non-distinct, and eviction semantics
+
+Each side of the join holds a **per-key ring buffer**. Default `perKeyBufferSize` is `10` per side; distinct mode is simply size `1`. Configure via `options.perKeyBufferSize` (global) or per side with `options.perKeyBufferSizeLeft` / `options.perKeyBufferSizeRight`. When a buffer is full and a new record arrives, the oldest entry is evicted with `reason="replaced"` and emitted on the expired stream; we warn only when the capacity was implicit (the default) to nudge you to size buffers deliberately. The new record starts with `matched=false`; the evicted entry carries its original `matched` flag so downstream consumers can see whether it ever matched.
+
+Matching **fans out to all buffered partners** for the same key on the opposite side. Distinct behavior is achieved by setting the buffer size to `1`; larger buffers keep multiple arrivals alive so later partners can match against each of them until a window or cap prunes them.
+
+All removals emit to the expired channel: buffer overwrites (`replaced`), count-window evictions (`evicted`), interval/predicate expirations, and terminal flushes (`completed`/`disposed`/`error`). Count windows now count buffered entries (not distinct keys) so entry-based and distinct modes share the same retention semantics. No record disappears silently—every removal path produces an expire packet.
 
 ## Warning & Lifecycle Hooks
 

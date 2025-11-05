@@ -14,7 +14,10 @@ local function build()
 
 	local builder = Query.from(customers, "customers")
 		:leftJoin(orders, "orders")
-		:onSchemas({ customers = "id", orders = "customerId" })
+		:onSchemas({
+			customers = { field = "id", bufferSize = 10 },
+			orders = { field = "customerId", bufferSize = 10 },
+		})
 		:window({ count = 16 })
 
 	return {

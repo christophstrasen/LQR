@@ -11,9 +11,15 @@ local function buildSubjects()
 
 	local builder = Query.from(customers, "customers")
 		:leftJoin(orders, "orders")
-		:onSchemas({ customers = "id", orders = "customerId" })
+		:onSchemas({
+			customers = { field = "id", bufferSize = 10 },
+			orders = { field = "customerId", bufferSize = 10 },
+		})
 		:leftJoin(refunds, "refunds")
-		:onSchemas({ orders = "id", refunds = "orderId" })
+		:onSchemas({
+			orders = { field = "id", bufferSize = 10 },
+			refunds = { field = "orderId", bufferSize = 10 },
+		})
 		:window({ count = 10 })
 
 	return {

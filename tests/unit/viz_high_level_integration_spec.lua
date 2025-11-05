@@ -18,9 +18,9 @@ describe("viz_high_level adapter + runtime", function()
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = "id", orders = "customerId" })
+			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
-			:onSchemas({ orders = "id", refunds = "orderId" })
+			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
 			:window({ count = 5 })
 
 		local adapter = QueryVizAdapter.attach(builder, { maxLayers = 5 })

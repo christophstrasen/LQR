@@ -85,10 +85,29 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		return function(cache, order, side)
 			order = order or {}
 			while #order > maxItems do
-				local oldestKey = table.remove(order, 1)
-				local record = cache[oldestKey]
-				cache[oldestKey] = nil
-				publishExpirationFn(side, oldestKey, record, "evicted")
+				local oldest = table.remove(order, 1)
+				local key, record
+				if type(oldest) == "table" then
+					key = oldest.key
+					record = oldest.record
+				else
+					key = oldest
+					local buffer = cache[key]
+					record = buffer and buffer.entries and buffer.entries[1] or nil
+				end
+				local buffer = cache[key]
+				if buffer and buffer.entries then
+					for i = #buffer.entries, 1, -1 do
+						if buffer.entries[i] == record then
+							table.remove(buffer.entries, i)
+							break
+						end
+					end
+					if #buffer.entries == 0 then
+						cache[key] = nil
+					end
+				end
+				publishExpirationFn(side, key, record, "evicted")
 				emitUnmatchedFn(side, record)
 			end
 		end
@@ -99,23 +118,30 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		local reason = expirationConfig.reason
 		return function(cache, order, side)
 			local now = currentFn()
-			for key, record in pairs(cache) do
-				local entry = record.entry
-				local meta = entry and entry.RxMeta
-				local value = meta and meta.sourceTime or (entry and entry[field])
-				if type(value) ~= "number" then
-					Log:warn("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
-				elseif now - value > offset then
-					cache[key] = nil
-					publishExpirationFn(side, key, record, reason)
-					emitUnmatchedFn(side, record)
-					if order then
-						for i = #order, 1, -1 do
-							if order[i] == key then
-								table.remove(order, i)
-								break
+			for key, buffer in pairs(cache) do
+				if buffer and buffer.entries then
+					for i = #buffer.entries, 1, -1 do
+						local entry = buffer.entries[i].entry
+						local meta = entry and entry.RxMeta
+						local value = meta and meta.sourceTime or (entry and entry[field])
+						if type(value) ~= "number" then
+							Log:warn("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
+						elseif now - value > offset then
+							local record = table.remove(buffer.entries, i)
+							publishExpirationFn(side, key, record, reason)
+							emitUnmatchedFn(side, record)
+							if order then
+								for j = #order, 1, -1 do
+									if order[j].record == record then
+										table.remove(order, j)
+										break
+									end
+								end
 							end
 						end
+					end
+					if #buffer.entries == 0 then
+						cache[key] = nil
 					end
 				end
 			end
@@ -129,26 +155,34 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 				now = currentFn(),
 				nowFn = currentFn,
 			}
-			for key, record in pairs(cache) do
-				local keep = true
-				local ok, result = pcall(predicate, record.entry, side, ctx)
-				if not ok then
-					Log:warn("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
-				else
-					keep = not not result
-				end
+			for key, buffer in pairs(cache) do
+				if buffer and buffer.entries then
+					for i = #buffer.entries, 1, -1 do
+						local record = buffer.entries[i]
+						local keep = true
+						local ok, result = pcall(predicate, record.entry, side, ctx)
+						if not ok then
+							Log:warn("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
+						else
+							keep = not not result
+						end
 
-				if not keep then
-					cache[key] = nil
-					publishExpirationFn(side, key, record, reason)
-					emitUnmatchedFn(side, record)
-					if order then
-						for i = #order, 1, -1 do
-							if order[i] == key then
-								table.remove(order, i)
-								break
+						if not keep then
+							table.remove(buffer.entries, i)
+							publishExpirationFn(side, key, record, reason)
+							emitUnmatchedFn(side, record)
+							if order then
+								for j = #order, 1, -1 do
+									if order[j].record == record then
+										table.remove(order, j)
+										break
+									end
+								end
 							end
 						end
+					end
+					if #buffer.entries == 0 then
+						cache[key] = nil
 					end
 				end
 			end

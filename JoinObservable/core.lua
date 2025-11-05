@@ -305,6 +305,16 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		local leftCache, rightCache = {}, {}
 		local leftOrder = expirationConfig.left.mode == "count" and {} or nil
 		local rightOrder = expirationConfig.right.mode == "count" and {} or nil
+		local defaultPerKeyBufferSize = options.perKeyBufferSize or 10
+		local perKeyBufferConfigured = {
+			left = options.perKeyBufferSizeLeft ~= nil,
+			right = options.perKeyBufferSizeRight ~= nil,
+		}
+		local globalPerKeyConfigured = options.perKeyBufferSize ~= nil
+		local perKeyBufferSize = {
+			left = options.perKeyBufferSizeLeft or defaultPerKeyBufferSize,
+			right = options.perKeyBufferSizeRight or defaultPerKeyBufferSize,
+		}
 		local gcSubscription
 		local gcTicking = false
 		-- Retention enforcers gate cache growth and drive expiration/onUnmatched emissions.
@@ -317,11 +327,63 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			end),
 			}
 
-			local function flushCache(cache, side, reason)
-				for key, record in pairs(cache) do
+		local function ensureBuffer(cache, key)
+			local buffer = cache[key]
+			if not buffer then
+				buffer = { entries = {} }
+				cache[key] = buffer
+			end
+			return buffer
+		end
+
+		local function removeFromOrder(order, targetRecord)
+			if not order then
+				return
+			end
+			for i = #order, 1, -1 do
+				if order[i].record == targetRecord then
+					table.remove(order, i)
+					return
+				end
+			end
+		end
+
+		local function evictOldest(buffer)
+			if not buffer or not buffer.entries then
+				return nil
+			end
+			return table.remove(buffer.entries, 1)
+		end
+
+		local function removeFromBuffer(cache, key, buffer, targetRecord)
+			if not buffer or not buffer.entries then
+				return
+			end
+			for i = #buffer.entries, 1, -1 do
+				if buffer.entries[i] == targetRecord then
+					table.remove(buffer.entries, i)
+					break
+				end
+			end
+			if #buffer.entries == 0 then
+				cache[key] = nil
+			end
+		end
+
+			local function flushCache(cache, order, side, reason)
+				for key, buffer in pairs(cache) do
+					if buffer and buffer.entries then
+						for _, record in ipairs(buffer.entries) do
+							publishExpiration(side, key, record, reason)
+							emitUnmatched(observer, strategy, side, record)
+						end
+					end
 					cache[key] = nil
-					publishExpiration(side, key, record, reason)
-					emitUnmatched(observer, strategy, side, record)
+				end
+				if order then
+					for i = #order, 1, -1 do
+						order[i] = nil
+					end
 				end
 			end
 
@@ -376,25 +438,39 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				end
 				closed = true
 				-- When completion/disposal hits, emit everything still buffered for visibility.
-				flushCache(leftCache, "left", reason)
-				flushCache(rightCache, "right", reason)
+				flushCache(leftCache, leftOrder, "left", reason)
+				flushCache(rightCache, rightOrder, "right", reason)
 			end
 
-			local function upsertCacheEntry(cache, key, entry, schemaName)
-				local record = cache[key]
-				if record then
-					record.entry = entry
-					record.matched = false
-					record.key = key
-					record.schemaName = schemaName
-				else
-					record = {
-						entry = entry,
-						matched = false,
-						key = key,
-						schemaName = schemaName,
-					}
-					cache[key] = record
+			local function upsertBufferEntry(cache, order, side, key, entry, schemaName)
+				local buffer = ensureBuffer(cache, key)
+				local capacity = perKeyBufferSize[side] or defaultPerKeyBufferSize
+				local shouldWarnOnCapacity = not (perKeyBufferConfigured[side] or globalPerKeyConfigured)
+				local record = {
+					entry = entry,
+					matched = false,
+					key = key,
+					schemaName = schemaName,
+				}
+				if capacity and capacity > 0 and #buffer.entries >= capacity then
+					local evicted = evictOldest(buffer)
+					if evicted then
+						removeFromOrder(order, evicted)
+						publishExpiration(side, key, evicted, "replaced")
+						emitUnmatched(observer, strategy, side, evicted)
+						if shouldWarnOnCapacity then
+							Log:warn(
+								"[buffer] Default buffer size %s reached for %s.%s; consider increasing perKeyBufferSize if not intended",
+								tostring(capacity),
+								tostring(schemaName),
+								tostring(key)
+							)
+						end
+					end
+				end
+				table.insert(buffer.entries, record)
+				if order then
+					order[#order + 1] = { key = key, record = record }
 				end
 				return record
 			end
@@ -483,7 +559,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					meta and tostring(meta.schemaVersion) or "nil"
 				)
 				Log:debug("[input] side=%s schema=%s key=%s entry=%s", side, tostring(schemaName), tostring(key), tostring(entry))
-				local record = upsertCacheEntry(cache, key, entry, schemaName)
+				local record = upsertBufferEntry(cache, order, side, key, entry, schemaName)
 
 				if baseViz then
 					emitViz("input", {
@@ -507,12 +583,14 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					table.insert(order, key)
 				end
 
-				local other = otherCache[key]
-				if other then
-					if side == "left" then
-						handleMatch(record, other)
-					else
-						handleMatch(other, record)
+				local otherBuffer = otherCache[key]
+				if otherBuffer and otherBuffer.entries then
+					for _, partner in ipairs(otherBuffer.entries) do
+						if side == "left" then
+							handleMatch(record, partner)
+						else
+							handleMatch(partner, record)
+						end
 					end
 				end
 

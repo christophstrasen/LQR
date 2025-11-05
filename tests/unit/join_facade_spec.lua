@@ -30,37 +30,25 @@ describe("Join high-level facade", function()
 		return captured
 	end
 
-	local function collect(resultStream)
-		local buffer = {}
-		resultStream:subscribe(function(value)
-			buffer[#buffer + 1] = value
-		end)
-		return buffer
-	end
-
-	it("warns when onField is missing on incoming records", function()
-		local warnings
-		local results
-		withCapturedWarnings(function(captured)
-			warnings = captured
-			local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
-			local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
-
-			local joined = Query.from(left, "left")
-				:innerJoin(right, "right")
-				:onField("customerId")
-
-			results = collect(joined)
-
-			leftSubject:onNext({ id = 1 })
-			rightSubject:onNext({ id = 10 })
-			leftSubject:onCompleted()
-			rightSubject:onCompleted()
-		end)
-
-		assert.are.equal(0, #results)
-		assert.is_true(#warnings > 0)
+local function collect(resultStream)
+	local buffer = {}
+	resultStream:subscribe(function(value)
+		buffer[#buffer + 1] = value
 	end)
+	return buffer
+end
+
+local function summarizePair(result)
+	if not result then
+		return {}
+	end
+	local left = result:get("left")
+	local right = result:get("right")
+	return {
+		left = left and left.id or left and left.orderId or nil,
+		right = right and right.id or right and right.orderId or nil,
+	}
+end
 
 	it("raises configuration errors when onSchemas lacks coverage for known schemas", function()
 		local left = SchemaHelpers.observableFromTable("left", { { id = 1 } })
@@ -69,7 +57,7 @@ describe("Join high-level facade", function()
 		assert.has_error(function()
 			Query.from(left, "left")
 				:innerJoin(right, "right")
-				:onSchemas({ left = "id" }) -- missing right
+				:onSchemas({ left = { field = "id" } }) -- missing right
 		end)
 	end)
 
@@ -80,9 +68,9 @@ describe("Join high-level facade", function()
 
 		local joined = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = "id", orders = "customerId" })
+			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:innerJoin(refunds, "refunds")
-			:onSchemas({ orders = "id", refunds = "orderId" })
+			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
 			:selectSchemas({ "customers", "orders", "refunds" })
 
 		local results = {}
@@ -111,7 +99,7 @@ describe("Join high-level facade", function()
 
 		local joined = Query.from(left, "left")
 			:leftJoin(right, "right")
-			:onId()
+			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
 			:window({ count = 1 })
 
 		local expiredPackets = collect(joined:expired())
@@ -131,19 +119,69 @@ describe("Join high-level facade", function()
 		end
 
 		assert.are.same({ 1, 2 }, expiredIds)
-		assert.are.same({ "evicted", "completed" }, expiredReasons)
+		assert.are.same({ "evicted", "evicted" }, expiredReasons)
+	end)
+
+	it("honors bufferSize configured via onSchemas table entries", function()
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
+
+		local joined = Query.from(left, "left")
+			:leftJoin(right, "right")
+			:onSchemas({
+				left = { field = "id", bufferSize = 1 }, -- distinct
+				right = { field = "id", bufferSize = 2 }, -- allow two rights per key
+			})
+			:window({ count = 5 })
+
+		local pairs = {}
+		local expiredPackets = {}
+
+		joined:subscribe(function(result)
+			pairs[#pairs + 1] = result
+		end)
+		joined:expired():subscribe(function(packet)
+			expiredPackets[#expiredPackets + 1] = packet
+		end)
+
+		leftSubject:onNext({ id = 1, side = "L1" })
+		rightSubject:onNext({ id = 1, side = "R1" })
+		rightSubject:onNext({ id = 1, side = "R2" })
+		rightSubject:onNext({ id = 1, side = "R3" }) -- should evict oldest right (R1) because bufferSize=2
+
+		leftSubject:onCompleted()
+		rightSubject:onCompleted()
+
+		-- The left buffer is distinct (size 1), so only one left is ever cached.
+		-- Right buffer keeps the last two rights; matches fan out to all buffered partners.
+		local summary = {}
+		for _, pair in ipairs(pairs) do
+			summary[#summary + 1] = summarizePair(pair)
+		end
+		-- Two matches because the right buffer kept two entries.
+		assert.are.same(2, #summary)
+
+		-- Oldest right was evicted due to bufferSize=2.
+		local evictedRights = {}
+		for _, packet in ipairs(expiredPackets) do
+			if packet.schema == "right" then
+				local entry = packet.result and packet.result:get("right")
+				evictedRights[#evictedRights + 1] = { id = entry and entry.id or nil, reason = packet.reason }
+			end
+		end
+		assert.is_true(#evictedRights >= 1)
 	end)
 
 	it("exposes a stable describe plan", function()
 		local left = SchemaHelpers.observableFromTable("left", { { id = 1 } })
 		local right = SchemaHelpers.observableFromTable("right", { { id = 2 } })
 
-		local plan = Query.from(left, "left")
-			:leftJoin(right, "right")
-			:onId()
-			:window({ count = 5 })
-			:selectSchemas({ left = "L", right = "R" })
-			:describe()
+	local plan = Query.from(left, "left")
+		:leftJoin(right, "right")
+		:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+		:window({ count = 5 })
+		:selectSchemas({ left = "L", right = "R" })
+		:describe()
 
 		assert.are.same({
 			from = { "left" },
@@ -151,7 +189,7 @@ describe("Join high-level facade", function()
 				{
 					type = "left",
 					source = "right",
-					key = "RxMeta.id",
+					key = { map = { left = "id", right = "id" } },
 					window = { mode = "count", count = 5 },
 				},
 			},
