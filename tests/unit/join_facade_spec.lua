@@ -172,6 +172,46 @@ end
 		assert.is_true(#evictedRights >= 1)
 	end)
 
+	it("applies per-side bufferSize independently for left and right", function()
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
+
+		local capturedOpts
+		local originalCreate = JoinObservable.createJoinObservable
+		local function restore()
+			JoinObservable.createJoinObservable = originalCreate
+		end
+
+		local ok, err = pcall(function()
+			JoinObservable.createJoinObservable = function(leftStream, rightStream, opts)
+				capturedOpts = opts
+				return originalCreate(leftStream, rightStream, opts)
+			end
+
+			local joined = Query.from(left, "left")
+				:leftJoin(right, "right")
+				:onSchemas({
+					left = { field = "id", bufferSize = 1 },
+					right = { field = "id", bufferSize = 5 },
+				})
+				:window({ count = 10 })
+
+			joined:subscribe(function() end)
+
+			leftSubject:onCompleted()
+			rightSubject:onCompleted()
+
+			assert.is_table(capturedOpts)
+			assert.are.equal(1, capturedOpts.perKeyBufferSizeLeft)
+			assert.are.equal(5, capturedOpts.perKeyBufferSizeRight)
+		end)
+
+		restore()
+		if not ok then
+			error(err)
+		end
+	end)
+
 	it("exposes a stable describe plan", function()
 		local left = SchemaHelpers.observableFromTable("left", { { id = 1 } })
 		local right = SchemaHelpers.observableFromTable("right", { { id = 2 } })

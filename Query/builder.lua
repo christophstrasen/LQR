@@ -656,7 +656,10 @@ function QueryBuilder:_build()
 	-- Explainer: build executes the declarative plan into concrete observables and merges expired side channels.
 	local expiredStreams = {}
 	local current = self._rootSource
-	local currentSchemas = self._schemaNames and cloneArray(self._schemaNames) or nil
+	-- NOTE: use the left pipeline schemas (root) here instead of the global union so
+	-- per-side buffer sizes reflect only the schemas that have actually flowed through
+	-- the left side so far.
+	local currentSchemas = self._rootSchemas and cloneArray(self._rootSchemas) or nil
 
 	for stepIndex, step in ipairs(self._steps) do
 		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source)
