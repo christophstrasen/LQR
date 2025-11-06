@@ -17,6 +17,7 @@ local BACKGROUND_COLOR = { 0.08, 0.08, 0.08, 1 }
 
 -- Utility: accumulate source/match stats for legend + metadata.
 local function bumpCount(map, key)
+	key = key or "unknown"
 	if not key then
 		return
 	end
@@ -150,6 +151,7 @@ function Renderer.render(runtime, palette, now)
 			projectableExpireCount = 0,
 			matchCountsByLayer = matchCountsByLayer,
 			projectableMatchCountsByLayer = projectableMatchCountsByLayer,
+			expireReasons = {},
 			maxLayers = runtime.maxLayers or 2,
 			palette = palette,
 			header = runtime.header or {},
@@ -256,8 +258,10 @@ function Renderer.render(runtime, palette, now)
 			}
 			snapshot.meta.expireCount = snapshot.meta.expireCount + 1
 			snapshot.meta.projectableExpireCount = snapshot.meta.projectableExpireCount + 1
+			bumpCount(snapshot.meta.expireReasons, evt.reason)
 		else
 			snapshot.meta.expireCount = snapshot.meta.expireCount + 1
+			bumpCount(snapshot.meta.expireReasons, evt and evt.reason or nil)
 		end
 	end
 
@@ -276,12 +280,23 @@ function Renderer.render(runtime, palette, now)
 			}
 		end
 	end
+	local expireReasons = {}
+	for reason, total in pairs(snapshot.meta.expireReasons) do
+		expireReasons[#expireReasons + 1] = {
+			reason = reason,
+			total = total,
+		}
+	end
+	table.sort(expireReasons, function(a, b)
+		return a.reason < b.reason
+	end)
 	snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = {
 		kind = "expire",
 		label = "Expired",
 		color = colorForKind(palette, "expire"),
 		total = snapshot.meta.expireCount,
 		projectable = snapshot.meta.projectableExpireCount,
+		reasons = expireReasons,
 	}
 
 	for _, column in pairs(snapshot.cells) do

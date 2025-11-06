@@ -28,7 +28,7 @@ local function build()
 	local builder = Query.from(customers, "customers")
 		:innerJoin(orders, "orders")
 		:onSchemas({
-			customers = { field = "id", bufferSize = 10 },
+			customers = { field = "id", bufferSize = 1 },
 			orders = { field = "customerId", bufferSize = 10 },
 		})
 		:window({
@@ -61,8 +61,8 @@ local function buildZones()
 			coverage = 1,
 			mode = "random",
 			rate = 8,
-			t0 = 0.1,
-			t1 = 0.7,
+			t0 = 0.01,
+			t1 = 0.5,
 			rate_shape = "constant",
 			idField = "id",
 		},
@@ -77,7 +77,7 @@ local function buildZones()
 			mode = "random",
 			rate = 8,
 			t0 = 0.1,
-			t1 = 0.7,
+			t1 = 0.9,
 			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)

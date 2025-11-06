@@ -177,4 +177,49 @@ describe("viz_high_level headless renderer", function()
 		assert.are.same({ 0, 1, 0, 1 }, second.color)
 		assert.are.equal(1, second.total)
 	end)
+
+	it("tracks expire counts by reason", function()
+		local runtime = Runtime.new({
+			maxLayers = 1,
+			maxColumns = 2,
+			maxRows = 2,
+			startId = 0,
+			visualsTTL = 1,
+		})
+
+		runtime:ingest({
+			type = "expire",
+			schema = "orders",
+			id = 0,
+			projectionKey = 0,
+			projectable = true,
+			layer = 1,
+			reason = "timeout",
+		}, 0)
+		runtime:ingest({
+			type = "expire",
+			schema = "orders",
+			id = 1,
+			projectionKey = 1,
+			projectable = false,
+			layer = 1,
+			reason = "evict",
+		}, 0)
+
+		local snap = Renderer.render(runtime, {}, 0)
+		local expireEntry = snap.meta.outerLegend[#snap.meta.outerLegend]
+		assert.are.equal("expire", expireEntry.kind)
+		assert.are.equal(2, expireEntry.total)
+		assert.are.equal(1, expireEntry.projectable)
+		assert.is_table(expireEntry.reasons)
+		assert.are.equal(2, #expireEntry.reasons)
+
+		local first = expireEntry.reasons[1]
+		assert.are.equal("evict", first.reason)
+		assert.are.equal(1, first.total)
+
+		local second = expireEntry.reasons[2]
+		assert.are.equal("timeout", second.reason)
+		assert.are.equal(1, second.total)
+	end)
 end)

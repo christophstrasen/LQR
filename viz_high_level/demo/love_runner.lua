@@ -115,17 +115,24 @@ local function drawHeader(snapshot, lg, backgroundColor)
 			lg.setColor(bg[1], bg[2], bg[3], bg[4])
 			lg.rectangle("fill", x + inset, headerY + inset, rectSize - inset * 2, rectSize - inset * 2)
 			lg.setColor(1, 1, 1, 1)
-			local countLabel = ""
-			if entry.kind == "match" then
-				countLabel = string.format(" (%d projectable/%d total)", entry.projectable or 0, entry.total or 0)
-			elseif entry.kind == "expire" then
-				countLabel = string.format(
-					" (%d projectable/%d total)",
-					snapshot.meta.projectableExpireCount or 0,
-					snapshot.meta.expireCount or 0
-				)
+			local total = entry.total or 0
+			local projectable = entry.projectable or 0
+			if entry.kind == "expire" then
+				total = snapshot.meta.expireCount or total
+				projectable = snapshot.meta.projectableExpireCount or projectable
 			end
-			local label = (entry.label or entry.kind) .. countLabel
+			local nonProjectable = math.max(total - projectable, 0)
+			local countLabel =
+				string.format(" (%d total, %d projectable, %d non-projectable)", total, projectable, nonProjectable)
+			local reasonLabel = ""
+			if entry.kind == "expire" and entry.reasons and #entry.reasons > 0 then
+				local parts = {}
+				for _, reason in ipairs(entry.reasons) do
+					parts[#parts + 1] = string.format("%s: %d", reason.reason, reason.total)
+				end
+				reasonLabel = " Expiration reasons: [" .. table.concat(parts, ", ") .. "]"
+			end
+			local label = (entry.label or entry.kind) .. countLabel .. reasonLabel
 			lg.printf(label, x + rectSize + 8, headerY, love.graphics.getWidth() - x - rectSize - 16, "left")
 			headerY = headerY + 20
 		end
@@ -246,11 +253,12 @@ function LoveRunner.bootstrap(opts)
 
 		state.attachment.query:subscribe(function() end)
 
-		state.driver = scenario.start and scenario.start(demo.subjects, {
-			playbackSpeed = playbackSpeed,
-			ticksPerSecond = playbackSpeed,
-			clock = scenarioClock,
-		})
+		state.driver = scenario.start
+			and scenario.start(demo.subjects, {
+				playbackSpeed = playbackSpeed,
+				ticksPerSecond = playbackSpeed,
+				clock = scenarioClock,
+			})
 		if (not state.driver) and scenario.complete then
 			scenario.complete(demo.subjects)
 		end
