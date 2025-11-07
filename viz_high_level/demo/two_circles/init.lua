@@ -28,8 +28,8 @@ local function build()
 	local builder = Query.from(customers, "customers")
 		:innerJoin(orders, "orders")
 		:onSchemas({
-			customers = { field = "id", bufferSize = 1 },
-			orders = { field = "customerId", bufferSize = 10 },
+			customers = { field = "id" },
+			orders = { field = "customerId" },
 		})
 		:window({
 			time = JOINT_TTL,
@@ -54,13 +54,13 @@ local function buildZones()
 		{
 			label = "cust_circle",
 			schema = "customers",
-			center = 44,
+			center = 43,
 			range = 1, --invalid for circle shapes
-			radius = 2,
+			radius = 4,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 8,
+			rate = 4,
 			t0 = 0.01,
 			t1 = 0.5,
 			rate_shape = "constant",
@@ -69,13 +69,13 @@ local function buildZones()
 		{
 			label = "ord_circle",
 			schema = "orders",
-			center = 46,
+			center = 47,
 			range = 1, --invalid for circle shapes
-			radius = 2,
+			radius = 4,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 8,
+			rate = 4,
 			t0 = 0.1,
 			t1 = 0.9,
 			rate_shape = "constant",
@@ -149,13 +149,13 @@ TwoCirclesDemo.loveDefaults = LoveDefaults.merge({
 	label = "two circles",
 	visualsTTLFactor = 1.2,
 	visualsTTLFactors = {
-		source = 1.1,
+		source = 1.0,
 		match = 7.2,
-		expire = 0.1,
+		expire = 0.02,
 	},
 	visualsTTLLayerFactors = {
-		[1] = 1.0,
-		[2] = 1.3,
+		[1] = 1,
+		[2] = 1,
 	},
 	playbackSpeed = 0.7,
 	visualsTTL = JOINT_TTL,
