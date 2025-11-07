@@ -167,7 +167,7 @@ end
 
 ### Per-insert GC toggle (`gcOnInsert`)
 
-By default the join runs retention checks on every insert (`gcOnInsert = true`). Set `gcOnInsert = false` to skip per-insert sweeps and rely on periodic GC (or opportunistic checks on completion/disposal). This reduces CPU at the cost of higher peak memory and delayed expirations/unmatched emissions between GC ticks—use only when you provide a periodic scheduler and can tolerate the latency.
+By default the join runs retention checks on every insert (`gcOnInsert = true`). Each insert now sweeps **both** caches (left and right), not just the side that received the record. Set `gcOnInsert = false` to skip per-insert sweeps and rely on periodic GC (or opportunistic checks on completion/disposal). This reduces CPU at the cost of higher peak memory and delayed expirations/unmatched emissions between GC ticks—use only when you provide a periodic scheduler and can tolerate the latency and cross-side eviction lag.
 
 ### Per-key buffers, distinct vs. non-distinct, and eviction semantics
 

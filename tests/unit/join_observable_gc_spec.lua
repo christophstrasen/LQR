@@ -84,6 +84,45 @@ describe("JoinObservable periodic GC", function()
 		assert.are.same({ "expired_interval" }, reasons)
 	end)
 
+	it("sweeps both caches on insert so stale opposite-side records expire", function()
+		local leftSubject = rx.Subject.create()
+		local rightSubject = rx.Subject.create()
+		local left = Schema.wrap("left", leftSubject, { idField = "id" })
+		local right = Schema.wrap("right", rightSubject, { idField = "id" })
+
+		local currentTime = 0
+		local join, expired = JoinObservable.createJoinObservable(left, right, {
+			on = "id",
+			joinType = "outer",
+			expirationWindow = {
+				mode = "interval",
+				field = "ts",
+				offset = 1,
+				currentFn = function()
+					return currentTime
+				end,
+			},
+		})
+
+		local expiredPackets = {}
+		expired:subscribe(function(packet)
+			table.insert(expiredPackets, packet)
+		end)
+		join:subscribe(function() end)
+
+		-- Seed the right cache with a record that will age out.
+		rightSubject:onNext({ id = 1, ts = 0 })
+		assert.are.same({}, expiredPackets)
+
+		-- Advance time past the interval window and insert on the left to trigger GC.
+		currentTime = 5
+		leftSubject:onNext({ id = 2, ts = 5 })
+
+		assert.are.equal(1, #expiredPackets)
+		assert.are.equal("right", expiredPackets[1].schema)
+		assert.are.equal("expired_interval", expiredPackets[1].reason)
+	end)
+
 	it("can defer per-insert GC when gcOnInsert=false and rely on periodic GC instead", function()
 		local scheduledTick
 		local function scheduleFn(_delay, fn)

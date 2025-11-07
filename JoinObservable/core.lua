@@ -490,6 +490,12 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				gcSubscription = nil
 			end
 
+			local function runInsertGC(triggerSide)
+				debugf("per-insert GC sweep (trigger=%s)", triggerSide or "unknown")
+				enforceRetention.left(leftCache, leftOrder, "left")
+				enforceRetention.right(rightCache, rightOrder, "right")
+			end
+
 			local function runPeriodicGC()
 				if not gcIntervalSeconds or gcIntervalSeconds <= 0 then
 					return
@@ -522,8 +528,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					end
 					gcTicking = true
 					debugf("periodic GC tick (interval=%ss)", tostring(gcIntervalSeconds))
-					enforceRetention.left(leftCache, leftOrder, "left")
-					enforceRetention.right(rightCache, rightOrder, "right")
+					runInsertGC("periodic")
 					gcSubscription = scheduleFn(gcIntervalSeconds, function()
 						gcTicking = false
 						tick()
@@ -596,8 +601,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 
 				-- Evict stale rows each time we insert to avoid unbounded growth.
 				if gcOnInsert then
-					debugf("per-insert GC sweep (%s)", side)
-					enforceRetention[side](cache, order, side)
+					runInsertGC(side)
 				end
 			end
 
