@@ -47,7 +47,7 @@ describe("Query visualization adapter", function()
 			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
 			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
-			:window({ count = 2 })
+			:joinWindow({ count = 2 })
 
 		local attachment = QueryVizAdapter.attach(builder, { maxLayers = 5 })
 

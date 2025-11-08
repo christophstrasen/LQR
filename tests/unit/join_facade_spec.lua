@@ -100,7 +100,7 @@ end
 		local joined = Query.from(left, "left")
 			:leftJoin(right, "right")
 			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
-			:window({ count = 1 })
+			:joinWindow({ count = 1 })
 
 		local expiredPackets = collect(joined:expired())
 
@@ -132,7 +132,7 @@ end
 				left = { field = "id", bufferSize = 1 }, -- distinct
 				right = { field = "id", bufferSize = 2 }, -- allow two rights per key
 			})
-			:window({ count = 5 })
+			:joinWindow({ count = 5 })
 
 		local pairs = {}
 		local expiredPackets = {}
@@ -194,7 +194,7 @@ end
 					left = { field = "id", bufferSize = 1 },
 					right = { field = "id", bufferSize = 5 },
 				})
-				:window({ count = 10 })
+				:joinWindow({ count = 10 })
 
 			joined:subscribe(function() end)
 
@@ -219,7 +219,7 @@ end
 	local plan = Query.from(left, "left")
 		:leftJoin(right, "right")
 		:onSchemas({ left = { field = "id" }, right = { field = "id" } })
-		:window({ count = 5 })
+		:joinWindow({ count = 5 })
 		:selectSchemas({ left = "L", right = "R" })
 		:describe()
 
@@ -230,7 +230,7 @@ end
 					type = "left",
 					source = "right",
 					key = { map = { left = "id", right = "id" } },
-					window = { mode = "count", count = 5 },
+					joinWindow = { mode = "count", count = 5 },
 				},
 			},
 			select = { left = "L", right = "R" },

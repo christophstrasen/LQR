@@ -25,7 +25,7 @@ local right = Schema.wrap("right", rightSubject, { idField = "id" })
 local join, expired = JoinObservable.createJoinObservable(left, right, {
 	on = "id",
 	joinType = "left",
-	expirationWindow = {
+	joinWindow = {
 		mode = "interval",
 		field = "ts",
 		offset = 1,

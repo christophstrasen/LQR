@@ -36,7 +36,7 @@ local rightStream = Schema.wrap(
 local joinStream, expiredStream = JoinObservable.createJoinObservable(leftStream, rightStream, {
 	on = "id",
 	joinType = "outer",
-	expirationWindow = {
+	joinWindow = {
 		mode = "count",
 		maxItems = 1, -- Keep only the most recent record per side to force quick evictions.
 	},

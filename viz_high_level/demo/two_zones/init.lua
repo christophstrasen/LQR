@@ -18,7 +18,7 @@ local function build()
 			customers = { field = "id", bufferSize = 10 },
 			orders = { field = "customerId", bufferSize = 10 },
 		})
-		:window({ count = 16 })
+		:joinWindow({ count = 16 })
 
 	return {
 		subjects = {

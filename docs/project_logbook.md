@@ -15,7 +15,7 @@
 5. **Join semantics can be layered like functions:** Even without a DSL, composing joins (`InnerJoin(A, LeftJoin(B, OuterJoin(C, D)))`) reads naturally and mirrors SQL. A future API could wrap our `createJoinStream` helper to provide fluent sugar while retaining the same underlying mechanics.
 
 ### Open questions / next steps
-- Broaden join types (left/right/anti/full) and allow per-join window policies (time-based or count-based) to balance correctness vs. resource limits.
+- Broaden join types (left/right/anti/full) and allow per-join join window policies (time-based or count-based) to balance correctness vs. resource limits.
 - Emit normalized `key` (derived from `on` selector) alongside `left/right` entries so downstream stages don’t need to re-derive join fields.
 - Explore cascading joins in code, ensuring key selectors and cache options propagate cleanly.
 - Investigate multi-source joins (more than two streams) to compare ergonomics and resource usage with binary chaining.
@@ -24,19 +24,19 @@
 
 ### Highlights
 - **Modular core:** Broke the monolithic `JoinObservable/init.lua` into focused helpers (`strategies`, `expiration`, `warnings`) and kept only the observable factory + key-selector/touch helpers in the entry module. This makes reasoning about join behavior, warning plumbing, and expiration logic far easier.
-- **Powerful expiration windows:** Replaced the lone `maxCacheSize` knob with `expirationWindow` modes (`count`, `interval`, `time`, `predicate`). Each mode emits structured expiration packets (“evicted”, “expired_interval”, “expired_time”, etc.) and replays unmatched rows according to the strategy, giving users stronger control over correctness windows. A new LuaEvents experiment demonstrates every mode with timestamped data.
+- **Powerful expiration join windows:** Replaced the lone `maxCacheSize` knob with `joinWindow` modes (`count`, `interval`, `time`, `predicate`). Each mode emits structured expiration packets (“evicted”, “expired_interval”, “expired_time”, etc.) and replays unmatched rows according to the strategy, giving users stronger control over correctness join windows. A new LuaEvents experiment demonstrates every mode with timestamped data.
 - **Test depth:** Suite now covers default joins, functional selectors, count/interval/time/predicate retention, nil-key drops, malformed packets, warning suppression, merge ordering + failure, matched-record guarantees, and manual disposal. Everything runs cleanly via `busted tests/unit/join_observable_spec.lua`.
 
 ### Key learnings
 1. **Visibility beats silence:** Dropped packets (nil keys, malformed merge output, predicate errors) must surface via warnings; use the shared logger tag (`join`) and `Log.supressBelow("error", fn)` in tests to mute noise without sacrificing production observability.
-2. **Retention defines correctness:** Framing cache limits as `expirationWindow` made it clear only “warm” records yield trustworthy joins. Providing time/predicate policies keeps the API flexible without leaking complexity into the core.
+2. **Retention defines correctness:** Framing cache limits as `joinWindow` made it clear only “warm” records yield trustworthy joins. Providing time/predicate policies keeps the API flexible without leaking complexity into the core.
 3. **Composable architecture pays off:** Moving strategies/expiration/warnings into their own modules and offering a custom merge hook gave us the confidence to expand features without bloating `init.lua`, and paved the way for future extensions (per-side policies, metrics).
 
 ### Decisions recorded
 - Keep nil-key entries as warnings + drops; expiration events fire when cached records (matched or not) age out.
 - Enforce merge contracts with hard assertions; failing to return an observable is programmer error.
 - Close `expired` when the main subscription unsubscribes to avoid dangling listeners.
-- Default `expirationWindow.mode = "time"` to a 60-second TTL over the `time` field; callers can override `ttl`, `field`, or `currentFn` as needed.
+- Default `joinWindow.mode = "time"` to a 60-second TTL over the `time` field; callers can override `ttl`, `field`, or `currentFn` as needed.
 
 ## Day 3 – Schema-Aware Chaining
 
@@ -65,7 +65,7 @@
 - **Result API modernization:** `Result` now exposes `schemaNames` and `selectSchemas`. The internal metadata table is `RxMeta.schemaMap`, keeping the naming consistent everywhere.
 - **Examples/tests updated:** Every example/experiment wraps sources with explicit ID info, including functional selectors (partition/localId). Specs were upgraded with helpers that auto-derive IDs, and new tests ensure `Schema.wrap` enforces IDs (field-based and selector-based) while dropping invalid payloads.
 - **Love2D visualization harness:** Added `viz/main.lua` and `viz/pre_render.lua` to rasterize schemas in real time. Inner grids track customers/orders while an outer overlay highlights joined and expired events with separate fades/palettes.
-- **Config-driven knobs:** Centralized palette choices, stream delays, expiration windows, fade durations, and grid geometry in `viz/sources.lua`, along with hundreds of synthetic customers/orders (IDs 101–400+) so demos stay lively.
+- **Config-driven knobs:** Centralized palette choices, stream delays, expiration join windows, fade durations, and grid geometry in `viz/sources.lua`, along with hundreds of synthetic customers/orders (IDs 101–400+) so demos stay lively.
 
 ### Key insights
 1. **Identity must enter at the edge:** Trying to invent IDs inside the join leads to nondeterministic caches. Forcing callers to declare the identifier in `Schema.wrap` keeps retention logic predictable and documents the domain contract.
@@ -103,7 +103,7 @@
 - **Testing:** New GC spec exercises `gcOnInsert=false` with a scheduled sweep and keeps interval-based GC coverage. 
 
 ### Takeaways
-1. **GC is policy + plumbing:** Retention policy lives in `expirationWindow`; GC controls (interval, scheduler, sweeps on insert) are execution concerns and stay at join level.
+1. **GC is policy + plumbing:** Retention policy lives in `joinWindow`; GC controls (interval, scheduler, sweeps on insert) are execution concerns and stay at join level.
 2. **Per-insert sweeps are safety-first:** With small caches they’re cheap; periodic GC exists for idle periods but shouldn’t be the only guard unless the host is sure about memory headroom.
 3. **Lifecycle correctness:** Cleaned up completion/disposal so both join and expired streams close reliably, flushing leftovers; added TODO to measure GC cost and auto-tune onInsert/interval based on load.
 
@@ -150,7 +150,7 @@
 ### Highlights
 - **Decay-aware color mixing:** The high-level renderer now records ingest timestamps and decays mix weights over time, matching the low-level viz’s additive blending. Overlapping sources/matches blend colors when they happen close together; stale hues fade toward the neutral background.
 - **Consistent grid visuals:** Every cell now renders a default light-gray inner rectangle with borders, so decayed events reveal the same grid state as untouched cells. The Love2D drawer blends event colors toward that baseline, making fade-outs intuitive.
-- **Auto zoom & sliding window:** Runtime tracks active IDs (based on projection keys and intensity) to decide whether a 10×10 or 100×100 grid is needed. It slides the window with a 20% forward buffer and only reevaluates every two seconds, keeping the view stable. Manual configs still work via `maxColumns/maxRows`.
+- **Auto zoom & sliding join window:** Runtime tracks active IDs (based on projection keys and intensity) to decide whether a 10×10 or 100×100 grid is needed. It slides the join window with a 20% forward buffer and only reevaluates every two seconds, keeping the view stable. Manual configs still work via `maxColumns/maxRows`.
 - **Digit-based labels:** Column labels now represent the higher-order digits (beyond the row granularity), while row labels display the last 1–2 digits depending on zoom level. The grid aligns IDs to these digit boundaries, so headers are meaningful at a glance.
 - **Love2D integration:** The on-screen viz uses the runtime’s auto zoom, draws consistent backgrounds, and displays headers/legends derived from the snapshot. Headless traces also consume the same snapshot data, ensuring parity between scripted runs and the UI.
 
@@ -183,7 +183,7 @@
 - **Grid-aware zone generator:** Zones now map shapes (continuous/flat/bell/circle) directly to grid IDs, dropping projection shims. Coverage thins fills by shuffling the full mask, creating gaps without shrinking the shape.
 - **Deterministic spatial/thin logic:** Coverage no longer slows emission rate or collapses inward; it selects a spread of cells across the mask. Random modes use a fixed seed, and rate shapes support constant/linear/bell aliases to keep schedules predictable.
 - **Time controls made sane:** Introduced `playbackSpeed` as the single pacing knob (ticksPerSecond fallback). Zone timelines use `t0/t1`, `rate`, and `rate_shape` over `PLAY_DURATION`; stamping `sourceTime` aligns joins and visual TTLs. Love runner gained a shared clock with a post-complete fade budget to keep visuals expiring after streams finish.
-- **Cleaner mapping defaults:** Zones own the ID ordering per shape; demos no longer carry mapping hints. Two-circle/two-zone demos lock the window (10×10), build time-based windows on `sourceTime`, and use unified payloads (no custom projection fields).
+- **Cleaner mapping defaults:** Zones own the ID ordering per shape; demos no longer carry mapping hints. Two-circle/two-zone demos lock the join window (10×10), build time-based join windows on `sourceTime`, and use unified payloads (no custom projection fields).
 - **Color refresh on repeats:** `CellLayer` refreshes and recomputes color on repeated adds, so rapid re-emits stay bright instead of dimming due to TTL decay.
 
 ### What we learned

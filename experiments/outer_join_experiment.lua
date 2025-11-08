@@ -101,7 +101,7 @@ local joinStream = JoinObservable.createJoinObservable(customersStream, ordersSt
 		orders = "customerId",
 	},
 	joinType = "outer",
-	expirationWindow = {
+	joinWindow = {
 		mode = "time",
 		ttl = 4,
 		field = "sourceTime",

@@ -293,10 +293,10 @@ for index, joinConfig in ipairs(resolveJoinConfigs()) do
 	local rightStream = Observables[rightStreamName]
 	if leftStream and rightStream then
 		local resultName = joinConfig.name or joinConfig.resultName or string.format("join_%d", index)
-		local joinExpiration = joinConfig.expirationWindow
+		local joinExpiration = joinConfig.joinWindow
 		assert(
 			joinExpiration,
-			string.format("Join config '%s' must provide expirationWindow", resultName)
+			string.format("Join config '%s' must provide joinWindow", resultName)
 		)
 
 		local rawJoin, rawExpired = JoinObservable.createJoinObservable(leftStream, rightStream, {
@@ -305,7 +305,7 @@ for index, joinConfig in ipairs(resolveJoinConfigs()) do
 				[rightStreamName] = "id",
 			},
 			joinType = joinConfig.joinType or "left",
-			expirationWindow = joinExpiration,
+			joinWindow = joinExpiration,
 			gcIntervalSeconds = joinConfig.gcIntervalSeconds,
 			gcScheduleFn = joinConfig.gcScheduleFn,
 			gcOnInsert = joinConfig.gcOnInsert,

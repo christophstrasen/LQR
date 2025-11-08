@@ -83,7 +83,7 @@ local joins = {
 			orders = "customerId",
 		},
 		joinType = "inner",
-		expirationWindow = {
+		joinWindow = {
 			mode = "time",
 			ttl = 4,
 			field = "sourceTime",
@@ -95,7 +95,7 @@ local joins = {
 	},
 }
 
-local ttl = joins[1].expirationWindow and joins[1].expirationWindow.ttl
+local ttl = joins[1].joinWindow and joins[1].joinWindow.ttl
 local innerMultiplier = windowConfig.layers.inner.fadeMultiplier or 1
 local outerMultiplier = windowConfig.layers.outer.fadeMultiplier or 1
 windowConfig.layers.inner.fadeSeconds = fadeSecondsFromTTL(ttl, innerMultiplier)

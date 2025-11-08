@@ -20,7 +20,7 @@ local function buildSubjects()
 			orders = { field = "id", bufferSize = 10 },
 			refunds = { field = "orderId", bufferSize = 10 },
 		})
-		:window({ count = 10 })
+		:joinWindow({ count = 10 })
 
 	return {
 		builder = builder,

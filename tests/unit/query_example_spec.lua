@@ -19,7 +19,7 @@ describe("Query high-level example", function()
 			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
 			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
-			:window({ count = 2 }) -- keep a small buffer so flush emits on completion
+			:joinWindow({ count = 2 }) -- keep a small buffer so flush emits on completion
 
 		local results, expiredPackets = {}, {}
 		query:subscribe(function(result)

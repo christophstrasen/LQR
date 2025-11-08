@@ -29,7 +29,7 @@ Let me know if any constraints need relaxing or if new ones (performance budgets
 - **Lua-ReactiveX** We will use https://github.com/4O4/lua-reactivex / https://luarocks.org/modules/4o4/reactivex as our ReactiveX implementation
 - **LuaEvent** We will use https://github.com/demiurgeQuantified/StarlitLibrary/blob/main/Contents/mods/StarlitLibrary/42/media/lua/shared/Starlit/LuaEvent.lua as the key primitive and "stream data" to operate on
 - **Testing via schedulers:** Virtual-time scheduler or deterministic clock may be required for unit tests—plan to expose a hook to inject one.
-- **Join semantics custom:** Lua-ReactiveX lacks keyed joins, so we will provide bespoke helpers (with timeout windows) layered atop core operators.
+- **Join semantics custom:** Lua-ReactiveX lacks keyed joins, so we will provide bespoke helpers (with timeout join windows) layered atop core operators.
 - **Bridge adapter:** `observableFromLuaEvent(luaEvent)` converts any Starlit LuaEvent into an Rx Observable, handling `Add`/`Remove`.
 - **`into` as sugar:** `query:into(bucket)` desugars to `query:tap(function(x) bucket[#bucket + 1] = x end)` and still returns an Observable for further chaining.
 - **Callback compatibility:** `query:onEach(fn)` (alias for `tap`) keeps the callback mental model while remaining 1:1 with Rx semantics.

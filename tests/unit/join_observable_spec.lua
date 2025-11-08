@@ -641,7 +641,7 @@ end)
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "inner",
-			expirationWindow = {
+			joinWindow = {
 				mode = "interval",
 				field = "sourceTime",
 				offset = 1,
@@ -926,7 +926,7 @@ end)
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "outer",
-			expirationWindow = {
+			joinWindow = {
 				mode = "interval",
 				field = "ts",
 				offset = 5,
@@ -981,7 +981,7 @@ end)
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "outer",
-			expirationWindow = {
+			joinWindow = {
 				mode = "predicate",
 				predicate = function(entry)
 					return entry.keep
@@ -1031,7 +1031,7 @@ end)
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "outer",
-			expirationWindow = {
+			joinWindow = {
 				mode = "time",
 				ttl = 5,
 				currentFn = function()
@@ -1089,7 +1089,7 @@ end)
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "outer",
-			expirationWindow = {
+			joinWindow = {
 				left = {
 					mode = "count",
 					maxItems = 1,

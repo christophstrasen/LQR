@@ -320,7 +320,7 @@ local function describeJoins(plan, depthResolver)
 			source = join.source,
 			key = join.key,
 			displayKey = keyLabel(join.key),
-			window = join.window,
+			joinWindow = join.joinWindow,
 			projectionFields = join.projectionFields,
 			schemas = schemasForKey(join.key),
 			layer = layer,

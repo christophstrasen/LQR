@@ -35,7 +35,7 @@ local approvals = Schema.wrap(
 local joinStream, expiredStream = JoinObservable.createJoinObservable(trades, approvals, {
 	on = "id",
 	joinType = "outer",
-	expirationWindow = {
+	joinWindow = {
 		mode = "predicate",
 		-- Domain rule: only keep cleared trades and non-test approvals in the caches.
 		predicate = function(entry, side)

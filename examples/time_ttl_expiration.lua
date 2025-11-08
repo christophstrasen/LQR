@@ -27,7 +27,7 @@ local right = Schema.wrap("payments", rightSource, { idField = "id" })
 local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
 	on = "id",
 	joinType = "outer",
-	expirationWindow = {
+	joinWindow = {
 		mode = "time",
 		ttl = 3, -- Only keep records warm for 3 seconds past `record.time`.
 		currentFn = currentTime, -- Custom clock so we can advance time manually, otherwise uses os.time() as default

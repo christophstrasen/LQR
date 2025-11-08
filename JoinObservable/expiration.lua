@@ -22,7 +22,7 @@ local function normalizeSingle(options, config)
 
 	local function resolveMaxItems()
 		local maxItems = config.maxItems or config.maxCacheSize or options.maxCacheSize or DEFAULT_MAX_CACHE_SIZE
-		assert(type(maxItems) == "number" and maxItems >= 1, "expirationWindow.maxItems must be a positive number")
+		assert(type(maxItems) == "number" and maxItems >= 1, "joinWindow.maxItems must be a positive number")
 		return maxItems
 	end
 
@@ -33,11 +33,11 @@ local function normalizeSingle(options, config)
 		}
 	elseif mode == "interval" then
 		local field = config.field or options.field
-		assert(field, "expirationWindow.field is required for interval mode")
+		assert(field, "joinWindow.field is required for interval mode")
 		local offset = config.offset or options.offset
-		assert(type(offset) == "number" and offset >= 0, "expirationWindow.offset must be a non-negative number")
+		assert(type(offset) == "number" and offset >= 0, "joinWindow.offset must be a non-negative number")
 		local currentFn = config.currentFn or options.currentFn or os.time
-		assert(type(currentFn) == "function", "expirationWindow.currentFn must be a function")
+		assert(type(currentFn) == "function", "joinWindow.currentFn must be a function")
 		return {
 			mode = "interval",
 			field = field,
@@ -47,9 +47,9 @@ local function normalizeSingle(options, config)
 		}
 	elseif mode == "predicate" then
 		local predicate = config.predicate or config.evaluator
-		assert(type(predicate) == "function", "expirationWindow.predicate must be a function")
+		assert(type(predicate) == "function", "joinWindow.predicate must be a function")
 		local currentFn = config.currentFn or options.currentFn or os.time
-		assert(type(currentFn) == "function", "expirationWindow.currentFn must be a function")
+		assert(type(currentFn) == "function", "joinWindow.currentFn must be a function")
 		return {
 			mode = "predicate",
 			predicate = predicate,
@@ -57,13 +57,13 @@ local function normalizeSingle(options, config)
 			reason = config.reason or options.reason or "expired_predicate",
 		}
 	else
-		error(("Unsupported expirationWindow mode '%s'"):format(tostring(config.mode)))
+		error(("Unsupported joinWindow mode '%s'"):format(tostring(config.mode)))
 	end
 end
 
 function Expiration.normalize(options)
 	options = options or {}
-	local config = options.expirationWindow or {}
+	local config = options.joinWindow or {}
 	if config.left or config.right then
 		local defaults = normalizeSingle(options, config)
 		return {
@@ -162,7 +162,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 						local keep = true
 						local ok, result = pcall(predicate, record.entry, side, ctx)
 						if not ok then
-							Log:warn("expirationWindow predicate errored for %s entry: %s", side, tostring(result))
+							Log:warn("joinWindow predicate errored for %s entry: %s", side, tostring(result))
 						else
 							keep = not not result
 						end

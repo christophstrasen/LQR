@@ -41,7 +41,7 @@ describe("JoinObservable periodic GC", function()
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "left",
-			expirationWindow = {
+			joinWindow = {
 				mode = "interval",
 				field = "ts",
 				offset = 1,
@@ -94,7 +94,7 @@ describe("JoinObservable periodic GC", function()
 		local join, expired = JoinObservable.createJoinObservable(left, right, {
 			on = "id",
 			joinType = "outer",
-			expirationWindow = {
+			joinWindow = {
 				mode = "interval",
 				field = "ts",
 				offset = 1,
@@ -139,7 +139,7 @@ describe("JoinObservable periodic GC", function()
 			on = "id",
 			joinType = "outer",
 			gcOnInsert = false,
-			expirationWindow = {
+			joinWindow = {
 				mode = "count",
 				maxItems = 1,
 			},

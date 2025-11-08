@@ -1,4 +1,4 @@
--- Highlights per-side interval windows so you can see asymmetric retention in action.
+-- Highlights per-side interval join windows so you can see asymmetric retention in action.
 -- Handy when each source has different freshness guarantees and needs its own TTL.
 
 -- Expected console: match for order 101, right-only output when order 202 expires quickly, and a late left-only expiration for order 303.
@@ -29,7 +29,7 @@ local right = Schema.wrap("fastOrders", rightSource, { idField = "orderId" })
 local joinStream, expiredStream = JoinObservable.createJoinObservable(left, right, {
 	on = "orderId", -- Join on the `orderId` field found in both streams.
 	joinType = "outer", -- Outer join surfaces whichever side survives expiration.
-	expirationWindow = {
+	joinWindow = {
 		left = {
 			mode = "interval",
 			field = "ts", -- Use the event timestamp carried inside each record.
@@ -78,7 +78,7 @@ end, function()
 end)
 
 emit(leftSource, { orderId = 101, ts = 0, note = "left arrives first" })
-emit(rightSource, { orderId = 101, ts = 1, note = "right within window" })
+emit(rightSource, { orderId = 101, ts = 1, note = "right within join window" })
 emit(rightSource, { orderId = 202, ts = 2, note = "right that will expire quickly" })
 emit(leftSource, { orderId = 303, ts = 3, note = "left that will expire later" })
 emit(rightSource, { orderId = 404, ts = 5, note = "fresh right, while older right may have expire" })

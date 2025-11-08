@@ -6,9 +6,9 @@ We follow the reactive programming paradigm defined by [ReactiveX](https://react
 
 ## Core Concepts
 
-Joining event streams differs from joining static tables. Streams are unbounded and may deliver records out of order or with unbounded delay, so we maintain per-key caches (one per side) to hold recent records. The `expirationWindow` defines how long a record stays “warm”; once it expires, we emit an expiration record and drop it. Only warm records can participate in matches, giving callers a predictable correctness window and preventing memory from growing unbounded. Unlike a SQL join over static snapshots, a streaming join continuously merges incoming records, emits pairs as soon as matches occur, and surfaces unmatched rows when the retention policy evicts them.
+Joining event streams differs from joining static tables. Streams are unbounded and may deliver records out of order or with unbounded delay, so we maintain per-key caches (one per side) to hold recent records. The `joinWindow` defines how long a record stays “warm”; once it expires, we emit an expiration record and drop it. Only warm records can participate in matches, giving callers a predictable join window and preventing memory from growing unbounded. Unlike a SQL join over static snapshots, a streaming join continuously merges incoming records, emits pairs as soon as matches occur, and surfaces unmatched rows when the retention policy evicts them.
 
-**Important:** You control how trustworthy the join is. A larger `expirationWindow` greatly improves the odds that matching records overlap in time, at the cost of more memory and CPU; a smaller window saves resources but risks expiring legitimate matches. Likewise, the better your input ordering (or custom merge), the tighter you can set the window. Pick the smallest window that still fits your typical left/right arrival gap—if a record arrives after that window closes, we simply can’t match it.
+**Important:** You control how trustworthy the join is. A larger `joinWindow` greatly improves the odds that matching records overlap in time, at the cost of more memory and CPU; a smaller join window saves resources but risks expiring legitimate matches. Likewise, the better your input ordering (or custom merge), the tighter you can set the join window. Pick the smallest join window that still fits your typical left/right arrival gap—if a record arrives after that join window closes, we simply can’t match it.
 
 ## Overview
 
@@ -40,7 +40,7 @@ local joinStream, expiredStream = JoinObservable.createJoinObservable(leftStream
 ```
 
 - `leftStream`, `rightStream`: Rx observables emitting tables. Each record is passed through the key selector and cached until matched or expired.
-- `options`: table (documented below). Optional; defaults provide an inner join on `id` with a count-based retention window.
+- `options`: table (documented below). Optional; defaults provide an inner join on `id` with a count-based join window.
 - Return values:
   - `joinStream`: primary observable; subscribe to get `{ left = tbl|nil, right = tbl|nil }` pairs.
   - `expiredStream`: secondary observable; subscribe to observe expiration records.
@@ -80,14 +80,14 @@ Supported join types (case-insensitive):
 
 Optional function `(leftTagged, rightTagged) -> observable`. Receives the left/right streams already tagged as `{ side = "left"|"right", record = tbl }` and must return an observable. Useful for reordering, buffering, or applying custom scheduling before the merge operation commences. Failing to return an observable raises `"mergeSources must return an observable"`.
 
-### `expirationWindow`
+### `joinWindow`
 
-Defines how long each side retains records before evicting them. Only records still “warm” are eligible to match new arrivals. When a record expires, it is removed from the cache, an expiration record is published, and (if the join strategy allows) an unmatched pair is emitted.
+Defines how long each side retains records before evicting them. Only records still “warm” are eligible to match new arrivals. When a record ages out of the join window, it is removed from the cache, an expiration record is published, and (if the join strategy allows) an unmatched pair is emitted.
 
 Structure:
 
 ```lua
-expirationWindow = {
+joinWindow = {
   mode = "count" | "interval" | "time" | "predicate",
   -- optional per-side overrides
   left = { ... },
@@ -95,8 +95,8 @@ expirationWindow = {
 }
 ```
 
-- If `left`/`right` are omitted, both sides inherit the top-level config. Setting `left` or `right` allows asymmetric retention policies.
-- Legacy `maxCacheSize` (top-level) still applies as a default when no `expirationWindow` is set.
+- If `left`/`right` are omitted, both sides inherit the top-level join window config. Setting `left` or `right` allows asymmetric retention policies.
+- Legacy `maxCacheSize` (top-level) still applies as a default when no `joinWindow` is set.
 
 #### Mode: `count`
 
@@ -144,7 +144,7 @@ Each record emitted via `expiredStream` has the shape:
 }
 ```
 
-Matched records can still expire once they age past the retention window; expiration events tell you when cache entries leave, regardless of match status. Unmatched emissions still happen at most once per side when a cached record expires or on completion/flush.
+Matched records can still expire once they age past the retention join window; expiration events tell you when cache entries leave, regardless of match status. Unmatched emissions still happen at most once per side when a cached record expires or on completion/flush.
 
 ### Periodic GC (`gcIntervalSeconds`, `gcScheduleFn`)
 
@@ -173,9 +173,9 @@ By default the join runs retention checks on every insert (`gcOnInsert = true`).
 
 Each side of the join holds a **per-key ring buffer**. Default `perKeyBufferSize` is `10` per side; distinct mode is simply size `1`. Configure via `options.perKeyBufferSize` (global) or per side with `options.perKeyBufferSizeLeft` / `options.perKeyBufferSizeRight`. When a buffer is full and a new record arrives, the oldest entry is evicted with `reason="replaced"` and emitted on the expired stream; we warn only when the capacity was implicit (the default) to nudge you to size buffers deliberately. The new record starts with `matched=false`; the evicted entry carries its original `matched` flag so downstream consumers can see whether it ever matched.
 
-Matching **fans out to all buffered partners** for the same key on the opposite side. Distinct behavior is achieved by setting the buffer size to `1`; larger buffers keep multiple arrivals alive so later partners can match against each of them until a window or cap prunes them.
+Matching **fans out to all buffered partners** for the same key on the opposite side. Distinct behavior is achieved by setting the buffer size to `1`; larger buffers keep multiple arrivals alive so later partners can match against each of them until a join window or cap prunes them.
 
-All removals emit to the expired channel: buffer overwrites (`replaced`), count-window evictions (`evicted`), interval/predicate expirations, and terminal flushes (`completed`/`disposed`/`error`). Count windows now count buffered entries (not distinct keys) so entry-based and distinct modes share the same retention semantics. No record disappears silently—every removal path produces an expire packet.
+All removals emit to the expired channel: buffer overwrites (`replaced`), count-window evictions (`evicted`), interval/predicate expirations, and terminal flushes (`completed`/`disposed`/`error`). Count-based join windows now count buffered entries (not distinct keys) so entry-based and distinct modes share the same retention semantics. No record disappears silently—every removal path produces an expire packet.
 
 ## Warning & Lifecycle Hooks
 
@@ -191,7 +191,7 @@ Join warnings now flow through the shared logger (`log.lua`, tag `join`), so adj
 
 ## Behavioral Guarantees
 
-1. **Deterministic retention:** Only records within the configured window participate in matches.
+1. **Deterministic retention:** Only records within the configured join window participate in matches.
 2. **Single expiration per record:** Once a record is expired, it is removed from the cache and will not fire again.
 3. **Matched records never expire:** Expiration records are only emitted for unmatched records.
 4. **Custom merge ordering respected:** The join processes records exactly as the merge function emits them (after validating they are tables with `side`/`record`).
@@ -270,7 +270,7 @@ _(These will live under `examples/` in future work.)_
 ## Testing & Debugging Tips
 
 - Use `Log.supressBelow("error", function() ... end)` to mute join warnings during noisy test sections; restore afterwards.
-- The experiment scripts under `experiments/join_lua_events_*` provide runnable scenarios for retention windows and join types.
+- The experiment scripts under `experiments/join_lua_events_*` provide runnable scenarios for retention join windows and join types.
 - When debugging unexpected expirations, subscribe to the `expired` stream and log both `reason` and any relevant record fields (e.g., timestamps, TTLs).
 - If you see `"mergeSources must return an observable"`, ensure your custom merge returns an object with `.subscribe`.
 

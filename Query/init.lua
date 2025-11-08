@@ -16,7 +16,7 @@ function Query.selectFrom(source, opts)
 	return Query.from(source, opts)
 end
 
----Overrides the default scheduler used for window GC scheduling.
+---Overrides the default scheduler used for join window GC scheduling.
 ---@param scheduler any
 function Query.setScheduler(scheduler)
 	Builder.setScheduler(scheduler)

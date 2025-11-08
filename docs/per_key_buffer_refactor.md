@@ -18,7 +18,7 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
   - Mark new entry `matched=false`, store key/schemaName.
   - If other side has buffered entries with same key, emit matches against each buffered partner (fan-out) on arrival.
 - Expiration/GC:
-  - Count windows count entries (not distinct keys); interval/predicate iterate per entry.
+  - Count-based join windows count entries (not distinct keys); interval/predicate iterate per entry.
   - `flushBoth`/completion/disposal emit expire for every remaining entry.
   - Ensure periodic/insert GC walks buffers and removes entries with expire events.
 - Expire semantics:
@@ -39,7 +39,7 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
 - Update existing join facade/core specs to new API shapes.
 - Add coverage:
   - Overwrite emits `expire(reason="replaced")` and does not silently drop.
-  - Count windows count entries when perKeyBufferSize>1.
+  - Count-based join windows count entries when perKeyBufferSize>1.
   - Asymmetric buffers (left=1, right=3) still match and expire correctly.
   - Flush/completion emits expire for all buffered entries.
   - Selection/describe reflects new key config structure.
@@ -52,4 +52,4 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
 ## Open Decisions to Resolve During Implementation
 - Default `perKeyBufferSize` when unspecified: 1 (distinct) vs a small >1 vs unbounded.
 - `matched` reset policy on overwrite: keep current reset or make sticky? Decide and document.
-- Whether count windows should remain distinct by key when perKeyBufferSize=1 (likely no—uniform entry counting is simpler).
+- Whether count-based join windows should remain distinct by key when perKeyBufferSize=1 (likely no—uniform entry counting is simpler).

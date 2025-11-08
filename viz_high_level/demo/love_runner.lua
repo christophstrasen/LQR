@@ -63,15 +63,16 @@ local function drawHeader(snapshot, lg, backgroundColor)
 	for _, join in ipairs(joins) do
 		lg.printf(fieldLabel(join), 12, headerY, love.graphics.getWidth() - 24, "left")
 		headerY = headerY + 18
-		if join.window then
+		local joinWindow = join.joinWindow
+		if joinWindow then
 			local wtxt
-			if join.window.mode == "count" then
-				wtxt = string.format("Count window=%s", tostring(join.window.count))
-			elseif join.window.mode == "time" then
+			if joinWindow.mode == "count" then
+				wtxt = string.format("Count join window=%s", tostring(joinWindow.count))
+			elseif joinWindow.mode == "time" then
 				wtxt = string.format(
-					"Time window field=%s offset=%s",
-					tostring(join.window.field),
-					tostring(join.window.time)
+					"Time join window field=%s offset=%s",
+					tostring(joinWindow.field),
+					tostring(joinWindow.time)
 				)
 			end
 			if wtxt then

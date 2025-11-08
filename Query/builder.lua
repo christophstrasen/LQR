@@ -307,31 +307,31 @@ local function normalizeKeySelector(step)
 	return selectorFromSchemas(normalized), bufferSizes
 end
 
--- Explainer: normalizeWindow defaults to a large count window and threads scheduler into GC if available.
-local function normalizeWindow(step, defaultWindowCount, scheduler)
-	local window = step.window
-	if not window then
+-- Explainer: normalizeJoinWindow defaults to a large count join window and threads scheduler into GC if available.
+local function normalizeJoinWindow(step, defaultWindowCount, scheduler)
+	local joinWindow = step.joinWindow
+	if not joinWindow then
 		return {
-			expirationWindow = {
+			joinWindow = {
 				mode = "count",
 				maxItems = defaultWindowCount,
 			},
 		}
 	end
 
-	if window.count then
+	if joinWindow.count then
 		return {
-			expirationWindow = {
+			joinWindow = {
 				mode = "count",
-				maxItems = window.count,
+				maxItems = joinWindow.count,
 			},
-			gcOnInsert = window.gcOnInsert,
-			gcIntervalSeconds = window.gcIntervalSeconds,
-			gcScheduleFn = window.gcScheduleFn,
+			gcOnInsert = joinWindow.gcOnInsert,
+			gcIntervalSeconds = joinWindow.gcIntervalSeconds,
+			gcScheduleFn = joinWindow.gcScheduleFn,
 		}
 	end
 
-	local scheduleFn = window.gcScheduleFn
+	local scheduleFn = joinWindow.gcScheduleFn
 	if not scheduleFn and scheduler and scheduler.schedule then
 		scheduleFn = function(delaySeconds, fn)
 			return scheduler:schedule(fn, delaySeconds)
@@ -339,14 +339,14 @@ local function normalizeWindow(step, defaultWindowCount, scheduler)
 	end
 
 	return {
-		expirationWindow = {
+		joinWindow = {
 			mode = "interval",
-			field = window.field or "sourceTime",
-			offset = window.time or window.offset or 0,
-			currentFn = window.currentFn or os.time,
+			field = joinWindow.field or "sourceTime",
+			offset = joinWindow.time or joinWindow.offset or 0,
+			currentFn = joinWindow.currentFn or os.time,
 		},
-		gcOnInsert = window.gcOnInsert,
-		gcIntervalSeconds = window.gcIntervalSeconds,
+		gcOnInsert = joinWindow.gcOnInsert,
+		gcIntervalSeconds = joinWindow.gcIntervalSeconds,
 		gcScheduleFn = scheduleFn,
 	}
 end
@@ -448,10 +448,10 @@ function QueryBuilder:_clone()
 	return copy
 end
 
--- Explainer: ensureStep prevents configuring keys/windows before any join is staged.
+-- Explainer: ensureStep prevents configuring keys/joinWindow before any join is staged.
 local function ensureStep(builder)
 	if #builder._steps == 0 then
-		error("Call innerJoin/leftJoin before onSchemas/window")
+		error("Call innerJoin/leftJoin before onSchemas/joinWindow")
 	end
 end
 
@@ -614,14 +614,14 @@ function QueryBuilder:onSchemas(map)
 	return nextBuilder
 end
 
----Sets the window/expiration policy for the current join step.
----@param window table
+---Sets the join window/expiration policy for the current join step.
+---@param joinWindow table
 ---@return QueryBuilder
-function QueryBuilder:window(window)
-	assert(type(window) == "table", "window expects a table")
+function QueryBuilder:joinWindow(joinWindow)
+	assert(type(joinWindow) == "table", "joinWindow expects a table")
 	ensureStep(self)
 	local nextBuilder = self:_clone()
-	nextBuilder._steps[#nextBuilder._steps].window = window
+	nextBuilder._steps[#nextBuilder._steps].joinWindow = joinWindow
 	return nextBuilder
 end
 
@@ -678,7 +678,7 @@ function QueryBuilder:_build()
 
 		local keySelector, bufferSizes = normalizeKeySelector(step)
 
-		local options = normalizeWindow(step, self._defaultWindowCount, self._scheduler)
+		local options = normalizeJoinWindow(step, self._defaultWindowCount, self._scheduler)
 		options.joinType = step.joinType
 		options.on = keySelector
 		options.perKeyBufferSizeLeft = resolveBufferSize(bufferSizes, currentSchemas)
@@ -778,42 +778,42 @@ local function keyDescription(step)
 	error("Unexpected keySpec in describe()")
 end
 
-local function windowDescription(window, defaultWindowCount)
-	if not window then
+local function joinWindowDescription(joinWindow, defaultWindowCount)
+	if not joinWindow then
 		return { mode = "count", count = defaultWindowCount }
 	end
-	if window.count then
-		return { mode = "count", count = window.count }
+	if joinWindow.count then
+		return { mode = "count", count = joinWindow.count }
 	end
 	return {
 		mode = "time",
-		time = window.time or window.offset or 0,
-		field = window.field or "sourceTime",
+		time = joinWindow.time or joinWindow.offset or 0,
+		field = joinWindow.field or "sourceTime",
 	}
 end
 
-local function gcDescription(window, defaultWindowCount)
+local function joinWindowGcDescription(joinWindow, defaultWindowCount)
 	local description = {
 		mode = "count",
 		count = defaultWindowCount,
 		gcOnInsert = true,
 	}
-	if not window then
+	if not joinWindow then
 		return description
 	end
-	if window.count then
+	if joinWindow.count then
 		description.mode = "count"
-		description.count = window.count
-	elseif window.time or window.offset then
+		description.count = joinWindow.count
+	elseif joinWindow.time or joinWindow.offset then
 		description.mode = "time"
-		description.time = window.time or window.offset or 0
-		description.field = window.field or "sourceTime"
+		description.time = joinWindow.time or joinWindow.offset or 0
+		description.field = joinWindow.field or "sourceTime"
 	end
-	if window.gcOnInsert ~= nil then
-		description.gcOnInsert = window.gcOnInsert
+	if joinWindow.gcOnInsert ~= nil then
+		description.gcOnInsert = joinWindow.gcOnInsert
 	end
-	if window.gcIntervalSeconds then
-		description.gcIntervalSeconds = window.gcIntervalSeconds
+	if joinWindow.gcIntervalSeconds then
+		description.gcIntervalSeconds = joinWindow.gcIntervalSeconds
 	end
 	return description
 end
@@ -835,10 +835,10 @@ function QueryBuilder:describe()
 			type = step.joinType,
 			source = step.sourceSchema or "unknown",
 			key = keyDescription(step),
-			window = windowDescription(step.window, self._defaultWindowCount),
+			joinWindow = joinWindowDescription(step.joinWindow, self._defaultWindowCount),
 		}
-		if step.window then
-			planGc = gcDescription(step.window, self._defaultWindowCount)
+		if step.joinWindow then
+			planGc = joinWindowGcDescription(step.joinWindow, self._defaultWindowCount)
 		end
 	end
 	plan.gc = planGc
