@@ -454,6 +454,29 @@ local function toJoinResult(value)
 	return nil
 end
 
+local function summarizeRowIds(row, schemaNames)
+	if not row then
+		return "no-row"
+	end
+	local summary = {}
+	local names = schemaNames or {}
+	for _, schemaName in ipairs(names) do
+		local entry = row[schemaName]
+		local id = nil
+		if type(entry) == "table" then
+			id = entry.id or (entry.RxMeta and entry.RxMeta.id) or (entry.RxMeta and entry.RxMeta.joinKey)
+		end
+		summary[#summary + 1] = string.format("%s:%s", tostring(schemaName), tostring(id))
+		if #summary >= 3 then
+			break
+		end
+	end
+	if #summary == 0 then
+		return "no-schemas"
+	end
+	return table.concat(summary, ",")
+end
+
 function QueryBuilder:_clone()
 	local copy = setmetatable({}, QueryBuilder)
 	copy._rootSource = self._rootSource
@@ -773,7 +796,9 @@ function QueryBuilder:_build()
 				Log:warn("Query.where predicate errored: %s", tostring(keep))
 				return false
 			end
-			return keep and true or false
+			local keepBool = keep and true or false
+			Log:info("[where] keep=%s ids=%s", tostring(keepBool), summarizeRowIds(row, rowSchemas))
+			return keepBool
 		end)
 	end
 

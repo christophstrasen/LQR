@@ -38,6 +38,11 @@ local function build()
 				return demoClock:now()
 			end,
 		})
+		:where(function(row)
+			local total = (row.orders and row.orders.total) or 0
+			print("checking predicate")
+			return total >= 70 and total <= 75
+		end)
 
 	return {
 		subjects = {
