@@ -8,6 +8,51 @@ local Log = require("log").withTag("join")
 
 local JoinObservableCore = {}
 
+-- Best-effort structured formatter for payload logging.
+local function formatForLog(value)
+	-- Prefer dkjson if available.
+	local okJson, dkjson = pcall(require, "dkjson")
+	if okJson and dkjson and dkjson.encode then
+		local okEnc, encoded = pcall(dkjson.encode, value, { indent = true })
+		if okEnc and encoded then
+			return encoded
+		end
+	end
+
+	-- Fallback: simple pretty printer with cycle protection.
+	local function encode(v, depth, seen)
+		if depth <= 0 then
+			return "..."
+		end
+		local t = type(v)
+		if t == "table" then
+			if seen[v] then
+				return "<cycle>"
+			end
+			seen[v] = true
+			local keys = {}
+			for k in pairs(v) do
+				keys[#keys + 1] = k
+			end
+			table.sort(keys, function(a, b)
+				return tostring(a) < tostring(b)
+			end)
+			local parts = {}
+			for _, k in ipairs(keys) do
+				parts[#parts + 1] = string.format("%s=%s", tostring(k), encode(v[k], depth - 1, seen))
+			end
+			seen[v] = nil
+			return "{" .. table.concat(parts, ", ") .. "}"
+		elseif t == "string" then
+			return string.format("%q", v)
+		else
+			return tostring(v)
+		end
+	end
+
+	return encode(value, 3, {})
+end
+
 local function toFieldSelector(field, context)
 	if type(field) ~= "string" or field == "" then
 		error(("%s.field must be a non-empty string"):format(context))
@@ -270,7 +315,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			tostring(recordEntry.schemaName),
 			tostring(key),
 			tostring(reason),
-			tostring(recordEntry.entry)
+			formatForLog(recordEntry.entry)
 		)
 		if baseViz then
 			emitViz("expire", {
@@ -563,7 +608,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					meta and tostring(meta.sourceTime) or "nil",
 					meta and tostring(meta.schemaVersion) or "nil"
 				)
-				Log:debug("[input] side=%s schema=%s key=%s entry=%s", side, tostring(schemaName), tostring(key), tostring(entry))
+				Log:debug("[input payload] side=%s schema=%s key=%s entry=%s", side, tostring(schemaName), tostring(key), formatForLog(entry))
 				local record = upsertBufferEntry(cache, order, side, key, entry, schemaName)
 
 				if baseViz then

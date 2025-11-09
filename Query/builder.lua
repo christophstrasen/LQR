@@ -9,6 +9,7 @@
 ---@field private _defaultWindowCount number
 ---@field private _scheduler any
 ---@field private _vizHook fun(context:table):table|nil
+---@field private _wherePredicate fun(row:table):boolean|nil
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
@@ -419,6 +420,40 @@ local function applySelectionToExpired(expired, selection)
 	end)
 end
 
+-- Explainer: buildRowView exposes schemas as table fields and supplies _raw_result for escape hatches.
+local function buildRowView(result, schemaNames)
+	if not isJoinResult(result) then
+		return nil
+	end
+	local row = {
+		_raw_result = result,
+	}
+	local names = schemaNames or result:schemaNames()
+	if names then
+		for _, schemaName in ipairs(names) do
+			if type(schemaName) == "string" and schemaName ~= "" then
+				row[schemaName] = result:get(schemaName) or {}
+			end
+		end
+	end
+	return row
+end
+
+-- Explainer: toJoinResult wraps raw schema-tagged records for selection-only flows.
+local function toJoinResult(value)
+	if isJoinResult(value) then
+		return value
+	end
+	if type(value) == "table" then
+		local schemaName = value.RxMeta and value.RxMeta.schema
+		if schemaName then
+			local temp = Result.new()
+			return temp:attach(schemaName, value)
+		end
+	end
+	return nil
+end
+
 function QueryBuilder:_clone()
 	local copy = setmetatable({}, QueryBuilder)
 	copy._rootSource = self._rootSource
@@ -445,6 +480,7 @@ function QueryBuilder:_clone()
 	copy._defaultWindowCount = self._defaultWindowCount
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
+	copy._wherePredicate = self._wherePredicate
 	return copy
 end
 
@@ -542,6 +578,7 @@ local function newBuilder(source, opts)
 	builder._defaultWindowCount = DEFAULT_WINDOW_COUNT
 	builder._scheduler = schedulerOverride
 	builder._vizHook = nil
+	builder._wherePredicate = nil
 	return builder
 end
 
@@ -636,6 +673,19 @@ function QueryBuilder:selectSchemas(selection)
 	return nextBuilder
 end
 
+---Applies a post-join WHERE-style predicate using the row-view helper.
+---@param predicate fun(row:table):boolean
+---@return QueryBuilder
+function QueryBuilder:where(predicate)
+	assert(type(predicate) == "function", "where expects a function predicate")
+	if self._wherePredicate ~= nil then
+		error("Multiple where calls are not supported")
+	end
+	local nextBuilder = self:_clone()
+	nextBuilder._wherePredicate = predicate
+	return nextBuilder
+end
+
 ---Returns the set of primary schemas (non-join sources) seen anywhere in the builder tree.
 ---@return table
 function QueryBuilder:primarySchemas()
@@ -700,6 +750,31 @@ function QueryBuilder:_build()
 
 		current = joinObservable:map(reattachParentSchemas)
 		currentSchemas = unionSchemas(currentSchemas, rightSchemas or (step.sourceSchema and { step.sourceSchema }))
+	end
+
+	if self._wherePredicate then
+		local rowSchemas = currentSchemas and cloneArray(currentSchemas) or nil
+		local predicate = self._wherePredicate
+		current = current:map(function(value)
+			return toJoinResult(value) or value
+		end)
+		current = current:filter(function(value)
+			local result = toJoinResult(value)
+			if not result then
+				Log:warn("Query.where dropped emission without schema metadata")
+				return false
+			end
+			local row = buildRowView(result, rowSchemas)
+			if not row then
+				return false
+			end
+			local ok, keep = pcall(predicate, row)
+			if not ok then
+				Log:warn("Query.where predicate errored: %s", tostring(keep))
+				return false
+			end
+			return keep and true or false
+		end)
 	end
 
 	if self._selection then
@@ -844,6 +919,9 @@ function QueryBuilder:describe()
 	plan.gc = planGc
 	if self._selection then
 		plan.select = self._selection
+	end
+	if self._wherePredicate then
+		plan.where = true
 	end
 	return plan
 end

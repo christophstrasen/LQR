@@ -81,7 +81,7 @@ local function buildZones()
 			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)
-				return { id = id, orderId = 500 + id, customerId = id, total = 30 + ((id % 4) * 5) }
+				return { id = id, orderId = 500 + id, customerId = id, total = 30 + ((id % 8) * 15) }
 			end,
 		},
 	}

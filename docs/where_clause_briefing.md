@@ -228,3 +228,47 @@ This briefing should be treated as the reference for implementing and testing
 the high-level `WHERE` support in the query builder and for writing user-facing
 documentation and examples that use it.
 
+---
+
+# Implementation
+
+### Decisions (locked in)
+- Single `where` per builder chain (multiple calls are not supported).
+- Row view only; `_raw_result` is the sole escape hatch to the underlying `JoinResult`.
+- Describe surface: at most a boolean marker for presence of WHERE; no predicate serialization.
+- Selection-only queries also support `where`.
+- Row view builder should be reusable later (e.g., for a potential `HAVING`), so keep it factored.
+
+### Phases and steps
+**Phase 1 — Low-level (no changes expected)**
+- Leave `JoinObservable` unchanged; WHERE is a high-level filter over joined `JoinResult`s.
+
+**Phase 2 — High-level builder**
+- Add builder state for a single predicate (e.g., `_wherePredicate`); guard against multiple `where` calls with a clear error.
+- Implement `QueryBuilder:where(predicate)`:
+  - validate predicate is a function;
+  - clone builder, store predicate.
+- Add a row-view constructor (plain function, no metatables) reusable later:
+  - inputs: `JoinResult`, `schemaNames` to expose;
+  - output: table with `row[schema] = result:get(schema) or {}` for each schema;
+  - include `row._raw_result = result`.
+- In `_build`:
+  - after all joins, before `selectSchemas`, map each emission to the row view and apply `filter(predicate)`;
+  - if no predicate, skip;
+  - do not alter the `expired` side channel (WHERE filters only the main stream).
+- Ensure selection-only flows work: row view should still be constructed over the single schema and filtering applied.
+
+**Phase 3 — Describe/plan**
+- Add a simple marker (e.g., `plan.where = true`) to `describe()` when a predicate is configured; do not serialize the function.
+
+**Phase 4 — Tests**
+- Add a new spec (e.g., `tests/unit/query_where_spec.lua`):
+  - inner join happy path: predicate keeps expected matches;
+  - left join: missing right side yields `{}` and predicate can safely read `row.orders.id`;
+  - selection-only query with `where` filters root stream;
+  - multiple `where` calls raise;
+  - row view fields are plain tables, missing schemas are `{}`, and `_raw_result` is present;
+  - ensure `selectSchemas` still projects after WHERE.
+
+**Phase 5 — Examples (optional but recommended)**
+- Add a short example in `examples` or `experiments` demonstrating `where` with row view and a left join.
