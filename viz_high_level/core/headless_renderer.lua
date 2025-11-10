@@ -101,8 +101,11 @@ local function colorForSchema(palette, schema)
 end
 
 local function colorForKind(palette, kind)
+	if kind == "final" then
+		return (palette and palette.final) or DEFAULT_MATCH_COLOR
+	end
 	if kind == "match" then
-		return (palette and (palette.final or palette.joined)) or DEFAULT_MATCH_COLOR
+		return (palette and palette.final) or DEFAULT_MATCH_COLOR
 	end
 	return (palette and palette.expired) or DEFAULT_EXPIRE_COLOR
 end

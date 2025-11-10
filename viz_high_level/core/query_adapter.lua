@@ -148,8 +148,6 @@ local function rainbowPalette(names)
 	end
 	-- Standard outer colors for join/expired.
 	palette.final = palette.final or { 0.2, 0.85, 0.2, 1 }
-	-- Preserve legacy palette.joined consumers by aliasing to final when unset.
-	palette.joined = palette.joined or palette.final
 	palette.expired = palette.expired or { 0.9, 0.25, 0.25, 1 }
 	return palette
 end
@@ -263,11 +261,11 @@ local function normalizeEventMapper(primarySet, maxLayers)
 				sourceTime = event.sourceTime,
 				record = event.entry,
 			}
-		elseif event.kind == "match" or event.kind == "unmatched" then
-			return {
-				type = "joinresult",
-				kind = event.kind,
-				layer = clampLayer(event.depth, maxLayers),
+	elseif event.kind == "match" or event.kind == "unmatched" then
+		return {
+			type = "joinresult",
+			kind = event.kind,
+			layer = clampLayer(event.depth, maxLayers),
 				key = event.key,
 				id = event.id,
 				left = event.left,
@@ -583,10 +581,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		return finalEventFromResult(result, projectionDomainSchema, projectionField, projectionFields, finalDepth)
 	end)
 
-	local baseStream = sink:filter(function(event)
-		-- Drop pre-WHERE join result events when we have a final tap; keep sources/expire.
-		return not (event and (event.kind == "match" or event.kind == "unmatched"))
-	end)
+	local baseStream = sink
 
 	return {
 		query = instrumented,

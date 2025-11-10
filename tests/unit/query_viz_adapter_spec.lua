@@ -70,22 +70,22 @@ describe("Query visualization adapter", function()
 		assert.are.equal(2, results[1]:get("customers").id)
 		assert.are.equal(102, results[1]:get("orders").id)
 
-			local finals = {}
-			for _, evt in ipairs(normalized) do
-				if evt.type == "joinresult" and evt.kind == "final" then
-					finals[#finals + 1] = evt
-				elseif evt.type == "joinresult" then
-					-- pre-WHERE join results should not appear in normalized
-					assert.are_not.equal("match", evt.kind)
-					assert.are_not.equal("unmatched", evt.kind)
-				end
+		local finals = {}
+		local joins = {}
+		for _, evt in ipairs(normalized) do
+			if evt.type == "joinresult" and evt.kind == "final" then
+				finals[#finals + 1] = evt
+			elseif evt.type == "joinresult" then
+				joins[#joins + 1] = evt
 			end
-			assert.are.equal(1, #finals)
-			local final = finals[1]
-			-- Final schema/id reflect projection domain (customers), but result should carry orders.
-			assert.are.equal(2, final.id)
-			assert.is_not_nil(final.result)
-			assert.are.equal(102, final.result:get("orders").id)
+		end
+		assert.is_true(#joins >= 1)
+		assert.are.equal(1, #finals)
+		local final = finals[1]
+		-- Final schema/id reflect projection domain (customers), but result should carry orders.
+		assert.are.equal(2, final.id)
+		assert.is_not_nil(final.result)
+		assert.are.equal(102, final.result:get("orders").id)
 		end)
 
 	it("emits layered events for stacked joins without changing query semantics", function()
@@ -136,9 +136,9 @@ describe("Query visualization adapter", function()
 		assert.is_nil(results[2]:get("refunds"))
 
 		local joins = ofType(normalized, "joinresult")
-		assert.is_true(#joins >= 1)
+		assert.is_true(#joins >= 2)
+		assert.are.equal("match", joins[1].kind)
 		assert.are.equal("final", joins[#joins].kind)
-		assert.are.equal("joinresult", joins[#joins].type)
 		local sources = ofType(normalized, "source")
 		assert.is_true(#sources >= 1)
 		assert.are.equal("source", sources[1].type)

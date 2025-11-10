@@ -1,0 +1,94 @@
+package.path = "./?.lua;./?/init.lua;" .. package.path
+require("bootstrap")
+
+local Runtime = require("viz_high_level.core.runtime")
+local Renderer = require("viz_high_level.core.headless_renderer")
+local DebugViz = require("viz_high_level.vizLogFormatter")
+local Log = require("log")
+local QueryVizAdapter = require("viz_high_level.core.query_adapter")
+local ThreeCirclesDemo = require("viz_high_level.demo.three_circles")
+
+-- Headless demo can be noisy at INFO; drop join-tag logs by default.
+-- Opt out with HEADLESS_JOIN_LOGS=1.
+local previousEmitter
+local joinLogs = os.getenv("HEADLESS_JOIN_LOGS")
+if joinLogs ~= "1" then
+	local prev
+	prev = Log.setEmitter(function(level, message, tag)
+		if tag == "join" then
+			return
+		end
+		if prev then
+			prev(level, message, tag)
+		end
+	end)
+	previousEmitter = prev
+end
+
+local demo = ThreeCirclesDemo.build()
+local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })
+local defaults = ThreeCirclesDemo.loveDefaults or {}
+
+local clock = {
+	value = 0,
+	set = function(self, value)
+		self.value = value or 0
+	end,
+	now = function(self)
+		return self.value or 0
+	end,
+}
+
+local visualsTTL = (defaults.visualsTTL or 2.5) * (defaults.visualsTTLFactor or 1)
+
+local runtime = Runtime.new({
+	maxLayers = 2,
+	adjustInterval = defaults.adjustInterval or 0.5,
+	header = adapter.header,
+	visualsTTL = visualsTTL,
+	visualsTTLFactor = 1,
+	visualsTTLFactors = defaults.visualsTTLFactors,
+	visualsTTLLayerFactors = defaults.visualsTTLLayerFactors,
+	maxColumns = defaults.maxColumns,
+	maxRows = defaults.maxRows,
+	startId = defaults.startId,
+	lockWindow = defaults.lockWindow,
+})
+
+adapter.normalized:subscribe(function(evt)
+	runtime:ingest(evt, clock:now())
+end)
+
+adapter.query:subscribe(function() end)
+
+local driver = ThreeCirclesDemo.start(demo.subjects, {
+	playbackSpeed = defaults.playbackSpeed or defaults.ticksPerSecond or 2,
+	clock = clock,
+})
+
+local function capture(label, tick)
+	if driver and driver.runUntil then
+		driver:runUntil(tick)
+	end
+	clock:set(tick)
+	local snapshot = Renderer.render(runtime, adapter.palette, clock:now())
+	DebugViz.snapshot(snapshot, { label = label, logSnapshots = true })
+	return snapshot
+end
+
+for _, snapInfo in ipairs(ThreeCirclesDemo.snapshots or {}) do
+	local tag = string.format("three_circles_%s", snapInfo.label or tostring(snapInfo.tick))
+	capture(tag, snapInfo.tick)
+end
+
+if driver and driver.runAll then
+	driver:runAll()
+end
+
+clock:set(clock:now() + 0.25)
+local snap = Renderer.render(runtime, adapter.palette, clock:now())
+DebugViz.snapshot(snap, { label = "three_circles_final", logSnapshots = true })
+
+if previousEmitter then
+	Log.setEmitter(previousEmitter)
+end
