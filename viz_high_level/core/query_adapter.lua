@@ -3,6 +3,7 @@
 local rx = require("reactivex")
 local JoinLog = require("log").withTag("join")
 local VizLog = require("log").withTag("viz-hi")
+local Result = require("JoinObservable.result")
 
 local QueryVizAdapter = {}
 
@@ -44,6 +45,23 @@ end
 
 local RESERVED_HUES = { 0.0, 1 / 3 }
 local MIN_HUE_DISTANCE = 0.08
+
+local function tryResolveKey(schemaName, entry, projectionFields)
+	if not schemaName or not entry then
+		return nil
+	end
+	local fields = projectionFields and projectionFields[schemaName]
+	local field
+	if type(fields) == "table" then
+		field = fields.field or fields[1]
+	else
+		field = fields
+	end
+	if field and entry[field] ~= nil then
+		return entry[field]
+	end
+	return entry.id or (entry.RxMeta and (entry.RxMeta.joinKey or entry.RxMeta.id))
+end
 
 local function normalizeRange(startHue, endHue)
 	if startHue < 0 then
@@ -129,7 +147,9 @@ local function rainbowPalette(names)
 		palette[name] = { r, g, b, 1 }
 	end
 	-- Standard outer colors for join/expired.
-	palette.joined = palette.joined or { 0.2, 0.85, 0.2, 1 }
+	palette.final = palette.final or { 0.2, 0.85, 0.2, 1 }
+	-- Preserve legacy palette.joined consumers by aliasing to final when unset.
+	palette.joined = palette.joined or palette.final
 	palette.expired = palette.expired or { 0.9, 0.25, 0.25, 1 }
 	return palette
 end
@@ -251,17 +271,29 @@ local function normalizeEventMapper(primarySet, maxLayers)
 				key = event.key,
 				id = event.id,
 				left = event.left,
-				right = event.right,
-				schema = event.schema,
-				side = event.side,
-				entry = event.entry,
-				unmatched = (event.kind == "unmatched"),
-			}
-		elseif event.kind == "expire" then
-			return {
-				type = "expire",
-				layer = clampLayer(event.depth, maxLayers),
-				schema = event.schema,
+			right = event.right,
+			schema = event.schema,
+			side = event.side,
+			entry = event.entry,
+			unmatched = (event.kind == "unmatched"),
+		}
+	elseif event.kind == "final" then
+		return {
+			type = "joinresult",
+			kind = "final",
+			layer = clampLayer(event.depth or maxLayers, maxLayers),
+			key = event.key,
+			id = event.id,
+			schema = event.schema,
+			entry = event.entry,
+			result = event.result,
+			unmatched = false,
+		}
+	elseif event.kind == "expire" then
+		return {
+			type = "expire",
+			layer = clampLayer(event.depth, maxLayers),
+			schema = event.schema,
 				id = event.id,
 				key = event.key,
 				entry = event.entry,
@@ -390,6 +422,28 @@ local function buildProjectionMap(plan)
 	return map, projectionDomainSchema, projectionField
 end
 
+local function finalEventFromResult(result, projectionDomainSchema, projectionField, projectionFields, depth)
+	if not result or getmetatable(result) ~= Result then
+		return nil
+	end
+	local domain = projectionDomainSchema or (result:schemaNames()[1])
+	if not domain then
+		return nil
+	end
+	local record = result:get(domain)
+	local key = tryResolveKey(domain, record, projectionFields) or (record and projectionField and record[projectionField])
+	local id = record and (record.id or (record.RxMeta and record.RxMeta.id))
+	return {
+		kind = "final",
+		schema = domain,
+		id = id,
+		key = key,
+		entry = record,
+		result = result,
+		depth = depth,
+	}
+end
+
 local function planHasSchemaMapping(plan)
 	for _, join in ipairs(plan.joins or {}) do
 		if join.key and join.key.map then
@@ -399,6 +453,26 @@ local function planHasSchemaMapping(plan)
 	return false
 end
 
+local function tryResolveKey(schemaName, entry, projectionFields)
+	if not schemaName or not entry then
+		return nil
+	end
+	local fields = projectionFields or {}
+	local field = fields[schemaName]
+	if field and type(entry) == "table" then
+		if type(field) == "table" then
+			field = field.field or field[1]
+		end
+		if field and entry[field] ~= nil then
+			return entry[field]
+		end
+	end
+	if type(entry) == "table" then
+		return entry.id or (entry.RxMeta and (entry.RxMeta.joinKey or entry.RxMeta.id))
+	end
+	return nil
+end
+
 local function enrichProjection(event, projection, projectionFields)
 	if not event or not projection then
 		return event
@@ -406,35 +480,24 @@ local function enrichProjection(event, projection, projectionFields)
 	local domain = projection.domain
 	local fields = projectionFields or {}
 
-	local function resolveKey(schema, payload)
-		if not schema or not payload then
-			return nil
-		end
-		local field = fields[schema]
-		if field and type(payload) == "table" then
-			return payload[field] or payload.id or payload.key
-		end
-		return nil
-	end
-
 	if event.type == "source" then
 		event.projectionDomain = domain
-		event.projectionKey = resolveKey(event.schema, event.record)
+		event.projectionKey = tryResolveKey(event.schema, event.record, fields)
 		event.projectable = event.projectionKey ~= nil
 	elseif event.type == "expire" then
 		event.projectionDomain = domain
 		local fallback = (event.schema and event.key) or nil
-		event.projectionKey = resolveKey(event.schema, event.entry) or fallback
+		event.projectionKey = tryResolveKey(event.schema, event.entry, fields) or fallback
 		event.projectable = event.projectionKey ~= nil
 	else
 		event.projectionDomain = domain
 		local key = nil
 		-- Prefer root schema if present on either side.
 		if event.left and fields[event.left.schema] then
-			key = resolveKey(event.left.schema, event.left.entry) or key
+			key = tryResolveKey(event.left.schema, event.left.entry, fields) or key
 		end
 		if event.right and fields[event.right.schema] and not key then
-			key = resolveKey(event.right.schema, event.right.entry)
+			key = tryResolveKey(event.right.schema, event.right.entry, fields)
 		end
 		-- Fallback to event.key if it matches any projectable schema.
 		if not key then
@@ -443,7 +506,7 @@ local function enrichProjection(event, projection, projectionFields)
 			elseif event.right and fields[event.right.schema] then
 				key = event.key
 			elseif event.schema and fields[event.schema] then
-				key = resolveKey(event.schema, event.entry) or event.key
+				key = tryResolveKey(event.schema, event.entry, fields) or event.key
 			end
 		end
 		event.projectionKey = key
@@ -500,14 +563,29 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	end
 
 	local sink = rx.Subject.create()
-	local instrumented = queryBuilder:withVisualizationHook(function(context)
-		return {
-			emit = function(event)
-				sink:onNext(event)
-			end,
-			stepIndex = context.stepIndex,
-			depth = depthForStep(context.stepIndex),
-		}
+	local finalTapStream = rx.Subject.create()
+	local instrumented = queryBuilder
+		:withVisualizationHook(function(context)
+			return {
+				emit = function(event)
+					sink:onNext(event)
+				end,
+				stepIndex = context.stepIndex,
+				depth = depthForStep(context.stepIndex),
+			}
+		end)
+		:withFinalTap(function(value)
+			finalTapStream:onNext(value)
+		end)
+
+	local finalDepth = depthForStep(totalSteps) or maxLayers
+	local normalizedFinal = finalTapStream:map(function(result)
+		return finalEventFromResult(result, projectionDomainSchema, projectionField, projectionFields, finalDepth)
+	end)
+
+	local baseStream = sink:filter(function(event)
+		-- Drop pre-WHERE join result events when we have a final tap; keep sources/expire.
+		return not (event and (event.kind == "match" or event.kind == "unmatched"))
 	end)
 
 	return {
@@ -528,19 +606,20 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 				fields = projectionFields,
 			},
 		},
-		normalized = sink:map(normalizeEventMapper(primarySet, maxLayers))
+		normalized = baseStream:merge(normalizedFinal)
+			:map(normalizeEventMapper(primarySet, maxLayers))
 			:map(function(event)
 				return enrichProjection(event, {
 					domain = projectionDomainSchema or (plan.from and plan.from[1]) or primaries[1],
 				}, projectionFields)
-				end)
-				:map(function(event)
-					logEvent(event, logEvents)
-					return event
-				end)
-				:filter(function(event)
-					return event ~= nil
-				end),
+			end)
+			:map(function(event)
+				logEvent(event, logEvents)
+				return event
+			end)
+			:filter(function(event)
+				return event ~= nil
+			end),
 	}
 end
 

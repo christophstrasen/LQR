@@ -37,6 +37,57 @@ end
 
 ---@diagnostic disable: undefined-global
 describe("Query visualization adapter", function()
+	it("emits final events after where filtering", function()
+		local customers = SchemaHelpers.observableFromTable("customers", {
+			{ id = 1, tier = "bronze" },
+			{ id = 2, tier = "gold" },
+		})
+		local orders = SchemaHelpers.observableFromTable("orders", {
+			{ id = 101, customerId = 1, total = 50 },
+			{ id = 102, customerId = 2, total = 75 },
+		})
+
+		local builder = Query.from(customers, "customers")
+			:leftJoin(orders, "orders")
+			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:where(function(row)
+				return (row.orders.total or 0) >= 60
+			end)
+
+		local attachment = QueryVizAdapter.attach(builder, { maxLayers = 3 })
+
+		local normalized = {}
+		attachment.normalized:subscribe(function(event)
+			normalized[#normalized + 1] = event
+		end)
+
+		local results = {}
+		attachment.query:subscribe(function(result)
+			results[#results + 1] = result
+		end)
+
+		assert.are.equal(1, #results)
+		assert.are.equal(2, results[1]:get("customers").id)
+		assert.are.equal(102, results[1]:get("orders").id)
+
+			local finals = {}
+			for _, evt in ipairs(normalized) do
+				if evt.type == "joinresult" and evt.kind == "final" then
+					finals[#finals + 1] = evt
+				elseif evt.type == "joinresult" then
+					-- pre-WHERE join results should not appear in normalized
+					assert.are_not.equal("match", evt.kind)
+					assert.are_not.equal("unmatched", evt.kind)
+				end
+			end
+			assert.are.equal(1, #finals)
+			local final = finals[1]
+			-- Final schema/id reflect projection domain (customers), but result should carry orders.
+			assert.are.equal(2, final.id)
+			assert.is_not_nil(final.result)
+			assert.are.equal(102, final.result:get("orders").id)
+		end)
+
 	it("emits layered events for stacked joins without changing query semantics", function()
 		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
 		local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
@@ -86,8 +137,8 @@ describe("Query visualization adapter", function()
 
 		local joins = ofType(normalized, "joinresult")
 		assert.is_true(#joins >= 1)
-		assert.are.equal("match", joins[1].kind)
-		assert.are.equal("joinresult", joins[1].type)
+		assert.are.equal("final", joins[#joins].kind)
+		assert.are.equal("joinresult", joins[#joins].type)
 		local sources = ofType(normalized, "source")
 		assert.is_true(#sources >= 1)
 		assert.are.equal("source", sources[1].type)
@@ -129,7 +180,7 @@ describe("Query visualization adapter", function()
 		local reserved = { 0.0, 1 / 3 }
 		local minDistance = 0.08
 		for schema, color in pairs(attachment.palette) do
-			if schema ~= "joined" and schema ~= "expired" then
+			if schema ~= "joined" and schema ~= "expired" and schema ~= "final" then
 				local hue = rgbToHue(color)
 				for _, target in ipairs(reserved) do
 					local diff = math.abs(hue - target)

@@ -41,7 +41,7 @@ local function build()
 		:where(function(row)
 			local total = (row.orders and row.orders.total) or 0
 			print("checking predicate")
-			return total >= 70 and total <= 75
+			return total >= 60 and total <= 80
 		end)
 
 	return {

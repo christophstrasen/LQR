@@ -10,6 +10,7 @@
 ---@field private _scheduler any
 ---@field private _vizHook fun(context:table):table|nil
 ---@field private _wherePredicate fun(row:table):boolean|nil
+---@field private _finalTap fun(value:any)|nil
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
@@ -504,6 +505,7 @@ function QueryBuilder:_clone()
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
 	copy._wherePredicate = self._wherePredicate
+	copy._finalTap = self._finalTap
 	return copy
 end
 
@@ -644,6 +646,18 @@ function QueryBuilder:withVisualizationHook(vizHook)
 	end
 	local nextBuilder = self:_clone()
 	nextBuilder._vizHook = vizHook
+	return nextBuilder
+end
+
+---Attaches a tap that fires on every final emission (after where/select).
+---@param finalTap fun(value:any)|nil
+---@return QueryBuilder
+function QueryBuilder:withFinalTap(finalTap)
+	if finalTap ~= nil then
+		assert(type(finalTap) == "function", "withFinalTap expects a function or nil")
+	end
+	local nextBuilder = self:_clone()
+	nextBuilder._finalTap = finalTap
 	return nextBuilder
 end
 
@@ -812,6 +826,15 @@ function QueryBuilder:_build()
 	end
 
 	local mergedExpired = mergeObservables(expiredStreams)
+
+	if self._finalTap then
+		local tap = self._finalTap
+		current = current:map(function(value)
+			tap(value)
+			return value
+		end)
+	end
+
 	self._built = {
 		observable = current,
 		expired = mergedExpired,
