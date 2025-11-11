@@ -271,13 +271,15 @@ function Renderer.render(runtime, palette, now)
 	end
 
 	-- Build outer legend entries per match layer and global expire.
+	local legendEntries = {}
 	for layer = 1, snapshot.meta.maxLayers do
 		local count = matchCountsByLayer[layer] or 0
-		local label = (layer == (snapshot.meta.header.finalLayer or 1)) and "Final" or string.format("Joined (layer %d)", layer)
-		local kind = (layer == (snapshot.meta.header.finalLayer or 1)) and "final" or "match"
+		local isFinal = layer == (snapshot.meta.header.finalLayer or 1)
+		local label = isFinal and string.format("Final (Layer %d)", layer) or string.format("Joined (Layer %d)", layer)
+		local kind = isFinal and "final" or "match"
 		local layerColor = joinColors[layer] or colorForKind(palette, kind)
 		if count > 0 or joinColors[layer] then
-			snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = {
+			legendEntries[#legendEntries + 1] = {
 				kind = kind,
 				label = label,
 				color = layerColor,
@@ -286,6 +288,12 @@ function Renderer.render(runtime, palette, now)
 				projectable = projectableMatchCountsByLayer[layer] or 0,
 			}
 		end
+	end
+	table.sort(legendEntries, function(a, b)
+		return a.layer > b.layer
+	end)
+	for _, entry in ipairs(legendEntries) do
+		snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = entry
 	end
 	local expireReasons = {}
 	for reason, total in pairs(snapshot.meta.expireReasons) do

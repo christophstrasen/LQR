@@ -141,7 +141,7 @@ describe("viz_high_level headless renderer", function()
 
 	it("counts matches per layer and uses provided layer colors", function()
 		local runtime = Runtime.new({
-			maxLayers = 2,
+			maxLayers = 3,
 			maxColumns = 2,
 			maxRows = 1,
 			startId = 0,
@@ -150,32 +150,36 @@ describe("viz_high_level headless renderer", function()
 				joinColors = {
 					[1] = { 1, 0, 0, 1 },
 					[2] = { 0, 1, 0, 1 },
+					[3] = { 0, 0, 1, 1 },
 				},
 			},
 		})
 
 		runtime:ingest({
 			type = "match",
-			layer = 1,
+			layer = 2,
 			projectionKey = 0,
 			projectable = true,
 		}, 0)
 		runtime:ingest({
 			type = "match",
-			layer = 2,
+			layer = 3,
 			projectionKey = 1,
 			projectable = true,
 		}, 0)
 
 		local snap = Renderer.render(runtime, {}, 0)
 		assert.is_table(snap.meta.outerLegend)
-		assert.are.equal(3, #snap.meta.outerLegend) -- two match layers + expire
-		local first = snap.meta.outerLegend[1]
-		assert.are.same({ 1, 0, 0, 1 }, first.color)
-		assert.are.equal(1, first.total)
-		local second = snap.meta.outerLegend[2]
-		assert.are.same({ 0, 1, 0, 1 }, second.color)
-		assert.are.equal(1, second.total)
+		assert.are.equal(4, #snap.meta.outerLegend) -- two match layers + final + expire
+		-- Legend is ordered from inner (highest layer) to outer (layer 1 is final).
+		local finalEntry = snap.meta.outerLegend[#snap.meta.outerLegend - 1]
+		assert.are.equal("Final (Layer 1)", finalEntry.label)
+		local layer3 = snap.meta.outerLegend[1]
+		assert.are.same({ 0, 0, 1, 1 }, layer3.color)
+		assert.are.equal(1, layer3.total)
+		local layer2 = snap.meta.outerLegend[2]
+		assert.are.same({ 0, 1, 0, 1 }, layer2.color)
+		assert.are.equal(1, layer2.total)
 	end)
 
 	it("tracks expire counts by reason", function()
