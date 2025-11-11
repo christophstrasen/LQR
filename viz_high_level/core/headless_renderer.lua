@@ -205,8 +205,10 @@ function Renderer.render(runtime, palette, now)
 			local borderRegion = cell.composite:getBorder(evt.layer)
 			if borderRegion then
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
-				local layerColor = joinColors[evt.layer] or colorForKind(palette, "match")
-				local ttl = visualsTTL * (ttlFactors.match or 1) * (layerFactors[evt.layer] or 1)
+				local kindKey = evt.kind == "final" and "final" or "match"
+				local layerColor = joinColors[evt.layer] or colorForKind(palette, kindKey)
+				local ttlFactor = evt.kind == "final" and (ttlFactors.final or ttlFactors.match) or (ttlFactors.match or 1)
+				local ttl = visualsTTL * ttlFactor * (layerFactors[evt.layer] or 1)
 				borderRegion:setDefaultTTL(ttl)
 				borderRegion:addLayer({
 					color = layerColor,
@@ -271,11 +273,13 @@ function Renderer.render(runtime, palette, now)
 	-- Build outer legend entries per match layer and global expire.
 	for layer = 1, snapshot.meta.maxLayers do
 		local count = matchCountsByLayer[layer] or 0
+		local label = (layer == (snapshot.meta.header.finalLayer or 1)) and "Final" or string.format("Joined (layer %d)", layer)
+		local kind = (layer == (snapshot.meta.header.finalLayer or 1)) and "final" or "match"
+		local layerColor = joinColors[layer] or colorForKind(palette, kind)
 		if count > 0 or joinColors[layer] then
-			local layerColor = joinColors[layer] or colorForKind(palette, "match")
 			snapshot.meta.outerLegend[#snapshot.meta.outerLegend + 1] = {
-				kind = "match",
-				label = string.format("Joined (layer %d)", layer),
+				kind = kind,
+				label = label,
 				color = layerColor,
 				layer = layer,
 				total = count,

@@ -220,13 +220,13 @@ function Draw.drawSnapshot(snapshot, opts)
 	end
 	local meta = snapshot.meta or {}
 	local maxLayers = meta.maxLayers or 1
-	local joinCount = #(meta.header and meta.header.joins or {})
-	local layerBudget = math.min(joinCount, maxLayers)
+	local joinLayers = #(meta.header and meta.header.joins or {}) + 1
+	local layerBudget = math.min(joinLayers, maxLayers)
 	local metrics = metricsForWindow(window, layerBudget)
 	local gridYOffset = (opts and opts.gridYOffset) or 0
 	local zoomCorrect = (opts and opts.zoomCorrect) or 1
 	local renderTime = meta.renderTime or (love and love.timer and love.timer.getTime()) or os.clock()
-	drawCells(snapshot, metrics, renderTime, maxLayers, joinCount, gridYOffset)
+	drawCells(snapshot, metrics, renderTime, maxLayers, joinLayers, gridYOffset)
 	if opts and opts.showLabels then
 		drawLabels(window, metrics, gridYOffset, zoomCorrect)
 	end
@@ -237,8 +237,8 @@ function Draw.metrics(snapshot)
 	local window = snapshot.window or (snapshot.meta and snapshot.meta.header and snapshot.meta.header.window)
 	local meta = snapshot.meta or {}
 	local maxLayers = meta.maxLayers or 1
-	local joinCount = #(meta.header and meta.header.joins or {})
-	local layerBudget = math.min(joinCount, maxLayers)
+	local joinLayers = #(meta.header and meta.header.joins or {}) + 1
+	local layerBudget = math.min(joinLayers, maxLayers)
 	window = window or { columns = 10, rows = 10 }
 	return metricsForWindow(window, layerBudget)
 end

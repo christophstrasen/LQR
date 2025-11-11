@@ -265,10 +265,10 @@ local function normalizeEventMapper(primarySet, maxLayers)
 		return {
 			type = "joinresult",
 			kind = event.kind,
-			layer = clampLayer(event.depth, maxLayers),
-				key = event.key,
-				id = event.id,
-				left = event.left,
+			layer = clampLayer((event.depth or 0) + 1, maxLayers),
+			key = event.key,
+			id = event.id,
+			left = event.left,
 			right = event.right,
 			schema = event.schema,
 			side = event.side,
@@ -525,6 +525,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	local maxLayers = opts.maxLayers or DEFAULT_MAX_LAYERS
 	local plan = queryBuilder:describe()
 	local totalSteps = #(plan.joins or {})
+	local totalLayers = totalSteps + 1 -- include final layer
 	local depthForStep = buildDepthResolver(totalSteps, maxLayers)
 	if not planHasSchemaMapping(plan) then
 		JoinLog:warn("[QueryVizAdapter] Visualization requires Query:onSchemas mappings to derive projection domains")
@@ -536,8 +537,9 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	local projectionFields, projectionDomainSchema, projectionField = buildProjectionMap(plan)
 	local joins = describeJoins(plan, depthForStep)
 	local joinColors = {}
+	joinColors[1] = palette.final or { 0.2, 0.85, 0.2, 1 }
 	for _, join in ipairs(joins) do
-		local layer = join.layer
+		local layer = join.layer and (join.layer + 1) or nil
 		if layer then
 			local colors = {}
 			for _, schema in ipairs(join.schemas or {}) do
@@ -576,7 +578,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 			finalTapStream:onNext(value)
 		end)
 
-	local finalDepth = depthForStep(totalSteps) or maxLayers
+	local finalDepth = 1
 	local normalizedFinal = finalTapStream:map(function(result)
 		return finalEventFromResult(result, projectionDomainSchema, projectionField, projectionFields, finalDepth)
 	end)
@@ -587,7 +589,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		query = instrumented,
 		events = sink,
 		palette = palette,
-		maxLayers = maxLayers,
+		maxLayers = math.max(totalLayers, maxLayers),
 		primarySchemas = primaries,
 		header = {
 			window = nil, -- filled by runtime snapshot
@@ -595,6 +597,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 			from = plan.from or primaries,
 			gc = plan.gc,
 			joinColors = joinColors,
+			finalLayer = finalDepth,
 			projection = {
 				domain = projectionDomainSchema or (plan.from and plan.from[1]) or primaries[1],
 				field = projectionField,
