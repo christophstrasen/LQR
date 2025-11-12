@@ -46,6 +46,8 @@ end
 local RESERVED_HUES = { 0.0, 1 / 3 }
 local MIN_HUE_DISTANCE = 0.08
 
+-- Try to resolve a projection key for a schema using projectionFields first, then fall back
+-- to id/joinKey. This keeps layers aligned with the projection map.
 local function tryResolveKey(schemaName, entry, projectionFields)
 	if not schemaName or not entry then
 		return nil
@@ -420,6 +422,8 @@ local function buildProjectionMap(plan)
 	return map, projectionDomainSchema, projectionField
 end
 
+-- Build a synthetic final event (post-WHERE stream) so the viz can render exactly
+-- what a downstream subscriber would see. Final always lives on the outermost layer.
 local function finalEventFromResult(result, projectionDomainSchema, projectionField, projectionFields, depth)
 	if not result or getmetatable(result) ~= Result then
 		return nil
@@ -562,6 +566,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		end
 	end
 
+	-- sink carries join-stage viz events; finalTapStream carries post-WHERE events.
 	local sink = rx.Subject.create()
 	local finalTapStream = rx.Subject.create()
 	local instrumented = queryBuilder

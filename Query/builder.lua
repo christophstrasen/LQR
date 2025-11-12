@@ -422,6 +422,8 @@ local function applySelectionToExpired(expired, selection)
 end
 
 -- Explainer: buildRowView exposes schemas as table fields and supplies _raw_result for escape hatches.
+-- This keeps WHERE predicates simple: every schema key is present (empty table if absent)
+-- and users can still reach the raw JoinResult when needed.
 local function buildRowView(result, schemaNames)
 	if not isJoinResult(result) then
 		return nil
@@ -441,6 +443,7 @@ local function buildRowView(result, schemaNames)
 end
 
 -- Explainer: toJoinResult wraps raw schema-tagged records for selection-only flows.
+-- The builder downstream always expects JoinResult; this keeps single-source queries consistent.
 local function toJoinResult(value)
 	if isJoinResult(value) then
 		return value
@@ -1002,3 +1005,5 @@ Builder.QueryBuilder = QueryBuilder
 Builder.DEFAULT_WINDOW_COUNT = DEFAULT_WINDOW_COUNT
 
 return Builder
+-- Explainer: summarizeRowIds builds a compact string for logging WHERE decisions
+-- so INFO logs stay readable without dumping whole rows.

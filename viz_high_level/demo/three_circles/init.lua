@@ -171,13 +171,17 @@ ThreeCirclesDemo.loveDefaults = LoveDefaults.merge({
 	label = "three circles",
 	visualsTTLFactor = 1.2,
 	visualsTTLFactors = {
+		-- NOTE: "joined" refers to join layers; "final" controls the outer post-WHERE ring.
 		source = 1.0,
-		match = 7.2,
+		joined = 7.2,
+		final = 7.2,
 		expire = 0.02,
 	},
 	visualsTTLLayerFactors = {
+		-- Layer 1 = final ring, layers 2+ = join rings for this demo.
 		[1] = 1,
 		[2] = 1,
+		[3] = 1,
 	},
 	playbackSpeed = 0.7,
 	visualsTTL = JOINT_TTL,

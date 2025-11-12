@@ -189,7 +189,7 @@ function LoveRunner.bootstrap(opts)
 	end
 	local function maxKindFactor()
 		local max = 1
-		for _, factor in pairs({ ttlFactors.source, ttlFactors.match, ttlFactors.expire }) do
+		for _, factor in pairs({ ttlFactors.source, ttlFactors.joined or ttlFactors.match, ttlFactors.final, ttlFactors.expire }) do
 			if type(factor) == "number" and factor > max then
 				max = factor
 			end

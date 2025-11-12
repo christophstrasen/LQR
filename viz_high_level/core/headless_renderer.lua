@@ -134,6 +134,11 @@ function Renderer.render(runtime, palette, now)
 	assert(runtime and runtime.window, "runtime with window() required")
 	local window = runtime:window()
 	local visualsTTL = runtime.visualsTTL or DEFAULT_ADJUST_INTERVAL
+	-- visualsTTLFactors (optional) let demos scale fades per kind:
+	--   source  = inner fills
+	--   joined  = join layers (pre-WHERE)
+	--   final   = outer post-WHERE ring
+	--   expire  = expire borders
 	local ttlFactors = runtime.visualsTTLFactors or {}
 	local layerFactors = runtime.visualsTTLLayerFactors or {}
 	local currentTime = now or runtime.lastIngestTime or 0
@@ -196,7 +201,7 @@ function Renderer.render(runtime, palette, now)
 		end
 	end
 
-	-- Outer borders: every join result (match layer) gets a border at the proper layer.
+	-- Outer borders: every join result (match layers + final) gets a border at the proper layer.
 	for _, evt in ipairs(runtime.events.match or {}) do
 		local id = evt.projectionKey or extractId(evt)
 		local col, row = mapIdToCell(window, id)
@@ -207,7 +212,10 @@ function Renderer.render(runtime, palette, now)
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
 				local kindKey = evt.kind == "final" and "final" or "match"
 				local layerColor = joinColors[evt.layer] or colorForKind(palette, kindKey)
-				local ttlFactor = evt.kind == "final" and (ttlFactors.final or ttlFactors.match) or (ttlFactors.match or 1)
+				-- joined = join layers, final = outer ring; keep a sensible fallback for older demos.
+				local joinedFactor = ttlFactors.joined or ttlFactors.match or 1
+				local finalFactor = ttlFactors.final or joinedFactor
+				local ttlFactor = evt.kind == "final" and finalFactor or joinedFactor
 				local ttl = visualsTTL * ttlFactor * (layerFactors[evt.layer] or 1)
 				borderRegion:setDefaultTTL(ttl)
 				borderRegion:addLayer({

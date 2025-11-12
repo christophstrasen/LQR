@@ -24,8 +24,8 @@ This package visualizes streaming joins by turning normalized events into grid s
 
 ## Visual fades (TTL)
 - Base TTL = `(visualsTTL or adjustInterval) * visualsTTLFactor`; if you omit `visualsTTL`, we fall back to the adjust cadence so fades still have a duration.
-- Per-kind scaling (optional): `visualsTTLFactors = { source, match, expire }` multiplies the base for inner fills (sources), match borders (joined), and expire borders.
-- Per-layer scaling (optional): `visualsTTLLayerFactors = { [layer] = factor }` multiplies match borders per join depth so outer joins can linger differently than inner ones.
+- Per-kind scaling (optional): `visualsTTLFactors = { source, joined, final, expire }` multiplies the base for inner fills (sources), join borders (joined layers), the outer post-WHERE ring (final), and expire borders.
+- Per-layer scaling (optional): `visualsTTLLayerFactors = { [layer] = factor }` multiplies join/final borders per depth so outer/final can linger differently than inner ones.
 - Leave the maps out to keep all factors at 1. Example: two_circles boosts match TTLs, shortens expire TTLs, and lifts the outermost match layer via `visualsTTLLayerFactors[2]`.
 
 ## Demo defaults (Love/headless)
@@ -33,8 +33,8 @@ Each demo exports `loveDefaults`; `demo/common/love_defaults.lua` just merges th
 - `label`: window title shown by the runner.
 - `visualsTTL`: base fade duration; defaults to `adjustInterval` if unset.
 - `visualsTTLFactor`: multiplies `visualsTTL` to stretch or shrink all fades.
-- `visualsTTLFactors`: optional per-kind multipliers for source/match/expire layers.
-- `visualsTTLLayerFactors`: optional per-border-layer multipliers on top of `match` TTLs.
+- `visualsTTLFactors`: optional per-kind multipliers for source/joined/final/expire layers.
+- `visualsTTLLayerFactors`: optional per-border-layer multipliers on top of the joined/final TTLs.
 - `adjustInterval`: how often the layout/zoom logic can run; also used as TTL fallback when `visualsTTL` is nil.
 - `playbackSpeed` / `ticksPerSecond`: pacing of demo events; pick one style per demo.
 - `clockMode`: whether the clock is driven by Love frames or the demo driver.
