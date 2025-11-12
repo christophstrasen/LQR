@@ -13,7 +13,7 @@ describe("viz_high_level headless renderer TTL factors", function()
 		local baseTTL = 2
 		local factors = {
 			source = 0.5,
-			match = 1.5,
+			joined = 1.5,
 			expire = 0.25,
 		}
 		local layerFactors = {
@@ -70,7 +70,7 @@ describe("viz_high_level headless renderer TTL factors", function()
 
 		local matchBorder = cell.composite:getBorder(2)
 		local matchLayerTTL = matchBorder.layers[next(matchBorder.layers)].ttl
-		assert.are.equal(baseTTL * (factors.joined or factors.match or 1) * layerFactors[2], matchLayerTTL)
+		assert.are.equal(baseTTL * factors.joined * layerFactors[2], matchLayerTTL)
 
 		local expireBorder = cell.composite:getBorder(1)
 		local expireLayerTTL = expireBorder.layers[next(expireBorder.layers)].ttl

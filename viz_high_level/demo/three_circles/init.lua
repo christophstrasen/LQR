@@ -173,8 +173,8 @@ ThreeCirclesDemo.loveDefaults = LoveDefaults.merge({
 	visualsTTLFactors = {
 		-- NOTE: "joined" refers to join layers; "final" controls the outer post-WHERE ring.
 		source = 1.0,
-		joined = 7.2,
-		final = 7.2,
+		joined = 1,
+		final = 3,
 		expire = 0.02,
 	},
 	visualsTTLLayerFactors = {

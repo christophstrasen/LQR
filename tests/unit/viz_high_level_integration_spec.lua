@@ -62,6 +62,7 @@ describe("viz_high_level adapter + runtime", function()
 		local dk2 = snap.meta.header.joins[2].displayKey or ""
 		assert.is_true(dk2:find("orders%.id") ~= nil)
 		assert.is_true(dk2:find("refunds%.orderId") ~= nil)
-		assert.are.same({ "customers" }, snap.meta.header.from)
+		-- Header.from now lists all primary schemas so legends and headers can show all sources.
+		assert.are.same({ "customers", "orders", "refunds" }, snap.meta.header.from)
 	end)
 end)

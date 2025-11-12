@@ -599,7 +599,8 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		header = {
 			window = nil, -- filled by runtime snapshot
 			joins = joins,
-			from = plan.from or primaries,
+			-- Use primary schemas here so legends can show all sources from the start.
+			from = primaries,
 			gc = plan.gc,
 			joinColors = joinColors,
 			finalLayer = finalDepth,

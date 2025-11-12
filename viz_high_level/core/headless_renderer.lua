@@ -212,8 +212,8 @@ function Renderer.render(runtime, palette, now)
 				borderRegion:setBackground(NEUTRAL_BORDER_COLOR)
 				local kindKey = evt.kind == "final" and "final" or "match"
 				local layerColor = joinColors[evt.layer] or colorForKind(palette, kindKey)
-				-- joined = join layers, final = outer ring; keep a sensible fallback for older demos.
-				local joinedFactor = ttlFactors.joined or ttlFactors.match or 1
+				-- joined = join layers, final = outer ring.
+				local joinedFactor = ttlFactors.joined or 1
 				local finalFactor = ttlFactors.final or joinedFactor
 				local ttlFactor = evt.kind == "final" and finalFactor or joinedFactor
 				local ttl = visualsTTL * ttlFactor * (layerFactors[evt.layer] or 1)
@@ -330,9 +330,11 @@ function Renderer.render(runtime, palette, now)
 		end
 	end
 
-	-- Legend: derive from sourceCounts + palette.
+	-- Legend: show all primary schemas from the plan header, even before the first source arrives.
 	local legendEntries = {}
-	for schema, count in pairs(snapshot.meta.sourceCounts) do
+	local headerFrom = (snapshot.meta.header and snapshot.meta.header.from) or {}
+	for _, schema in ipairs(headerFrom) do
+		local count = snapshot.meta.sourceCounts[schema] or 0
 		legendEntries[#legendEntries + 1] = {
 			schema = schema,
 			count = count,
