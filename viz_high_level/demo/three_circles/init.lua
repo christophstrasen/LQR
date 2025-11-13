@@ -35,7 +35,7 @@ local function build()
 			orders = { field = "id" },
 			shipments = { field = "orderId" },
 		})
-		:joinWindow({
+		:withDefaultJoinWindow({
 			time = JOINT_TTL,
 			field = "sourceTime",
 			currentFn = function()

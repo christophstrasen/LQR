@@ -15,7 +15,9 @@ and Rx-native.
 - `:innerJoin(other)` / `:leftJoin(other)` → chain more sources (raw observables or join outputs).
 - `:onSchemas{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
 - `:joinWindow{ time=seconds | count=n, field="sourceTime", currentFn=os.time, gcIntervalSeconds? }`
-  → join window/retention/expiration policy.
+  → join window/retention/expiration policy for the most recent join. Use `:withDefaultJoinWindow{...}`
+  (or `Query.setDefaultJoinWindow{...}` globally) to set the fallback applied when a join omits
+  `:joinWindow`.
 - `:selectSchemas{ "customers", "orders", ... }` → project/rename schemas for downstream clarity.
 - `:describe()` → returns a stable plan (table/string) for tests and debugging.
 - Rx-native ops (`filter`, `map`, `merge`, `throttle`, etc.) remain available on the underlying
@@ -69,9 +71,10 @@ local subscription = joined:subscribe(...) -- standard Rx subscription
   - Allow join inputs to be raw observables or JoinResult streams; internally fan out requested
     schemas via `JoinObservable.chain` (or equivalent) so no user-facing chain call is needed.
 - **Join windows**
-  - `joinWindow{ time | count, field?, currentFn?, gcIntervalSeconds?, gcOnInsert? }`. No join window means
-    no expiration. Default: a large count-based join window (e.g., `{ count = 1000 }`) to keep behavior simple
-    when unspecified.
+  - `joinWindow{ time | count, field?, currentFn?, gcIntervalSeconds?, gcOnInsert? }`. No join window on a
+    step means “use the default join window.” Default fallback: a large count-based join window (e.g.,
+    `{ count = 1000 }`) to keep behavior simple when unspecified. A per-query default can be set with
+    `withDefaultJoinWindow`, and a process-wide default with `Query.setDefaultJoinWindow`.
 - **Select/rename**
   - `selectSchemas` to shape downstream schema names; required for readability.
 - **Describe**

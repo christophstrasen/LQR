@@ -6,7 +6,7 @@
 ---@field private _selection table|nil
 ---@field private _schemaNames table|nil
 ---@field private _built table|nil
----@field private _defaultWindowCount number
+---@field private _defaultJoinWindow table|nil
 ---@field private _scheduler any
 ---@field private _vizHook fun(context:table):table|nil
 ---@field private _wherePredicate fun(row:table):boolean|nil
@@ -19,6 +19,7 @@ local Log = require("log").withTag("query")
 local DEFAULT_WINDOW_COUNT = 1000
 local DEFAULT_PER_KEY_BUFFER_SIZE = 10
 local schedulerOverride = nil
+local defaultJoinWindowOverride = nil
 
 local QueryBuilder = {}
 QueryBuilder.__index = QueryBuilder
@@ -310,22 +311,26 @@ local function normalizeKeySelector(step)
 end
 
 -- Explainer: normalizeJoinWindow defaults to a large count join window and threads scheduler into GC if available.
-local function normalizeJoinWindow(step, defaultWindowCount, scheduler)
-	local joinWindow = step.joinWindow
+local function normalizeJoinWindow(step, defaultJoinWindow, scheduler)
+	local joinWindow = step.joinWindow or defaultJoinWindow
 	if not joinWindow then
-		return {
-			joinWindow = {
-				mode = "count",
-				maxItems = defaultWindowCount,
-			},
+		joinWindow = { count = DEFAULT_WINDOW_COUNT }
+	end
+
+	if joinWindow.mode == "count" and not joinWindow.count then
+		joinWindow = {
+			count = joinWindow.maxItems or DEFAULT_WINDOW_COUNT,
+			gcOnInsert = joinWindow.gcOnInsert,
+			gcIntervalSeconds = joinWindow.gcIntervalSeconds,
+			gcScheduleFn = joinWindow.gcScheduleFn,
 		}
 	end
 
-	if joinWindow.count then
+	if joinWindow.count or joinWindow.maxItems then
 		return {
 			joinWindow = {
 				mode = "count",
-				maxItems = joinWindow.count,
+				maxItems = joinWindow.count or joinWindow.maxItems,
 			},
 			gcOnInsert = joinWindow.gcOnInsert,
 			gcIntervalSeconds = joinWindow.gcIntervalSeconds,
@@ -504,7 +509,7 @@ function QueryBuilder:_clone()
 	end
 	copy._selection = self._selection
 	copy._schemaNames = self._schemaNames and cloneArray(self._schemaNames) or nil
-	copy._defaultWindowCount = self._defaultWindowCount
+	copy._defaultJoinWindow = self._defaultJoinWindow
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
 	copy._wherePredicate = self._wherePredicate
@@ -561,6 +566,10 @@ local function resolveBufferSize(bufferSizes, schemas)
 	return size or DEFAULT_PER_KEY_BUFFER_SIZE
 end
 
+local function resolveDefaultJoinWindow(builder)
+	return builder._defaultJoinWindow or defaultJoinWindowOverride
+end
+
 local function collectPrimarySchemas(builder, set)
 	set = set or {}
 	if builder._rootSchemas then
@@ -603,7 +612,7 @@ local function newBuilder(source, opts)
 	builder._rootSchemas = schemaName and { schemaName } or nil
 	builder._schemaNames = builder._rootSchemas and cloneArray(builder._rootSchemas) or nil
 	builder._steps = {}
-	builder._defaultWindowCount = DEFAULT_WINDOW_COUNT
+	builder._defaultJoinWindow = defaultJoinWindowOverride
 	builder._scheduler = schedulerOverride
 	builder._vizHook = nil
 	builder._wherePredicate = nil
@@ -649,6 +658,18 @@ function QueryBuilder:withVisualizationHook(vizHook)
 	end
 	local nextBuilder = self:_clone()
 	nextBuilder._vizHook = vizHook
+	return nextBuilder
+end
+
+---Sets a per-query default join window applied to any join without its own joinWindow.
+---@param joinWindow table|nil
+---@return QueryBuilder
+function QueryBuilder:withDefaultJoinWindow(joinWindow)
+	if joinWindow ~= nil then
+		assert(type(joinWindow) == "table", "withDefaultJoinWindow expects a table or nil")
+	end
+	local nextBuilder = self:_clone()
+	nextBuilder._defaultJoinWindow = joinWindow
 	return nextBuilder
 end
 
@@ -768,7 +789,7 @@ function QueryBuilder:_build()
 
 		local keySelector, bufferSizes = normalizeKeySelector(step)
 
-		local options = normalizeJoinWindow(step, self._defaultWindowCount, self._scheduler)
+		local options = normalizeJoinWindow(step, resolveDefaultJoinWindow(self), self._scheduler)
 		options.joinType = step.joinType
 		options.on = keySelector
 		options.perKeyBufferSizeLeft = resolveBufferSize(bufferSizes, currentSchemas)
@@ -904,42 +925,44 @@ local function keyDescription(step)
 	error("Unexpected keySpec in describe()")
 end
 
-local function joinWindowDescription(joinWindow, defaultWindowCount)
-	if not joinWindow then
-		return { mode = "count", count = defaultWindowCount }
+local function joinWindowDescription(joinWindow, defaultJoinWindow)
+	local source = joinWindow or defaultJoinWindow
+	if not source then
+		return { mode = "count", count = DEFAULT_WINDOW_COUNT }
 	end
-	if joinWindow.count then
-		return { mode = "count", count = joinWindow.count }
+	if source.count or source.maxItems or source.mode == "count" then
+		return { mode = "count", count = source.count or source.maxItems or DEFAULT_WINDOW_COUNT }
 	end
 	return {
 		mode = "time",
-		time = joinWindow.time or joinWindow.offset or 0,
-		field = joinWindow.field or "sourceTime",
+		time = source.time or source.offset or 0,
+		field = source.field or "sourceTime",
 	}
 end
 
-local function joinWindowGcDescription(joinWindow, defaultWindowCount)
+local function joinWindowGcDescription(joinWindow, defaultJoinWindow)
+	local source = joinWindow or defaultJoinWindow
 	local description = {
 		mode = "count",
-		count = defaultWindowCount,
+		count = DEFAULT_WINDOW_COUNT,
 		gcOnInsert = true,
 	}
-	if not joinWindow then
+	if not source then
 		return description
 	end
-	if joinWindow.count then
+	if source.count or source.maxItems or source.mode == "count" then
 		description.mode = "count"
-		description.count = joinWindow.count
-	elseif joinWindow.time or joinWindow.offset then
+		description.count = source.count or source.maxItems or DEFAULT_WINDOW_COUNT
+	elseif source.time or source.offset or source.mode == "time" or source.mode == "interval" then
 		description.mode = "time"
-		description.time = joinWindow.time or joinWindow.offset or 0
-		description.field = joinWindow.field or "sourceTime"
+		description.time = source.time or source.offset or 0
+		description.field = source.field or "sourceTime"
 	end
-	if joinWindow.gcOnInsert ~= nil then
-		description.gcOnInsert = joinWindow.gcOnInsert
+	if source.gcOnInsert ~= nil then
+		description.gcOnInsert = source.gcOnInsert
 	end
-	if joinWindow.gcIntervalSeconds then
-		description.gcIntervalSeconds = joinWindow.gcIntervalSeconds
+	if source.gcIntervalSeconds then
+		description.gcIntervalSeconds = source.gcIntervalSeconds
 	end
 	return description
 end
@@ -951,20 +974,17 @@ function QueryBuilder:describe()
 		from = self._rootSchemas or { "unknown" },
 		joins = {},
 	}
-	local planGc = {
-		mode = "count",
-		count = self._defaultWindowCount,
-		gcOnInsert = true,
-	}
+	local defaultJoinWindow = resolveDefaultJoinWindow(self)
+	local planGc = joinWindowGcDescription(nil, defaultJoinWindow)
 	for _, step in ipairs(self._steps) do
 		plan.joins[#plan.joins + 1] = {
 			type = step.joinType,
 			source = step.sourceSchema or "unknown",
 			key = keyDescription(step),
-			joinWindow = joinWindowDescription(step.joinWindow, self._defaultWindowCount),
+			joinWindow = joinWindowDescription(step.joinWindow, defaultJoinWindow),
 		}
 		if step.joinWindow then
-			planGc = joinWindowGcDescription(step.joinWindow, self._defaultWindowCount)
+			planGc = joinWindowGcDescription(step.joinWindow, defaultJoinWindow)
 		end
 	end
 	plan.gc = planGc
@@ -999,6 +1019,17 @@ end
 
 function Builder.getScheduler()
 	return schedulerOverride
+end
+
+function Builder.setDefaultJoinWindow(joinWindow)
+	if joinWindow ~= nil then
+		assert(type(joinWindow) == "table", "setDefaultJoinWindow expects a table or nil")
+	end
+	defaultJoinWindowOverride = joinWindow
+end
+
+function Builder.getDefaultJoinWindow()
+	return defaultJoinWindowOverride
 end
 
 Builder.QueryBuilder = QueryBuilder

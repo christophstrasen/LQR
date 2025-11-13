@@ -22,4 +22,10 @@ function Query.setScheduler(scheduler)
 	Builder.setScheduler(scheduler)
 end
 
+---Overrides the default join window used when a join step does not declare one.
+---@param joinWindow table|nil
+function Query.setDefaultJoinWindow(joinWindow)
+	Builder.setDefaultJoinWindow(joinWindow)
+end
+
 return Query

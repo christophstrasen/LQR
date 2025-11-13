@@ -241,4 +241,64 @@ end
 			},
 		}, plan)
 	end)
+
+	it("applies a per-query default join window when a step omits joinWindow", function()
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
+
+		local capturedOpts
+		local originalCreate = JoinObservable.createJoinObservable
+		local function restore()
+			JoinObservable.createJoinObservable = originalCreate
+		end
+
+		local ok, err = pcall(function()
+			JoinObservable.createJoinObservable = function(leftStream, rightStream, opts)
+				capturedOpts = opts
+				return originalCreate(leftStream, rightStream, opts)
+			end
+
+			local joined = Query.from(left, "left")
+				:withDefaultJoinWindow({
+					time = 7,
+					field = "sourceTime",
+					currentFn = function()
+						return 42
+					end,
+					gcOnInsert = false,
+					gcIntervalSeconds = 1,
+				})
+				:leftJoin(right, "right")
+				:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+
+			local plan = joined:describe()
+			assert.are.same({ "left" }, plan.from)
+			assert.are.same(
+				{ mode = "time", time = 7, field = "sourceTime" },
+				plan.joins[1].joinWindow
+			)
+			assert.are.equal("time", plan.gc.mode)
+			assert.are.equal(7, plan.gc.time)
+			assert.are.equal("sourceTime", plan.gc.field)
+			assert.are.equal(false, plan.gc.gcOnInsert)
+			assert.are.equal(1, plan.gc.gcIntervalSeconds)
+
+			joined:subscribe(function() end)
+			leftSubject:onCompleted()
+			rightSubject:onCompleted()
+
+			assert.is_table(capturedOpts)
+			assert.are.equal("interval", capturedOpts.joinWindow.mode)
+			assert.are.equal(7, capturedOpts.joinWindow.offset)
+			assert.are.equal("sourceTime", capturedOpts.joinWindow.field)
+			assert.are.equal(false, capturedOpts.gcOnInsert)
+			assert.are.equal(1, capturedOpts.gcIntervalSeconds)
+			assert.is_function(capturedOpts.joinWindow.currentFn)
+		end)
+
+		restore()
+		if not ok then
+			error(err)
+		end
+	end)
 end)
