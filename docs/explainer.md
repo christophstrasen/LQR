@@ -37,7 +37,95 @@ local attachment = Query.from(customersObservable, "customers")
 - **Builder**: `Query.from` seeds the chain with the primary observable, attaching a schema name that downstream joins reference. Each `:leftJoin` / `:innerJoin` adds another observable to the pipeline with its own label, so you can still address individual schemas in the resulting `JoinResult`.
 - **Subscribers**: `attachment.query:subscribe(function(result) ... end)` is where business logic lives. It interprets every joined record emission (matched or unmatched) as soon as required sources arrive—critical for low-latency processing where waiting for a batch query would be too slow.
 
-### 4. Join Windowing, Retention, and GC
+### 4. WHERE-style Filtering on Joined Rows
+
+On top of the join structure itself, the high-level API exposes a single `WHERE`-style filter:
+
+```lua
+local query =
+  Query.from(customers, "customers")
+    :leftJoin(orders, "orders")
+    :onSchemas({ customers = "id", orders = "customerId" })
+    :joinWindow({ time = 4, field = "sourceTime" })
+    :where(function(row)
+      local c = row.customers
+      local o = row.orders -- {} when there is no matching order
+
+      if c.type == "VIP" then
+        return true
+      end
+
+      if not o.id then
+        -- left-join row without a matching order
+        return false
+      end
+
+      return (o.amount or 0) < (c.creditLine or math.huge)
+    end)
+    :selectSchemas({ "customers", "orders" })
+```
+
+Conceptually this is the reactive equivalent of `WHERE` in SQL:
+
+- It **runs after all join steps** in the builder and **before** any `selectSchemas` projection.
+- It operates on **joined rows**, not raw source events, so predicates can freely combine fields from different schemas.
+- It behaves like an Rx `filter`: only rows where the predicate returns a truthy value are forwarded.
+
+#### Row view: schema-aware but simple
+
+Instead of passing the raw `JoinResult` into your predicate, the builder constructs a simple **row view** table:
+
+```lua
+row = {
+  customers = { ... } or {}, -- absent schema → empty table
+  orders    = { ... } or {},
+  refunds   = { ... } or {},
+
+  _raw_result = <JoinResult>, -- escape hatch for power users
+}
+```
+
+Key rules:
+
+- Every schema name that flows through the builder becomes a **field on the row**:
+  - `row.customers` is the underlying customer record table if present in the `JoinResult`.
+  - If that schema is missing (e.g. right side of a left join with no match), it is **an empty table `{}`**.
+- Accessing fields is always safe:
+  - `row.orders.id` simply evaluates to `nil` when there is no matching `orders` record.
+  - You never need to guard with `if row.orders then …` just because of join type.
+- The row view is a **plain Lua table**:
+  - no metatables;
+  - no magic lookups;
+  - garbage-collector friendly and easy to inspect in logs or REPL.
+- For advanced use cases you can still access the raw `JoinResult` through `row._raw_result` and call helpers like `:schemaNames()` or `:get("schema")` directly.
+
+This design keeps predicates straightforward: they read like normal Lua over nested tables, while still preserving full observability and provenance when needed.
+
+#### Where it sits in the pipeline
+
+The logical order for the high-level API is:
+
+1. `FROM` / root source(s) via `Query.from(...)`.
+2. Zero or more join steps:
+   - `:innerJoin(...)`, `:leftJoin(...)`, each with its own `onSchemas` and optional `joinWindow`.
+3. **At most one** `WHERE` step:
+   - `:where(function(row) ... end)` against the row view described above.
+4. Optional projection:
+   - `:selectSchemas({ ... })` to pick and/or rename schemas for downstream consumers.
+5. Subscription and side-effects:
+   - `:subscribe(...)`, `:into(...)`, visualization hooks, etc.
+
+Two important constraints:
+
+- Only one `where` call is allowed per builder chain. Calling it twice raises an error; this keeps the plan easy to inspect and avoids surprising combinations of predicates.
+- Selection-only queries are supported. Even if you never call `innerJoin`/`leftJoin`, a `Query.from(...):where(...):selectSchemas(...)` chain still sees a row view with a single schema field (e.g. `row.customers`).
+
+Streaming behavior remains Rx-native:
+
+- `where` does **not** reorder or buffer emissions; it just decides which joined rows pass through.
+- If the predicate throws an error, that row is dropped and a warning is logged instead of crashing the entire stream. Well-behaved predicates should be pure and side-effect free beyond logging or metrics.
+
+### 5. Join Windowing, Retention, and GC
 
 When we talk about join windowing and buffering in a streaming join, we’re really answering two questions: for how long should an event be allowed to wait for a partner, and how many events with the same key should we keep around at the same time. The **join window** answers the first question at a global level across all keys and is the dominant safety net for memory and latency, while the **per-key buffer** answers the second question at a local per-key level and lets you decide whether your join behaves like a “latest value per key” view or like a “recent history of events per key”.
 
@@ -80,11 +168,11 @@ With these two levers in mind—join window for “how long/how many overall” 
 
 
 
-### 5. Streaming joins and event counts
+### 6. Streaming joins and event counts
 
 Joins operate on *events in a join window*, not unique ids. A single emission can fan out to multiple join results if the join window already contains several matching partners. Example: seven orders sit in a 3s join window; one customer event with a matching `customerId` can produce up to seven join events. Re‑emitting the same id later will generate more join events as long as partners remain in the join window. Header counters in the viz (`source`, `joined`, `expired`) therefore reflect event counts, not distinct ids currently visible.
 
-### 5. Visualizing Reactive Joins
+### 7. Visualizing Reactive Joins
 
 Reactive joins are inherently dynamic, but you can still visualize them. We ship a 1‑D “grid” renderer that maps record IDs. It’s ideal when your join keys live in a single numeric domain (e.g., customer IDs).
 

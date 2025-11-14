@@ -549,13 +549,26 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				-- Auto-detect scheduler or use provided gcScheduleFn for periodic GC.
 				-- @TODO: add instrumentation for GC cost and auto-tune gcOnInsert/gcIntervalSeconds based on load.
 				local scheduleFn = gcScheduleFn
+				if not scheduleFn and rx.scheduler and rx.scheduler.schedule then
+					scheduleFn = function(delaySeconds, fn)
+						return rx.scheduler.schedule(fn, delaySeconds or 0)
+					end
+					debugf("gcIntervalSeconds using rx.scheduler helper")
+				end
 				if not scheduleFn then
 					local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
-					if scheduler and tostring(scheduler) == "TimeoutScheduler" and scheduler.schedule then
-						scheduleFn = function(delaySeconds, fn)
-							return scheduler:schedule(fn, (delaySeconds or 0) * 1000)
+					if scheduler and scheduler.schedule then
+						if tostring(scheduler) == "TimeoutScheduler" then
+							scheduleFn = function(delaySeconds, fn)
+								return scheduler:schedule(fn, (delaySeconds or 0) * 1000)
+							end
+							debugf("gcIntervalSeconds using TimeoutScheduler")
+						else
+							scheduleFn = function(delaySeconds, fn)
+								return scheduler:schedule(fn, delaySeconds or 0)
+							end
+							debugf("gcIntervalSeconds using scheduler=%s", tostring(scheduler))
 						end
-						debugf("gcIntervalSeconds using TimeoutScheduler")
 					end
 				end
 

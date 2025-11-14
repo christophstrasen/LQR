@@ -31,7 +31,7 @@
 - **Respect the Coding Style & Conventions** in `context.md`
 
 ## 3) Project Summary
-- experimenting with the possibilities, principles etc. of Lua-ReactiveX
+- Implement a query and join system that works on Lua-ReactiveX observables and allows for an sql-like building and running of queries over multiple observables and sources with a fluent, user-friendly API and handling. In a nutshell "Single thread, non-blocking stream processing in lua with a ReactiveX backbone and an SQL-Like interface"
 
 ## 4) Tech Stack & Environment
 - **Language(s):** Lua 5.1. Later: Zomboid (Build 42) runtime on kahlua vm.
