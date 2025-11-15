@@ -506,20 +506,49 @@ Before hardening this into implementation, we should answer:
 
 ---
 
-## 9. Next steps
+## 9. Implementation plan (next steps)
 
-Once we’ve answered the open questions above, the next concrete steps would be:
+- **Low-level operator surface**
+  - Introduce a `GroupByObservable` (name TBD) that takes a joined row stream and produces:
+    - an **aggregate stream** (schema-tagged by `groupName`, payload per “aggregate view” shape);
+    - an **enriched stream** (row view with inline `_sum` / `_avg` / `_min` / `_max` and `_count`);
+    - optionally an **expired stream** for debugging/observability of window evictions (can also log).
+  - Emit both aggregate + enriched streams; ensure lifecycle/teardown mirrors Join to avoid leaks.
 
-1. Lock in the **aggregate row** and **enriched event** shapes in a small data-model spec.
-2. Draft a low-level `GroupObservable.createGroupObservable(rowStream, options)` that:
-   - maintains per-key group state and sliding windows;
-   - emits aggregate view + optional expiration side channel;
-   - can be wrapped into enriched event view.
-3. Extend the high-level `QueryBuilder` with:
-   - `groupBy(keyFn, opts)` for aggregate view;
-   - `groupByEnrich(keyFn, opts)` for enriched event view;
-   - `having(predicate)` that runs over whichever view is currently in use;
-   - integration with `describe()` so group config is observable.
+- **Cache and window lifecycle (reuse Join patterns)**
+  - Maintain per-key cache of raw rows to enforce time/count windows and recompute aggregates.
+  - Modes: time-based (event time via `field`/`currentFn`) and count-based (last N rows per key).
+  - Per-insert GC (update window on every insert) + optional periodic GC (`gcIntervalSeconds` +
+    scheduler detection) just like Join.
+  - Evictions can be reported on `expired` (if enabled) and/or logged at info level.
+
+- **Aggregation pipeline**
+  - On each insert: update group state, enforce window, recompute aggregates for that key, emit
+    updated aggregate row and enriched event.
+  - Aggregates: dotted paths → `_sum` / `_avg` / `_min` / `_max` tables under schemas; `_count`
+    always present; `avg` emits `nil` when count = 0.
+  - Tag aggregate rows with `RxMeta.schema = groupName` so they can feed downstream queries.
+
+- **High-level wiring**
+  - Extend `QueryBuilder` with `groupBy` / `groupByEnrich` / `groupWindow` / `aggregates` /
+    `having` plumbing into the low-level operator.
+  - Surface grouping in `describe()` (`plan.group` with mode, window, and full aggregates config).
+
+- **Tests to add early**
+  - Low-level:
+    - time-window expiry and count-window eviction;
+    - per-insert GC vs periodic GC behavior;
+    - aggregate recomputation and emitted shapes (aggregate and enriched);
+    - optional expired/debug stream emits when groups/window entries age out.
+  - High-level:
+    - builder wiring for both views;
+    - `having` over aggregate and enriched views;
+    - `describe()` includes grouping.
+
+- **Debug/inspection**
+  - Keep raw rows in the cache (needed for window enforcement). For “inspect window contents”
+    scenarios, expose only via the optional `expired` stream or a debug flag—do not bloat normal
+    aggregate payloads.
 4. Add unit tests mirroring the WHERE briefing style:
    - basic grouping;
    - sliding windows;
