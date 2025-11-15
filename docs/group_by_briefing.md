@@ -209,7 +209,7 @@ We intend to support both.
 This is closest to classic SQL GROUP BY. For each group key and window, we maintain aggregate
 values and emit them as they change.
 
-**Conceptual shape:**
+**Conceptual shape (payload returned by `result:get(groupName)`):**
 
 ```lua
 aggregateRow = {
@@ -220,17 +220,29 @@ aggregateRow = {
   groupName = <string>|nil,
 
   -- Aggregated values derived from the rows in the current group window.
-  -- Shape mirrors configured aggregates. Example:
-  -- aggregateValues = {
-  --   _count = <number>, -- group size
-  --   combat = {
-  --     damage = { sum = <number>, avg = <number> },
-  --   },
-  --   healing = {
-  --     received = { sum = <number> },
+  -- Shape mirrors configured aggregates and uses prefix tables per aggregator:
+  --   - _count         : group size (always present)
+  --   - <schema>._sum  : sum for configured fields under that schema
+  --   - <schema>._avg  : average for configured fields under that schema
+  --   - <schema>._min  : minimum for configured fields under that schema
+  --   - <schema>._max  : maximum for configured fields under that schema
+  --
+  -- Example for a "battle" schema with nested combat/healing fields:
+  --
+  -- aggregateRow = {
+  --   key = "battle:zone42",
+  --   groupName = "battle",
+  --   _count = 7,
+  --   battle = {
+  --     combat = {
+  --       _sum = { damage = 81 },
+  --       _avg = { damage = 13.5 },
+  --     },
+  --     healing = {
+  --       _sum = { received = 124 },
+  --     },
   --   },
   -- }
-  aggregateValues = <table>,
 
   window = {
     start = <number>, -- event-time boundary
@@ -262,7 +274,7 @@ Example over aggregates:
 ```lua
 :groupBy(keyFn, opts)
   :having(function(g)
-    return (g.aggregateValues._count or 0) >= 5
+    return (g._count or 0) >= 5
   end)
 ```
 
@@ -279,18 +291,50 @@ For each incoming row:
    - the original row (or row view), and
    - the latest aggregate values for its group.
 
-**Conceptual shape:**
+**Conceptual shape (row view enriched in-place):**
+
+For enriched events we do **not** expose a separate aggregate-values tree. Instead, we:
+
+- attach group-wide fields at the top level of the row view; and
+- enrich each schema table with `_sum` / `_avg` / `_min` / `_max` subtables.
+
+Example:
 
 ```lua
 enrichedEvent = {
-  row = <rowView>,      -- or underlying JoinResult/JoinResult-derived row
-  aggregateValues = {
-    _count = <number>, -- count including this row within the window
-    -- other aggregate values as configured; same shape as in aggregateRow
+  -- group-wide
+  _groupKey = <primitive>,
+  _groupName = "battle",
+  _count = <number>, -- count including this row within the window
+
+  -- original schemas, enriched
+  customers = {
+    age = 42,
+    _avg = {
+      age = 37,
+    },
+    _sum = {
+      age = 222,
+    },
   },
-  window = {
-    start = <number>,
-    end   = <number>,
+
+  battle = {
+    combat = {
+      damage = 10,
+      healing = { received = 5 },
+
+      _sum = {
+        damage = 81,
+      },
+      _avg = {
+        damage = 13.5,
+      },
+    },
+    healing = {
+      _sum = {
+        received = 124,
+      },
+    },
   },
 }
 ```
@@ -304,7 +348,7 @@ Query.from(animals, "animals")
   end, { window = { time = 10, field = "sourceTime" } })
   :having(function(evt)
     -- only pass animals whose herd size has reached at least 5 in the last 10s
-    return (evt.aggregateValues._count or 0) >= 5
+    return (evt._count or 0) >= 5
   end)
 ```
 
@@ -319,8 +363,9 @@ where it makes sense. That likely means:
 
 - treating `row` as a normal row view (or JoinResult) so it can feed directly into another
   `Query.from(...)` chain; and/or
-- exposing aggregates via a consistent schema (e.g. attaching a dedicated `RxMeta.schema` and
-  `aggregateValues` payload) so grouped streams can be re-joined like any other source.
+- exposing aggregates via a consistent schema (e.g. attaching a dedicated `RxMeta.schema` for the
+  aggregate view and using the `_sum` / `_avg` / `_min` / `_max` conventions) so grouped streams
+  can be re-joined like any other source.
 
 We do not lock this shape in yet, but grouping should not make re-use impossible.
 
@@ -363,12 +408,12 @@ local grouped =
     end)
     :groupWindow({ time = 10, field = "sourceTime" })
     :aggregates({
-      count = true, -- exposes aggregateValues._count (count per group)
-      sum = { "orders.amount" }, -- exposes aggregateValues.orders.amount.sum
-      avg = { "orders.amount" }, -- exposes aggregateValues.orders.amount.avg
+      count = true, -- exposes _count (count per group)
+      sum = { "customers.orders.amount" }, -- exposes customers.orders._sum.amount
+      avg = { "customers.orders.amount" }, -- exposes customers.orders._avg.amount
     })
     :having(function(g)
-      return (g.aggregateValues._count or 0) >= 3
+      return (g._count or 0) >= 3
     end)
 ```
 
@@ -383,7 +428,7 @@ local perEvent =
     :groupWindow({ time = 10, field = "sourceTime" })
     :aggregates({ count = true })
     :having(function(evt)
-      return (evt.aggregateValues._count or 0) >= 5
+      return (evt._count or 0) >= 5
     end)
 ```
 
@@ -397,7 +442,7 @@ grouping → `having`/projection).
 Before hardening this into implementation, we should answer:
 1. **Aggregate API (concrete v1 scope)**
    - We want to ship a **small but useful standard set** of aggregate functions:
-     - `count` — number of events in the group window (exposed as `aggregateValues._count`);
+     - `count` — number of events in the group window (exposed as `_count`);
      - `sum(field)` — sum over a numeric field;
      - `min(field)` / `max(field)` — extrema over a numeric field;
      - `avg(field)` — average, derived from `sum(field)/count`.
@@ -406,22 +451,24 @@ Before hardening this into implementation, we should answer:
        paths:
        ```lua
        aggregates = {
-         count = true, -- optional flag, but aggregateValues._count is always present
-         sum = { "combat.damage", "healing.received" },
-         min = { "player.health" },
-         max = { "player.health" },
-         avg = { "combat.damage" },
+         count = true, -- optional flag, but _count is always present
+         sum = { "battle.combat.damage", "battle.healing.received" },
+         min = { "customers.age" },
+         max = { "customers.age" },
+         avg = { "battle.combat.damage" },
        }
        ```
-     - Field paths are dotted strings (`"combat.damage"`) that map to nested tables in
-       `aggregateValues`, **mirroring intermediate tables from the row where possible**:
-       - if `row.combat` is a table and `row.combat.damage` is numeric, we aggregate into
-         `aggregateValues.combat.damage.sum`;
-       - if the path does not exist yet in `aggregateValues`, we create intermediate tables on
-         demand so consumers can treat `aggregateValues` as a parallel tree of aggregate values.
+     - Field paths are dotted strings including the schema name (e.g. `"battle.combat.damage"`)
+       that map to nested tables under that schema in the payload, **mirroring intermediate tables
+       from the row where possible**:
+       - if `row.battle.combat` is a table and `row.battle.combat.damage` is numeric, we aggregate
+         into `battle.combat._sum.damage`, `battle.combat._avg.damage`, etc.;
+       - if the path does not exist yet under that schema in the aggregate payload, we create
+         intermediate tables on demand so consumers can treat aggregates as a parallel tree of
+         `_sum` / `_avg` / `_min` / `_max` tables.
    - Behavior notes:
      - `count` is computed **for every grouping**, regardless of whether `aggregates.count` is set;
-       `aggregateValues._count` is always present in both aggregate and enriched views.
+       `_count` is always present in both aggregate and enriched views.
      - When the effective count for a given field is `0`, we report `avg` as `nil` for that field.
 
 2. **Integration with existing `describe()` / plan inspection**
@@ -441,10 +488,10 @@ Before hardening this into implementation, we should answer:
        aggregates = {
          -- full aggregate config as passed into :aggregates(...)
          count = true,
-         sum = { "combat.damage", "healing.received" },
-         min = { "player.health" },
-         max = { "player.health" },
-         avg = { "combat.damage" },
+         sum = { "battle.combat.damage", "battle.healing.received" },
+         min = { "customers.age" },
+         max = { "customers.age" },
+         avg = { "battle.combat.damage" },
        },
      }
      ```
