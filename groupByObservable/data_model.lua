@@ -74,6 +74,9 @@ function M.buildAggregateRow(opts)
 		_count = aggregates.count or aggregates._count or 0,
 		window = opts.window,
 	}
+	if groupName then
+		payload.RxMeta = { schema = groupName }
+	end
 	if opts.rawState ~= nil then
 		payload._raw_state = opts.rawState
 	end
@@ -118,4 +121,3 @@ function M.buildEnrichedRow(row, opts)
 end
 
 return M
-
