@@ -28,6 +28,8 @@ local function isPrimitive(value)
 	return t == "string" or t == "number" or t == "boolean"
 end
 
+-- Explainer: normalizeWindow mirrors joinWindow semantics so GC options behave consistently.
+-- We intentionally keep gcOnInsert defaulting to true and support periodic GC via gcIntervalSeconds/gcScheduleFn.
 local function normalizeWindow(opts)
 	opts = opts or {}
 	if opts.count and opts.count > 0 then
@@ -50,6 +52,9 @@ local function normalizeWindow(opts)
 	}
 end
 
+-- Explainer: enforceWindow trims a single group's entries according to the configured window.
+-- For count windows we drop oldest entries; for time windows we drop entries older than (now - time).
+-- We return evicted entries so the caller can emit expirations for observability/debugging.
 local function enforceWindow(entries, window, now)
 	if window.mode == "count" then
 		local evicted = {}
@@ -64,6 +69,7 @@ local function enforceWindow(entries, window, now)
 	local threshold = now - window.time
 	while #entries > 0 do
 		local entry = entries[1]
+		-- We intentionally require a timestamp to evict; if time is missing we keep the entry rather than guessing.
 		if entry.time ~= nil and entry.time < threshold then
 			table.remove(entries, 1)
 			evicted[#evicted + 1] = entry
@@ -74,6 +80,9 @@ local function enforceWindow(entries, window, now)
 	return evicted
 end
 
+-- Explainer: computeAggregates folds the current window entries into flat path→value maps per aggregate kind.
+-- We keep per-kind tables keyed by dotted path so the data_model can project into _sum/_avg/_min/_max later.
+-- avg returns nil when no numeric samples are present, matching the spec.
 local function computeAggregates(entries, aggregateConfig)
 	local aggregates = {
 		count = #entries,
@@ -141,6 +150,10 @@ end
 ---@return rx.Observable aggregateStream
 ---@return rx.Observable enrichedStream
 ---@return rx.Observable expiredStream
+---Creates aggregate and enriched streams for grouped rows.
+-- Explainer: we subscribe once to the source, maintain per-key windows, and emit both aggregate rows
+-- (schema-tagged for downstream joins) and enriched events (inline aggregates) on every insert.
+-- Optional periodic GC mirrors join behavior so time windows still expire during idle periods.
 function GroupByCore.createGroupByObservable(source, options)
 	assert(source and source.subscribe, "createGroupByObservable expects an observable source")
 	options = options or {}
@@ -158,6 +171,7 @@ function GroupByCore.createGroupByObservable(source, options)
 	local state = {}
 
 	local function emitForKey(key, entryList, currentRow)
+		-- Recompute aggregates per insert so downstream sees up-to-date group state.
 		local aggregates = computeAggregates(entryList, aggregatesConfig)
 		aggregates.count = #entryList
 
@@ -170,6 +184,7 @@ function GroupByCore.createGroupByObservable(source, options)
 			end
 		end
 
+		-- Aggregate view: schema-tagged rows that can flow into further joins.
 		local aggregateRow = DataModel.buildAggregateRow({
 			groupName = groupNameOverride or (key ~= nil and tostring(key)) or nil,
 			key = key,
@@ -178,6 +193,7 @@ function GroupByCore.createGroupByObservable(source, options)
 		})
 		aggregateSubject:onNext(aggregateRow)
 
+		-- Enriched view: original row plus inline aggregates/prefixes.
 		local enriched = DataModel.buildEnrichedRow(currentRow, {
 			groupName = groupNameOverride or (key ~= nil and tostring(key)) or nil,
 			key = key,
@@ -197,6 +213,7 @@ function GroupByCore.createGroupByObservable(source, options)
 		if not scheduleFn then
 			local scheduler = rx.scheduler and rx.scheduler.get and rx.scheduler.get()
 			if scheduler and tostring(scheduler) == "TimeoutScheduler" and scheduler.schedule then
+				-- Support TimeoutScheduler (ms-based) when available, like Join.
 				scheduleFn = function(delaySeconds, fn)
 					return scheduler:schedule(fn, (delaySeconds or 0) * 1000)
 				end

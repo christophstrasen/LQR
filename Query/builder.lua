@@ -15,6 +15,7 @@ local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
 local Log = require("log").withTag("query")
+local GroupByObservable = require("groupByObservable")
 
 local DEFAULT_WINDOW_COUNT = 1000
 local DEFAULT_PER_KEY_BUFFER_SIZE = 10
@@ -513,6 +514,9 @@ function QueryBuilder:_clone()
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
 	copy._wherePredicate = self._wherePredicate
+	copy._group = self._group
+	copy._groupWindow = self._groupWindow
+	copy._aggregates = self._aggregates
 	copy._finalTap = self._finalTap
 	return copy
 end
@@ -647,6 +651,68 @@ end
 ---@return QueryBuilder
 function QueryBuilder:leftJoin(source, opts)
 	return self:_addStep("left", source, opts)
+end
+
+---Configures grouping key function (aggregate view).
+---@param groupNameOrKeyFn string|fun(row:table):string|number|boolean
+---@param keyFn fun(row:table):string|number|boolean|nil
+---@return QueryBuilder
+function QueryBuilder:groupBy(groupNameOrKeyFn, keyFn)
+	local groupName = nil
+	if type(groupNameOrKeyFn) == "string" then
+		groupName = groupNameOrKeyFn
+	else
+		keyFn = groupNameOrKeyFn
+	end
+	assert(type(keyFn) == "function", "groupBy expects a function keyFn")
+	local nextBuilder = self:_clone()
+	nextBuilder._group = {
+		keyFn = keyFn,
+		groupName = groupName,
+		view = "aggregate",
+	}
+	return nextBuilder
+end
+
+---Configures grouping key function (enriched event view).
+---@param groupNameOrKeyFn string|fun(row:table):string|number|boolean
+---@param keyFn fun(row:table):string|number|boolean|nil
+---@return QueryBuilder
+function QueryBuilder:groupByEnrich(groupNameOrKeyFn, keyFn)
+	local groupName = nil
+	if type(groupNameOrKeyFn) == "string" then
+		groupName = groupNameOrKeyFn
+	else
+		keyFn = groupNameOrKeyFn
+	end
+	assert(type(keyFn) == "function", "groupByEnrich expects a function keyFn")
+	local nextBuilder = self:_clone()
+	nextBuilder._group = {
+		keyFn = keyFn,
+		groupName = groupName,
+		view = "enriched",
+	}
+	return nextBuilder
+end
+
+---Configures the group window (time- or count-based).
+---@param window table
+---@return QueryBuilder
+function QueryBuilder:groupWindow(window)
+	assert(type(window) == "table", "groupWindow expects a table")
+	local nextBuilder = self:_clone()
+	nextBuilder._groupWindow = window
+	return nextBuilder
+end
+
+---Declares which aggregates to compute.
+---@param aggregates table
+---@return QueryBuilder
+function QueryBuilder:aggregates(aggregates)
+	assert(type(aggregates) == "table", "aggregates expects a table")
+	local nextBuilder = self:_clone()
+	nextBuilder._aggregates = aggregates
+	return nextBuilder
 end
 
 ---Attaches a visualization hook (optional, no-op in normal runs).
@@ -849,6 +915,44 @@ function QueryBuilder:_build()
 		end
 	end
 
+	-- Grouping (aggregate or enriched) at the tail of the pipeline.
+	if self._group then
+		local groupOpts = self._group
+		local groupWindow = self._groupWindow or {}
+		local aggregates = self._aggregates or {}
+		local rowSchemas = currentSchemas and cloneArray(currentSchemas) or nil
+		current = current:map(function(value)
+			local result = toJoinResult(value)
+			if not result then
+				Log:warn("Grouping dropped emission without schema metadata")
+				return nil
+			end
+			return buildRowView(result, rowSchemas)
+		end):filter(function(row)
+			return row ~= nil
+		end)
+
+		local aggregateStream, enrichedStream, groupExpired = GroupByObservable.createGroupByObservable(current, {
+			keySelector = groupOpts.keyFn,
+			groupName = groupOpts.groupName
+				or (self._schemaNames and self._schemaNames[1] and ("_groupBy:" .. self._schemaNames[1]))
+				or "_groupBy",
+			window = groupWindow,
+			aggregates = aggregates,
+			flushOnComplete = groupWindow.flushOnComplete,
+		})
+
+		if groupExpired then
+			expiredStreams[#expiredStreams + 1] = groupExpired
+		end
+
+		if groupOpts.view == "enriched" then
+			current = enrichedStream
+		else
+			current = aggregateStream
+		end
+	end
+
 	local mergedExpired = mergeObservables(expiredStreams)
 
 	if self._finalTap then
@@ -993,6 +1097,33 @@ function QueryBuilder:describe()
 	end
 	if self._wherePredicate then
 		plan.where = true
+	end
+	if self._group then
+		local windowDesc = {
+			mode = "time",
+			time = 0,
+			field = "sourceTime",
+		}
+			if self._groupWindow then
+				if self._groupWindow.count then
+					windowDesc = { mode = "count", count = self._groupWindow.count }
+				else
+					windowDesc.time = self._groupWindow.time or self._groupWindow.offset or 0
+					windowDesc.field = self._groupWindow.field or "sourceTime"
+				end
+				if self._groupWindow.gcOnInsert ~= nil then
+					windowDesc.gcOnInsert = self._groupWindow.gcOnInsert
+				end
+				if self._groupWindow.gcIntervalSeconds then
+					windowDesc.gcIntervalSeconds = self._groupWindow.gcIntervalSeconds
+			end
+		end
+		plan.group = {
+			mode = self._group.view,
+			key = "function",
+			window = windowDesc,
+			aggregates = self._aggregates or {},
+		}
 	end
 	return plan
 end

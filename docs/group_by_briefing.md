@@ -217,7 +217,7 @@ aggregateRow = {
 
   -- Optional human-friendly name/label for the group.
   -- Default: stringified key. Can be overridden via configuration.
-  groupName = <string>|nil,
+  groupName = <string>|nil, -- default: "_groupBy:<firstSchema>" or "_groupBy"
 
   -- Aggregated values derived from the rows in the current group window.
   -- Shape mirrors configured aggregates and uses prefix tables per aggregator:
