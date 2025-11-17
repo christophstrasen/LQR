@@ -69,5 +69,10 @@ describe("GroupBy data model", function()
 		assert.are.equal(40.5, enriched.battle.combat._avg.damage)
 		assert.are.equal(222, enriched.customers._sum.age)
 		assert.are.equal(37, enriched.customers._avg.age)
+
+		-- synthetic schema for grouping
+		assert.is_table(enriched["_groupBy:battle"])
+		assert.are.equal(2, enriched["_groupBy:battle"]._count)
+		assert.are.equal(81, enriched["_groupBy:battle"].battle.combat._sum.damage)
 	end)
 end)

@@ -47,7 +47,14 @@ are **independent**:
 - join window: how long unmatched records stay warm in join caches so they can still match;
 - group window: over which slice of time/events we aggregate rows that share a group key.
 
-Grouping works purely over the **joined + filtered row stream**.
+Grouping works purely over the **joined + filtered row stream**:
+
+- The low-level join produces `JoinResult` containers keyed by schema name (e.g. `customers`,
+  `orders`), each entry carrying its own `record.RxMeta.schema`.
+- The builder’s row view (`row.customers`, `row.orders`, …) is a plain-table projection of that
+  `JoinResult` with one field per schema.
+- `groupBy` and `groupByEnrich` operate on this row view instead of on raw source records, so
+  grouping is always “after joins, on fully joined rows”.
 
 ---
 
@@ -254,6 +261,14 @@ aggregateRow = {
 }
 ```
 
+In other words:
+
+- The **join stage** emits `JoinResult` containers (multi-schema).
+- The **row view** flattens that container into `row.<schema>` tables for predicates and grouping.
+- The **aggregate view** then turns each group into a *single synthetic schema* row tagged with
+  `RxMeta.schema = groupName` (defaulting to `_groupBy:<firstSchema>`), suitable for feeding into
+  new join pipelines if needed.
+
 Default behavior (subject to tuning):
 
 - **Per-record updates**: whenever a row enters/exits the window for a key, we recompute aggregate
@@ -297,6 +312,8 @@ For enriched events we do **not** expose a separate aggregate-values tree. Inste
 
 - attach group-wide fields at the top level of the row view; and
 - enrich each schema table with `_sum` / `_avg` / `_min` / `_max` subtables.
+- optionally add a **synthetic grouping schema** (keyed `_groupBy:<groupName>`) so enriched rows
+  can be treated as a single schema by downstream consumers when needed.
 
 Example:
 
@@ -336,6 +353,22 @@ enrichedEvent = {
       },
     },
   },
+
+  -- synthetic grouping schema (optional) to make enriched rows consumable as a single schema
+  ["_groupBy:battle"] = {
+    _groupKey = <primitive>,
+    _groupName = "battle",
+    _count = <number>,
+    battle = {
+      combat = {
+        _sum = { damage = 81 },
+        _avg = { damage = 13.5 },
+      },
+      healing = {
+        _sum = { received = 124 },
+      },
+    },
+  },
 }
 ```
 
@@ -357,6 +390,15 @@ model with plain SQL but natural in a reactive, per-event pipeline.
 
 **Design note:** enriched events are powerful for mod/game logic (“gate this event based on herd
 size”), while pure aggregates are more natural for dashboards / metrics / further joins.
+
+Connection to joins:
+
+- Each enriched event is built from a **joined row view** derived from a `JoinResult`, so
+  `row.customers`, `row.orders`, etc. still correspond to original join schemas.
+- Inline aggregates (`_sum` / `_avg` / `_min` / `_max`, `_count`) and the synthetic
+  `"_groupBy:<groupName>"` schema simply overlay additional structure on top of that joined row,
+  without erasing the original per-schema payloads. This keeps grouped, enriched events compatible
+  with the mental model established in the join explainer.
 
 **Future intent:** we should aim for enriched events to be **re-usable as inputs to new queries**
 where it makes sense. That likely means:
@@ -403,7 +445,7 @@ local grouped =
     :where(function(row)
       return row.customers.segment == "VIP"
     end)
-    :groupBy(function(row)
+    :groupBy("_groupBy:customers", function(row)
       return row.customers.id
     end)
     :groupWindow({ time = 10, field = "sourceTime" })
@@ -422,7 +464,7 @@ local grouped =
 ```lua
 local perEvent =
   Query.from(animals, "animals")
-    :groupByEnrich(function(row)
+    :groupByEnrich("_groupBy:animals", function(row)
       return row.animals.type
     end)
     :groupWindow({ time = 10, field = "sourceTime" })

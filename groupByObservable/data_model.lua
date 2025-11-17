@@ -117,6 +117,24 @@ function M.buildEnrichedRow(row, opts)
 	applyAggregateKind(enriched, "min", aggregates.min)
 	applyAggregateKind(enriched, "max", aggregates.max)
 
+	-- Optionally expose a synthetic schema so enriched rows can be wrapped/consumed downstream.
+	if enriched._groupName then
+		local synthetic = {
+			_groupKey = enriched._groupKey,
+			_groupName = enriched._groupName,
+			_count = enriched._count,
+		}
+		applyAggregateKind(synthetic, "sum", aggregates.sum)
+		applyAggregateKind(synthetic, "avg", aggregates.avg)
+		applyAggregateKind(synthetic, "min", aggregates.min)
+		applyAggregateKind(synthetic, "max", aggregates.max)
+		local syntheticKey = enriched._groupName
+		if not syntheticKey:match("^_groupBy:") then
+			syntheticKey = "_groupBy:" .. syntheticKey
+		end
+		enriched[syntheticKey] = synthetic
+	end
+
 	return enriched
 end
 

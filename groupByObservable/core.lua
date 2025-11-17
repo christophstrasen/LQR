@@ -334,27 +334,30 @@ function GroupByCore.createGroupByObservable(source, options)
 		end
 	end
 
-	local aggregateObservable = rx.Observable.create(function(observer)
-		local sub = aggregateSubject:subscribe(observer)
-		return function()
-			sub:unsubscribe()
-			teardown()
-		end
-	end)
+	-- Shared subscription / teardown: stop the source + GC when all downstream observers are gone.
+	local refCount = 0
+	local function attach(subject)
+		return rx.Observable.create(function(observer)
+			refCount = refCount + 1
+			local sub = subject:subscribe(observer)
+			local unsubscribed = false
+			return function()
+				if unsubscribed then
+					return
+				end
+				unsubscribed = true
+				sub:unsubscribe()
+				refCount = refCount - 1
+				if refCount <= 0 then
+					teardown()
+				end
+			end
+		end)
+	 end
 
-	local enrichedObservable = rx.Observable.create(function(observer)
-		local sub = enrichedSubject:subscribe(observer)
-		return function()
-			sub:unsubscribe()
-		end
-	end)
-
-	local expiredObservable = rx.Observable.create(function(observer)
-		local sub = expiredSubject:subscribe(observer)
-		return function()
-			sub:unsubscribe()
-		end
-	end)
+	local aggregateObservable = attach(aggregateSubject)
+	local enrichedObservable = attach(enrichedSubject)
+	local expiredObservable = attach(expiredSubject)
 
 	return aggregateObservable, enrichedObservable, expiredObservable
 end

@@ -931,6 +931,8 @@ function QueryBuilder:_build()
 		end):filter(function(row)
 			return row ~= nil
 		end)
+		-- @TODO: provide a seamless helper to re-wrap grouped/enriched rows into schema-tagged streams
+		-- when chaining into new queries, instead of expecting callers to hand-roll chain/wrap logic.
 
 		local aggregateStream, enrichedStream, groupExpired = GroupByObservable.createGroupByObservable(current, {
 			keySelector = groupOpts.keyFn,
