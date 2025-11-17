@@ -147,6 +147,7 @@ end
 ---@field options.groupName string|nil
 ---@field options.window table
 ---@field options.aggregates table
+---@field options.viewLabel string|nil
 ---@return rx.Observable aggregateStream
 ---@return rx.Observable enrichedStream
 ---@return rx.Observable expiredStream
@@ -163,6 +164,7 @@ function GroupByCore.createGroupByObservable(source, options)
 	local aggregatesConfig = options.aggregates or {}
 	local groupNameOverride = options.groupName
 	local flushOnComplete = options.flushOnComplete ~= false
+	local viewLabel = options.viewLabel or "aggregate"
 
 	local aggregateSubject = rx.Subject.create()
 	local enrichedSubject = rx.Subject.create()
@@ -200,6 +202,8 @@ function GroupByCore.createGroupByObservable(source, options)
 			aggregates = aggregates,
 		})
 		enrichedSubject:onNext(enriched)
+		-- Lower-level observability; keep at debug to avoid spamming app logs.
+		Log:debug("[group] key=%s view=%s count=%s", tostring(key), tostring(viewLabel), tostring(aggregates.count))
 	end
 
 	local subscription
@@ -239,6 +243,7 @@ function GroupByCore.createGroupByObservable(source, options)
 							time = ev.time,
 						})
 					end
+					Log:debug("[group] periodic GC evicted=%s key=%s", tostring(#evicted), tostring(key))
 				end
 			end
 			gcSubscription = scheduleFn(window.gcIntervalSeconds, sweepAll)
@@ -290,6 +295,8 @@ function GroupByCore.createGroupByObservable(source, options)
 						time = ev.time,
 					})
 				end
+				Log:debug("[group] evicted=%s key=%s reason=%s", tostring(#evicted), tostring(key),
+					window.mode == "time" and "expired" or "evicted")
 			end
 		end
 

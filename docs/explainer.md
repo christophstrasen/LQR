@@ -8,19 +8,16 @@ This project treats every record emission flowing through a join as a **record**
 - **Reactive joins**: each record carries `record.RxMeta = { schema, id, sourceTime, ... }` so downstream operators can reason about provenance. Instead of querying stored rows, we react to live record emissions passing through the join graph.
 - **Implication**: order and timing matter. If the “right” side arrives before the “left” side, the join caches it until a match appears (or expires). There is no global blocking “evaluate a cartesian product” step: the result is a continuous stream of `JoinResult` objects.
 
-
 ### 2. Record lifecycle and terminology
 
 - **Source**: a source record enters the cache with its join key (logged as `input` in joins and `source` in viz).
 - **Schemas**: every source is labeled (e.g., `customers`, `orders`, `refunds`) and that label lives in `RxMeta.schema` on each record. Joined records keep their schema-tagged payloads so downstream stages can chain further joins, project/rename fields, or measure latency without losing provenance.
 - **Match emission**: when a left/right pair satisfies the key we consider them matched.
-**Joined record**: the `JoinResult` emitted on the main stream when a join condition is satisfied. It bundles one or more schema payloads (e.g., `customers`, `orders`). For anti joins, positive matches are not emitted at all; only the unmatched side is emitted, so no joined record appears when both sides are present.
+  **Joined record**: the `JoinResult` emitted on the main stream when a join condition is satisfied. It bundles one or more schema payloads (e.g., `customers`, `orders`). For anti joins, positive matches are not emitted at all; only the unmatched side is emitted, so no joined record appears when both sides are present.
 - **Unmatched emission**: only for strategies that want it (left/outer/anti). This is separate from cache removal; it is the “no partner” result on the main joined stream.
 - **Cache removal (“expired”)**: any time a cached record is removed—due to TTL/interval, count GC, predicate GC, or completion/disposal—we emit on `builder:expired()`. Packets carry `schema`, `key`, `reason` (e.g., `expired_interval | evicted | expired_predicate | completed | disposed`) and the removed record. We currently emit all removals (matched or not); if you only care about “never matched,” filter by `matched`/reason in consumers.
 
 Joined stream = the results your app consumes (positive matches, plus unmatched where applicable). The expiration stream = observability about cache churn and join window/GC behavior.
-
-
 
 ### 3. Observables and the Builder DSL
 
@@ -28,9 +25,9 @@ We compose stream joins with a fluent DSL:
 
 ```lua
 local attachment = Query.from(customersObservable, "customers")
-	:leftJoin(ordersObservable, "orders")
-	:onSchemas({ customers = "id", orders = "customerId" })
-	:joinWindow({ count = 5 })
+    :leftJoin(ordersObservable, "orders")
+    :onSchemas({ customers = "id", orders = "customerId" })
+    :joinWindow({ count = 5 })
 ```
 
 - **Observables** (from Lua ReactiveX) deliver push-based streams of record emissions. They matter because they capture the *ongoing* nature of our joins: instead of preparing a data set upfront, we subscribe to each observable and react to every item it emits.
@@ -125,6 +122,111 @@ Streaming behavior remains Rx-native:
 - `where` does **not** reorder or buffer emissions; it just decides which joined rows pass through.
 - If the predicate throws an error, that row is dropped and a warning is logged instead of crashing the entire stream. Well-behaved predicates should be pure and side-effect free beyond logging or metrics.
 
+### 5. Grouping and Aggregates (`GROUP BY` / `HAVING`)
+
+Once you have a joined + filtered row stream, you often want to ask “how many of X per Y in a moving
+window?” or “only let events through once their group crosses a threshold”. In SQL this is
+`GROUP BY` / `HAVING`; in the high-level API we express this with `groupBy` / `groupByEnrich` /
+`groupWindow` / `aggregates` / `having`.
+
+At a high level:
+
+- grouping runs **after joins and WHERE**, operating on the row view;
+- group windows are independent of join windows (separate retention knobs);
+- we support both a **group state stream** (aggregate view) and an **enriched event stream**.
+
+#### 5.1 Aggregate view — one row per group
+
+The aggregate view collapses many events per key into a single synthetic schema per group that keeps aggregate values up to date over a sliding window.
+
+```lua
+local grouped =
+  Query.from(customers, "customers")
+    :leftJoin(orders, "orders")
+    :onSchemas({ customers = "id", orders = "customerId" })
+    :joinWindow({ time = 7, field = "sourceTime" })
+    :where(function(row)
+      return row.customers.segment == "VIP"
+    end)
+    :groupBy("customers_grouped", function(row)
+      return row.customers.id
+    end)
+    :groupWindow({ time = 10, field = "sourceTime" })
+    :aggregates({
+      count = true, -- exposes _count per group
+      sum = { "customers.orders.amount" },
+      avg = { "customers.orders.amount" },
+    })
+    :having(function(g)
+      -- only keep groups where we saw at least 3 joined events
+      return (g._count or 0) >= 3
+    end)
+```
+
+Subscribing to `grouped` yields **one row per group key**, emitted whenever a new event enters or leaves the group window:
+
+- `g.key` is the normalized group key.
+- `g.groupName` is `"customers_grouped"`; `g.RxMeta.schema` is also `"customers_grouped"`, so this
+  stream can be fed into further joins as a synthetic schema.
+- `g._count` is the number of events in the group window.
+- `g.customers.orders._sum.amount` is the sum of `row.customers.orders.amount` over the last 10
+  seconds for that customer id.
+- `g.customers.orders._avg.amount` is the corresponding average (nil when no samples).
+
+Under the hood, grouping maintains a per-key window of rows and recomputes aggregates per insert.
+Group windows can be:
+
+- time-based: `{ time = seconds, field = "sourceTime", currentFn = ... }`;
+- count-based: `{ count = N }` (“last N events per key”).
+
+Group windows are **separate from join windows**; a query can use a short join window (e.g. 3s) and
+a longer group window (e.g. 60s) or the other way round.
+
+#### 5.2 Enriched event view — live group context on every row
+
+Sometimes you want per-event decisions with group context attached, e.g. “only let a zombie event
+through once at least 5 zombies have been seen in this room in the last 10 seconds”. For that we
+use `groupByEnrich`, which leaves the row view intact and layers aggregates in-place:
+
+```lua
+local perEvent =
+  Query.from(animals, "animals")
+    :groupByEnrich("_groupBy:animals", function(row)
+      return row.animals.type -- "Elephant", "Zebra", ...
+    end)
+    :groupWindow({ time = 10, field = "sourceTime" })
+    :aggregates({
+      count = true,
+      sum = { "animals.weight" },
+    })
+    :having(function(row)
+      -- only let animals through once at least 5 of their type
+      -- have appeared in the last 10 seconds
+      return (row._count or 0) >= 5
+    end)
+```
+
+Each enriched row:
+
+- is still a **row view** built from the `JoinResult`:
+  - `row.animals` is the original record for that schema;
+  - other schemas from earlier joins (e.g. `row.location`) remain available.
+- carries group-wide metadata at the top level:
+  - `_groupKey` — the group key returned by `groupByEnrich`’s key function;
+  - `_groupName` — `"animals"` in the example above;
+  - `_count` — number of events in the group window for that key.
+- enriches each schema table with aggregate subtables:
+  - `row.animals._sum.weight` (sum of weights for that animal type in the window);
+  - `row.animals._avg.weight` if requested.
+- optionally includes a **synthetic grouping schema** keyed as `"_groupBy:<groupName>"`:
+  - `row["_groupBy:animals"]` contains `_count`, `_groupKey`, `_groupName`, and the same aggregate
+    prefixes; this is useful if you want to treat grouped events as a single schema in downstream
+    pipelines.
+
+Because enriched rows preserve the original per-schema tables and only add prefixed metadata, they
+fit naturally into the join mental model: you can still reason about `row.customers` / `row.orders`
+as before, with extra `_sum` / `_avg` / `_min` / `_max` mirrors where you asked for aggregates.
+
 ### 5. Join Windowing, Retention, and GC
 
 When we talk about join windowing and buffering in a streaming join, we’re really answering two questions: for how long should an event be allowed to wait for a partner, and how many events with the same key should we keep around at the same time. The **join window** answers the first question at a global level across all keys and is the dominant safety net for memory and latency, while the **per-key buffer** answers the second question at a local per-key level and lets you decide whether your join behaves like a “latest value per key” view or like a “recent history of events per key”.
@@ -165,8 +267,6 @@ On insertion the buffer first checks whether it has room for the new record; if 
 The match join window and the per-key buffer work together: the buffer prunes “horizontally” within each key, choosing between a distinct or non-distinct view of that key, while the join window prunes “vertically” across all keys, deciding how many or how old entries in total are allowed to stay warm. Because count-based join windows now count buffered entries, a large buffer per key will consume the global join window faster, so if you want “latest per key” semantics you typically set `bufferSize = 1` and pick a join window that mainly caps total growth, and if you want “every event per key” semantics you intentionally allow a larger `bufferSize` and choose a join window large enough to hold the richer history without surprising early evictions.
 
 With these two levers in mind—join window for “how long/how many overall” and per-key buffers for “how many per key”—reactive joins become an intuitive extension of SQL thinking that happens continuously over time instead of only at query execution.
-
-
 
 ### 6. Streaming joins and event counts
 

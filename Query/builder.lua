@@ -514,6 +514,7 @@ function QueryBuilder:_clone()
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
 	copy._wherePredicate = self._wherePredicate
+	copy._havingPredicate = self._havingPredicate
 	copy._group = self._group
 	copy._groupWindow = self._groupWindow
 	copy._aggregates = self._aggregates
@@ -712,6 +713,19 @@ function QueryBuilder:aggregates(aggregates)
 	assert(type(aggregates) == "table", "aggregates expects a table")
 	local nextBuilder = self:_clone()
 	nextBuilder._aggregates = aggregates
+	return nextBuilder
+end
+
+---Applies a HAVING-style predicate over the current view (aggregate or enriched).
+---@param predicate fun(row:table):boolean
+---@return QueryBuilder
+function QueryBuilder:having(predicate)
+	assert(type(predicate) == "function", "having expects a function predicate")
+	if not self._group then
+		error("having requires groupBy/groupByEnrich to be configured first")
+	end
+	local nextBuilder = self:_clone()
+	nextBuilder._havingPredicate = predicate
 	return nextBuilder
 end
 
@@ -942,10 +956,35 @@ function QueryBuilder:_build()
 			window = groupWindow,
 			aggregates = aggregates,
 			flushOnComplete = groupWindow.flushOnComplete,
+			viewLabel = groupOpts.view,
 		})
 
 		if groupExpired then
 			expiredStreams[#expiredStreams + 1] = groupExpired
+		end
+
+		-- Optional HAVING-style predicate over the grouped view.
+		if self._havingPredicate then
+			local predicate = self._havingPredicate
+			if groupOpts.view == "enriched" then
+				enrichedStream = enrichedStream:filter(function(row)
+					local ok, keep = pcall(predicate, row)
+					if not ok then
+						Log:warn("Query.having (enriched) predicate errored: %s", tostring(keep))
+						return false
+					end
+					return keep and true or false
+				end)
+			else
+				aggregateStream = aggregateStream:filter(function(row)
+					local ok, keep = pcall(predicate, row)
+					if not ok then
+						Log:warn("Query.having (aggregate) predicate errored: %s", tostring(keep))
+						return false
+					end
+					return keep and true or false
+				end)
+			end
 		end
 
 		if groupOpts.view == "enriched" then
@@ -1099,6 +1138,9 @@ function QueryBuilder:describe()
 	end
 	if self._wherePredicate then
 		plan.where = true
+	end
+	if self._havingPredicate then
+		plan.having = true
 	end
 	if self._group then
 		local windowDesc = {
