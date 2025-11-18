@@ -181,6 +181,15 @@ local function mergeObservables(observables)
 	end)
 end
 
+local function warnIfBuilt(builder, verb)
+	if builder._built then
+		Log:warn(
+			"Query.%s called on a builder that has already been built; this creates a new query and will not affect existing subscriptions",
+			tostring(verb)
+		)
+	end
+end
+
 -- Explainer: buildSelectionMap normalizes selection into schema->alias mapping for reuse.
 local function buildSelectionMap(selection)
 	if not selection then
@@ -625,6 +634,7 @@ local function newBuilder(source, opts)
 end
 
 function QueryBuilder:_addStep(joinType, source, opts)
+	warnIfBuilt(self, joinType .. "Join")
 	local observable, schemaName = normalizeSourceArg(source, opts)
 	local nextBuilder = self:_clone()
 	nextBuilder._steps[#nextBuilder._steps + 1] = {
@@ -659,6 +669,7 @@ end
 ---@param keyFn fun(row:table):string|number|boolean|nil
 ---@return QueryBuilder
 function QueryBuilder:groupBy(groupNameOrKeyFn, keyFn)
+	warnIfBuilt(self, "groupBy")
 	local groupName = nil
 	if type(groupNameOrKeyFn) == "string" then
 		groupName = groupNameOrKeyFn
@@ -680,6 +691,7 @@ end
 ---@param keyFn fun(row:table):string|number|boolean|nil
 ---@return QueryBuilder
 function QueryBuilder:groupByEnrich(groupNameOrKeyFn, keyFn)
+	warnIfBuilt(self, "groupByEnrich")
 	local groupName = nil
 	if type(groupNameOrKeyFn) == "string" then
 		groupName = groupNameOrKeyFn
@@ -701,6 +713,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:groupWindow(window)
 	assert(type(window) == "table", "groupWindow expects a table")
+	warnIfBuilt(self, "groupWindow")
 	local nextBuilder = self:_clone()
 	nextBuilder._groupWindow = window
 	return nextBuilder
@@ -711,6 +724,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:aggregates(aggregates)
 	assert(type(aggregates) == "table", "aggregates expects a table")
+	warnIfBuilt(self, "aggregates")
 	local nextBuilder = self:_clone()
 	nextBuilder._aggregates = aggregates
 	return nextBuilder
@@ -721,6 +735,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:having(predicate)
 	assert(type(predicate) == "function", "having expects a function predicate")
+	warnIfBuilt(self, "having")
 	if not self._group then
 		error("having requires groupBy/groupByEnrich to be configured first")
 	end
@@ -736,6 +751,7 @@ function QueryBuilder:withVisualizationHook(vizHook)
 	if vizHook ~= nil then
 		assert(type(vizHook) == "function", "withVisualizationHook expects a function or nil")
 	end
+	warnIfBuilt(self, "withVisualizationHook")
 	local nextBuilder = self:_clone()
 	nextBuilder._vizHook = vizHook
 	return nextBuilder
@@ -748,6 +764,7 @@ function QueryBuilder:withDefaultJoinWindow(joinWindow)
 	if joinWindow ~= nil then
 		assert(type(joinWindow) == "table", "withDefaultJoinWindow expects a table or nil")
 	end
+	warnIfBuilt(self, "withDefaultJoinWindow")
 	local nextBuilder = self:_clone()
 	nextBuilder._defaultJoinWindow = joinWindow
 	return nextBuilder
@@ -760,6 +777,7 @@ function QueryBuilder:withFinalTap(finalTap)
 	if finalTap ~= nil then
 		assert(type(finalTap) == "function", "withFinalTap expects a function or nil")
 	end
+	warnIfBuilt(self, "withFinalTap")
 	local nextBuilder = self:_clone()
 	nextBuilder._finalTap = finalTap
 	return nextBuilder
@@ -770,6 +788,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:onSchemas(map)
 	assert(type(map) == "table", "onSchemas expects a table")
+	warnIfBuilt(self, "onSchemas")
 	ensureStep(self)
 	local hasEntries = next(map) ~= nil
 	assert(hasEntries, "onSchemas expects at least one mapping")
@@ -797,6 +816,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:joinWindow(joinWindow)
 	assert(type(joinWindow) == "table", "joinWindow expects a table")
+	warnIfBuilt(self, "joinWindow")
 	ensureStep(self)
 	local nextBuilder = self:_clone()
 	nextBuilder._steps[#nextBuilder._steps].joinWindow = joinWindow
@@ -808,6 +828,10 @@ end
 ---@return QueryBuilder
 function QueryBuilder:selectSchemas(selection)
 	assert(type(selection) == "table", "selectSchemas expects a table")
+	if self._selection ~= nil then
+		Log:warn("Query.selectSchemas called multiple times; previous selection will be replaced")
+	end
+	warnIfBuilt(self, "selectSchemas")
 	local nextBuilder = self:_clone()
 	nextBuilder._selection = selection
 	nextBuilder._schemaNames = deriveSchemasFromSelection(selection)
@@ -819,6 +843,7 @@ end
 ---@return QueryBuilder
 function QueryBuilder:where(predicate)
 	assert(type(predicate) == "function", "where expects a function predicate")
+	warnIfBuilt(self, "where")
 	if self._wherePredicate ~= nil then
 		error("Multiple where calls are not supported")
 	end
@@ -843,6 +868,7 @@ function QueryBuilder:_build()
 	if self._built then
 		return self._built
 	end
+	Log:info("Query.build activated; further chaining on this builder will create new queries")
 
 	-- Explainer: build executes the declarative plan into concrete observables and merges expired side channels.
 	local expiredStreams = {}
@@ -930,6 +956,14 @@ function QueryBuilder:_build()
 	end
 
 	-- Grouping (aggregate or enriched) at the tail of the pipeline.
+	if not self._group then
+		if self._groupWindow then
+			Log:warn("Query.groupWindow configured without groupBy/groupByEnrich; configuration will be ignored")
+		end
+		if self._aggregates then
+			Log:warn("Query.aggregates configured without groupBy/groupByEnrich; configuration will be ignored")
+		end
+	end
 	if self._group then
 		local groupOpts = self._group
 		local groupWindow = self._groupWindow or {}

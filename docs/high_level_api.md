@@ -1,3 +1,5 @@
+Maybe outdated???
+
 # High-Level Join API (Draft)
 
 This captures the intended fluent API for our Lua-ReactiveX join layer. It assumes every
@@ -22,6 +24,13 @@ and Rx-native.
 - `:describe()` → returns a stable plan (table/string) for tests and debugging.
 - Rx-native ops (`filter`, `map`, `merge`, `throttle`, etc.) remain available on the underlying
   observable.
+
+## Builder lifecycle & activation
+- Builders are immutable configs. Every fluent call returns a new `QueryBuilder`; the original is unchanged, even if it is already active.
+- A builder becomes active only when you **consume** it: `subscribe(...)`, `into(bucket)`, `expired()`, or when it is passed as a source into another `Query` (sub-query builds it). The first activation emits an info log.
+- Once active, its configuration is frozen. Any further `:where/:groupBy/:selectSchemas/:innerJoin/...` on that same builder creates a **new** query; existing subscriptions are unaffected and keep running.
+- Assemble the full query before consuming it. Chaining more steps after consumption creates a new pipeline (a runtime split) and can multiply load if both run.
+- Sub-queries: passing a builder into `innerJoin/leftJoin` builds it and reuses that output; it never reconfigures the original. Passing a raw observable simply adds another subscriber.
 
 ### Selection-only queries
 - The builder works even without additional `innerJoin/leftJoin` calls. You can `Query.from(source)`
