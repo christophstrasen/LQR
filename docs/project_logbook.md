@@ -236,3 +236,42 @@
 2. **Viz must separate “join mechanics” from “final result”:** Pre-WHERE join layers answer “what is the join doing?”; the final layer answers “what does my subscriber see?”. Keeping both, and making the final ring explicit, gives better intuition than trying to overload a single concept of “joined.”
 3. **Layer indexing and TTLs need a story:** By reserving layer 1 for final and shifting joins inward, `visualsTTLLayerFactors[1]` clearly applies to the final ring and join layers can be tuned separately. The TTL map now has room for a dedicated `final` factor distinct from `match`.
 4. **Instrumentation hooks should mirror the logical pipeline:** Having both `withVisualizationHook` (join-stage) and `withFinalTap` (post-WHERE) kept the adapter simple and made it obvious where each class of events originates. That pattern will generalize to future stages like GROUP/HAVING/LIMIT without re-plumbing the entire viz stack.
+
+## Day 16 – GROUP BY / HAVING and grouped demos
+
+### Highlights
+- **Low-level grouping core (`groupByObservable`):** Introduced a new low-level operator that consumes a joined+filtered row stream and produces three observables:
+  - an **aggregate stream** (one synthetic schema per group with `_count` and `_sum/_avg/_min/_max` under nested tables);
+  - an **enriched stream** (original row view with `_groupKey/_groupName/_count` plus inline aggregates on each schema);
+  - an **expired stream** (raw evictions/expirations per key for debugging).
+  Windows are time-based (`time/field/currentFn`) or count-based (`count`), with `gcOnInsert`/`gcIntervalSeconds`/`gcScheduleFn`/`flushOnComplete` matching join GC semantics. Aggregate rows are tagged with `RxMeta.schema = groupName` (default `_groupBy:<firstSchema>`/`_groupBy`), while enriched rows preserve source schemas and add a synthetic `"_groupBy:<groupName>"` payload for downstream consumption.
+
+- **Data model + tests:** Locked down the aggregate and enriched shapes in `groupByObservable.data_model` and validated them via `group_by_data_model_spec` and `group_by_core_spec`:
+  - aggregate rows: `key`, `groupName`, `_count`, `window`, `RxMeta.schema`, nested `_sum/_avg/_min/_max`;
+  - enriched rows: top-level `_groupKey/_groupName/_count`, per-schema `_sum/_avg/_min/_max`, plus a synthetic `"_groupBy:<groupName>"` subtree mirroring aggregates.
+
+- **High-level API integration:** Extended `QueryBuilder` with `groupBy` / `groupByEnrich` / `groupWindow` / `aggregates` / `having`:
+  - grouping runs after joins and WHERE, over the row view (`row.<schema>` plus `_raw_result`);
+  - `groupBy` drives the aggregate view; `groupByEnrich` drives the enriched view;
+  - `groupWindow` and `aggregates` configure the grouping core;
+  - `having` filters the grouped stream (aggregate or enriched) with WHERE-like semantics;
+  - `describe()` now surfaces a `plan.group` section (mode, window, aggregates, having marker).
+  A new `query_group_by_spec` covers basic count-window grouping, aggregates, and HAVING on both aggregate and enriched streams.
+
+- **Docs and explainer updates:** Added `docs/group_by_briefing.md` as a full design spec and integrated a new “Grouping and Aggregates (GROUP BY / HAVING)” section into `explainer.md`:
+  - explains how grouping sits after joins/WHERE;
+  - clarifies separate join vs group windows;
+  - documents aggregate and enriched shapes, including the synthetic `_groupBy:` schema;
+  - shows fluent examples (groupBy/groupByEnrich + groupWindow + aggregates + having).
+
+- **Demos:** Built grouping-aware demos to make behavior tangible:
+  - `three_circles_group`: extends the existing three-way join scenario with per-customer grouping of orders, aggregate + enriched streams, and logging of grouped stats;
+  - `single_group`: a simpler single-schema demo (`events`), grouped by `events.type` with a short time window, sum/avg aggregates, and a headless runner that prints post-HAVING aggregates clearly.
+  Both continue to work with the existing `QueryVizAdapter` (grouping is bolted on after the join+viz pipeline).
+
+### What we learned
+1. **Grouping is another stateful operator, not “magic SQL”:** Treating GROUP BY as a per-key window + aggregate state machine (with its own GC knobs) made it straightforward to plug into the existing join/WHERE pipeline without special-casing it.
+2. **Two views are both useful:** An aggregate stream (synthetic schema per group) is great for dashboards and further joins; enriched events (row view + inline aggregates) are ideal for per-event decisions (“let this through only once the group is large enough”). Supporting both from the same core pays off.
+3. **Join vs group windows must stay conceptually separate:** Join windows answer “how long can records wait to meet partners,” while group windows answer “over which slice do we aggregate?” Keeping them distinct but time-consistent (same notion of time, shared GC policy) avoids surprising interactions when data lingers in join caches.
+4. **Synthetic schemas and prefixes keep things composable:** Using prefixed aggregators (`_sum/_avg/_min/_max`, `_count`) and synthetic `_groupBy:<schema>` schemas keeps grouped outputs composable with the rest of the system, while avoiding collisions with source schemas.
+5. **Good demos need a focused scenario:** A single-schema grouping demo (with carefully chosen event types and values) makes it much easier to “feel” group windows and HAVING thresholds than a complex multi-join scenario where several moving parts interact at once.
