@@ -24,31 +24,6 @@ local function bumpCount(map, key)
 	map[key] = (map[key] or 0) + 1
 end
 
--- Project a logical id (projection key) into a column/row inside the window.
--- Default: column-major (linear). When mapping="scramble", use a deterministic
--- permutation to preserve locality-free placement for non-monotonic shapes.
-local permCache = {}
-
-local function scrambledIndex(columns, rows, offset)
-	local size = columns * rows
-	local key = string.format("%dx%d", columns, rows)
-	if not permCache[key] then
-		local idxs = {}
-		for i = 0, size - 1 do
-			idxs[#idxs + 1] = i
-		end
-		local a, c, m = 1664525, 1013904223, 2 ^ 32
-		local seed = 42
-		for i = #idxs, 2, -1 do
-			seed = (a * seed + c) % m
-			local j = (seed % i) + 1
-			idxs[i], idxs[j] = idxs[j], idxs[i]
-		end
-		permCache[key] = idxs
-	end
-	return permCache[key][offset + 1] or offset
-end
-
 local function mapIdToCell(window, id)
 	if not id then
 		return nil, nil
@@ -286,8 +261,18 @@ function Renderer.render(runtime, palette, now)
 	for layer = 1, snapshot.meta.maxLayers do
 		local count = matchCountsByLayer[layer] or 0
 		local isFinal = layer == (snapshot.meta.header.finalLayer or 1)
-		local label = isFinal and string.format("Final (Layer %d after :where and :having)", layer)
-			or string.format("Joined (Layer %d)", layer)
+		local rightSchema = nil
+		if snapshot.meta.header and snapshot.meta.header.joins then
+			-- Explainer: join layers in the viz are offset by +1 from the adapter depth:
+			--   layer = (totalSteps - stepIndex) + 2
+			-- Inverting gives stepIndex = totalSteps - layer + 2.
+			local totalSteps = #snapshot.meta.header.joins
+			local joinIndex = totalSteps - layer + 2
+			local join = snapshot.meta.header.joins[joinIndex]
+			rightSchema = join and join.source
+		end
+		local label = isFinal and string.format("Final (Layer %d - after :where and :having)", layer)
+			or string.format("Joined (Layer %d - %s)", layer, rightSchema or "Unknown")
 		local kind = isFinal and "final" or "match"
 		local layerColor = joinColors[layer] or colorForKind(palette, kind)
 		if count > 0 or joinColors[layer] then
