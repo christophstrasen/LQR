@@ -8,6 +8,7 @@ local Draw = require("viz_high_level.core.draw")
 local LoveRunner = {}
 
 local DEFAULT_BACKGROUND = { 0.08, 0.08, 0.08, 1 }
+local HOVER_HISTORY_LIMIT = 6 -- match runtime default for consistency
 
 local function cloneColor(color)
 	if not color then
@@ -163,8 +164,113 @@ local function drawSnapshot(snapshot, background)
 	local metrics = Draw.metrics(snapshot)
 	local originX = 12 + (metrics.rowLabelWidth or 0)
 	local originY = headerBase + 10 + (metrics.columnLabelHeight or 0)
+	lg.push()
 	lg.translate(originX, originY)
 	Draw.drawSnapshot(snapshot, { showLabels = true })
+	lg.pop()
+	return {
+		originX = originX,
+		originY = originY,
+		metrics = metrics,
+		headerBase = headerBase,
+	}
+end
+
+local function hoveredCell(snapshot, drawMeta)
+	if not snapshot or not drawMeta or not drawMeta.metrics then
+		return nil
+	end
+	local window = snapshot.window or (snapshot.meta and snapshot.meta.header and snapshot.meta.header.window)
+	if not window then
+		return nil
+	end
+	local mx, my = love.mouse.getPosition()
+	local gridX = mx - drawMeta.originX
+	local gridY = my - drawMeta.originY
+	if gridX < 0 or gridY < 0 then
+		return nil
+	end
+	local col = math.floor(gridX / drawMeta.metrics.cellSize) + 1
+	local row = math.floor(gridY / drawMeta.metrics.cellSize) + 1
+	if col < 1 or col > (drawMeta.metrics.columns or 0) or row < 1 or row > (drawMeta.metrics.rows or 0) then
+		return nil
+	end
+	local id = (window.startId or 0) + (col - 1) * (window.rows or 0) + (row - 1)
+	return {
+		col = col,
+		row = row,
+		id = id,
+	}
+end
+
+local function describeHistoryEntry(entry)
+	if not entry then
+		return ""
+	end
+	local parts = {}
+	parts[#parts + 1] = string.format("t=%.2fs", entry.at or 0)
+	parts[#parts + 1] = entry.kind or entry.type or "event"
+	if entry.layer then
+		parts[#parts + 1] = string.format("layer=%s", tostring(entry.layer))
+	end
+	if entry.schema then
+		parts[#parts + 1] = string.format("schema=%s", tostring(entry.schema))
+	end
+	if entry.id then
+		parts[#parts + 1] = string.format("id=%s", tostring(entry.id))
+	end
+	if entry.reason then
+		parts[#parts + 1] = string.format("reason=%s", tostring(entry.reason))
+	end
+	if entry.side then
+		parts[#parts + 1] = string.format("side=%s", tostring(entry.side))
+		end
+	return table.concat(parts, " ")
+end
+
+local function drawHoverOverlay(snapshot, drawMeta)
+	local history = snapshot.meta and snapshot.meta.history or {}
+	local hover = hoveredCell(snapshot, drawMeta)
+	if not hover or not hover.id then
+		return
+	end
+
+	local lg = love.graphics
+	-- Highlight the hovered cell.
+	lg.setColor(1, 1, 1, 0.8)
+	lg.setLineWidth(2)
+	local boxSize = drawMeta.metrics.cellSize
+	local boxX = drawMeta.originX + (hover.col - 1) * boxSize
+	local boxY = drawMeta.originY + (hover.row - 1) * boxSize
+	lg.rectangle("line", boxX, boxY, boxSize, boxSize)
+
+	-- Build hover panel content as a single flowing text block so Love wraps naturally.
+	local entries = history[hover.id]
+	local lines = {}
+	lines[#lines + 1] = string.format("cell id=%s (col=%d,row=%d)", tostring(hover.id), hover.col, hover.row)
+	if not entries or #entries == 0 then
+		lines[#lines + 1] = "no recent events"
+	else
+		for i = #entries, math.max(#entries - HOVER_HISTORY_LIMIT + 1, 1), -1 do
+			lines[#lines + 1] = describeHistoryEntry(entries[i])
+		end
+	end
+	local text = table.concat(lines, "\n")
+
+	-- Render panel in top-right (50% wider to reduce wraps).
+	local panelWidth = math.floor(380 * 1.5)
+	local margin = 12
+	local font = love.graphics.getFont()
+	local _, wrapped = font:getWrap(text, panelWidth - 16)
+	local lineHeight = font:getHeight()
+	local panelHeight = (#wrapped * lineHeight) + (margin * 2)
+	local panelX = love.graphics.getWidth() - panelWidth - margin
+	local panelY = margin
+
+	lg.setColor(0, 0, 0, 0.75)
+	lg.rectangle("fill", panelX, panelY, panelWidth, panelHeight)
+	lg.setColor(1, 1, 1, 1)
+	lg.printf(text, panelX + 8, panelY + margin * 0.5, panelWidth - 16, "left")
 end
 
 ---@param opts table
@@ -303,7 +409,8 @@ function LoveRunner.bootstrap(opts)
 		end
 		local snapshot = Renderer.render(runtime, attachment.palette, state.clock:now())
 		DebugViz.snapshot(snapshot, { label = "love-frame" })
-		drawSnapshot(snapshot, state.background)
+		local drawMeta = drawSnapshot(snapshot, state.background)
+		drawHoverOverlay(snapshot, drawMeta)
 	end
 
 	function love.quit()

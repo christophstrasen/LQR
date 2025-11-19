@@ -173,7 +173,10 @@ describe("viz_high_level headless renderer", function()
 		assert.are.equal(4, #snap.meta.outerLegend) -- two match layers + final + expire
 		-- Legend is ordered from inner (highest layer) to outer (layer 1 is final).
 		local finalEntry = snap.meta.outerLegend[#snap.meta.outerLegend - 1]
-		assert.are.equal("Final (Layer 1)", finalEntry.label)
+		assert.is_true(
+			tostring(finalEntry.label):match("^Final %(Layer 1") ~= nil,
+			"expected final legend entry to describe layer 1"
+		)
 		local layer3 = snap.meta.outerLegend[1]
 		assert.are.same({ 0, 0, 1, 1 }, layer3.color)
 		assert.are.equal(1, layer3.total)

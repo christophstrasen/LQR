@@ -126,4 +126,37 @@ describe("viz_high_level runtime", function()
 		local window = runtime:window()
 		assert.are.equal(5, window.margin)
 	end)
+
+	it("keeps a bounded per-key history for projectable events", function()
+		local runtime = Runtime.new({
+			historyLimit = 2,
+		})
+		runtime:ingest({ type = "source", id = 10, projectionKey = 10, projectable = true, schema = "A" }, 1)
+		runtime:ingest({
+			type = "joinresult",
+			kind = "match",
+			layer = 3,
+			projectionKey = 10,
+			projectable = true,
+			left = { schema = "A", id = 10 },
+			right = { schema = "B", id = 20 },
+		}, 2)
+		runtime:ingest({
+			type = "expire",
+			layer = 3,
+			projectionKey = 10,
+			projectable = true,
+			reason = "timeout",
+		}, 3)
+
+		local history = runtime.history[10]
+		assert.is_not_nil(history)
+		assert.are.equal(2, #history) -- bounded at historyLimit
+		assert.are.equal("joinresult", history[1].type)
+		assert.are.equal("match", history[1].kind)
+		-- layer is clamped to runtime.maxLayers when ingested
+		assert.are.equal(2, history[1].layer)
+		assert.are.equal("expire", history[2].type)
+		assert.are.equal("timeout", history[2].reason)
+	end)
 end)

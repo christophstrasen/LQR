@@ -163,6 +163,9 @@ function Renderer.render(runtime, palette, now)
 			maxLayers = runtime.maxLayers or 2,
 			palette = palette,
 			header = runtime.header or {},
+			-- Explainer: carry per-cell history (built in runtime) so renderers/UIs
+			-- can surface recent events on hover without replaying streams.
+			history = runtime.history or {},
 			legend = {},
 			outerLegend = {},
 		},
@@ -283,7 +286,8 @@ function Renderer.render(runtime, palette, now)
 	for layer = 1, snapshot.meta.maxLayers do
 		local count = matchCountsByLayer[layer] or 0
 		local isFinal = layer == (snapshot.meta.header.finalLayer or 1)
-		local label = isFinal and string.format("Final (Layer %d)", layer) or string.format("Joined (Layer %d)", layer)
+		local label = isFinal and string.format("Final (Layer %d after :where and :having)", layer)
+			or string.format("Joined (Layer %d)", layer)
 		local kind = isFinal and "final" or "match"
 		local layerColor = joinColors[layer] or colorForKind(palette, kind)
 		if count > 0 or joinColors[layer] then

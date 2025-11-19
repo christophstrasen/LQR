@@ -37,16 +37,16 @@ local function new(opts)
 	local self = setmetatable({}, Runtime)
 	self.autoZoom = not (opts.maxColumns or opts.maxRows)
 	if self.autoZoom then
-	self.windowConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
-	self.zoomState = "small"
-else
-	self.windowConfig = {
-		columns = opts.maxColumns or ZOOM_SMALL.columns,
-		rows = opts.maxRows or ZOOM_SMALL.rows,
-	}
-	self.zoomState = "manual"
-end
-self.windowConfig.mapping = opts.mapping or "linear"
+		self.windowConfig = { columns = ZOOM_SMALL.columns, rows = ZOOM_SMALL.rows }
+		self.zoomState = "small"
+	else
+		self.windowConfig = {
+			columns = opts.maxColumns or ZOOM_SMALL.columns,
+			rows = opts.maxRows or ZOOM_SMALL.rows,
+		}
+		self.zoomState = "manual"
+	end
+	self.windowConfig.mapping = opts.mapping or "linear"
 	self.adjustInterval = opts.adjustInterval or DEFAULT_ADJUST_INTERVAL
 	self.marginAbsolute = opts.margin
 	self.marginPercent = opts.marginPercent or DEFAULT_MARGIN_COLUMNS_PERCENT
@@ -83,6 +83,11 @@ self.windowConfig.mapping = opts.mapping or "linear"
 		match = {},
 		expire = {},
 	}
+	-- Explainer: history keeps the last N projectable events per projectionKey so UIs
+	-- (e.g., hover overlays) can surface recent activity on a cell without rerunning
+	-- the whole stream. Size is intentionally small to avoid unbounded memory.
+	self.history = {}
+	self.historyLimit = opts.historyLimit or 10
 	self.zoomState = self.autoZoom and "small" or "manual"
 	return self
 end
@@ -282,6 +287,35 @@ function Runtime:ingest(event, now)
 		local id = normalizeId(event.projectionKey or event.id)
 		if id ~= nil then
 			self.activeIds[id] = timestamp
+		end
+	end
+
+	-- Keep a rolling history per projection key for hover/tooling overlays.
+	local projectionKey = event.projectionKey or event.id
+	if event.projectable and projectionKey ~= nil then
+		local key = normalizeId(projectionKey)
+		if key ~= nil then
+			local bucket = self.history[key]
+			if not bucket then
+				bucket = {}
+				self.history[key] = bucket
+			end
+			-- Store lightweight, structured info (avoid heavy payload copies).
+			local entry = {
+				at = timestamp,
+				type = event.type,
+				kind = event.kind,
+				layer = event.layer,
+				schema = event.schema or (event.left and event.left.schema) or (event.right and event.right.schema),
+				id = event.id or (event.left and event.left.id) or (event.right and event.right.id),
+				key = event.key or projectionKey,
+				reason = event.reason,
+				side = event.side,
+			}
+			bucket[#bucket + 1] = entry
+			if #bucket > self.historyLimit then
+				table.remove(bucket, 1)
+			end
 		end
 	end
 
