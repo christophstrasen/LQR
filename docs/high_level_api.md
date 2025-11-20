@@ -18,6 +18,11 @@ and Rx-native.
   `:antiLeftJoin(other)` / `:antiRightJoin(other)` / `:antiOuterJoin(other)` → chain more
   sources (raw observables or join outputs).
 - `:onSchemas{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
+  - Per-entry options: `{ field = "...", distinct = true }`:
+    - implies a per-key buffer size of `1` for that schema’s side, and
+    - causes matched records on that side to be consumed on match, expiring them with reason
+      `distinct_match`. Marking schemas on both sides as `distinct = true` gives you “one-and-done”
+      matching for that pair.
 - `:joinWindow{ time=seconds | count=n, field="sourceTime", currentFn=os.time, gcIntervalSeconds? }`
   → join window/retention/expiration policy for the most recent join. Use `:withDefaultJoinWindow{...}`
   (or `Query.setDefaultJoinWindow{...}` globally) to set the fallback applied when a join omits

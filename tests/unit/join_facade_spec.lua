@@ -324,4 +324,34 @@ end
 			:describe()
 		assert.are.equal("anti_left", antiPlan.joins[1].type)
 	end)
+
+	it("consumes matched pairs when distinct is set", function()
+		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
+		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
+
+		local joined = Query.from(left, "left")
+			:innerJoin(right, "right")
+			:onSchemas({
+				left = { field = "id", distinct = true },
+				right = { field = "id", distinct = true },
+			})
+
+		local results = {}
+		local expired = {}
+		joined:subscribe(function(result)
+			results[#results + 1] = result
+		end)
+		joined:expired():subscribe(function(packet)
+			expired[#expired + 1] = packet.reason
+		end)
+
+		leftSubject:onNext({ id = 1 })
+		rightSubject:onNext({ id = 1 }) -- first match consumes both
+		rightSubject:onNext({ id = 1 }) -- buffered until next left
+		leftSubject:onNext({ id = 1 }) -- second arrival on each side
+
+		assert.are.equal(1, #results)
+		-- Distinct match consumption should emit expirations when pairs are consumed.
+		assert.is_true(#expired >= 1)
+	end)
 end)

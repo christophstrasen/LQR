@@ -282,6 +282,7 @@ local function normalizeKeySelector(step)
 	assert(spec and spec.kind == "schemas", "onSchemas(...) is required for join keys")
 	local normalized = {}
 	local bufferSizes = {}
+	local distinctSchemas = {}
 	for schema, value in pairs(spec.map) do
 		if type(schema) ~= "string" or schema == "" then
 			error("onSchemas keys must be non-empty schema names")
@@ -300,6 +301,7 @@ local function normalizeKeySelector(step)
 			end
 			if distinct == true then
 				perKeyBufferSize = 1
+				distinctSchemas[schema] = true
 			elseif distinct == false and perKeyBufferSize == nil then
 				perKeyBufferSize = DEFAULT_PER_KEY_BUFFER_SIZE
 			end
@@ -317,7 +319,7 @@ local function normalizeKeySelector(step)
 			bufferSizes[schema] = perKeyBufferSize
 		end
 	end
-	return selectorFromSchemas(normalized), bufferSizes
+	return selectorFromSchemas(normalized), bufferSizes, next(distinctSchemas) and distinctSchemas or nil
 end
 
 -- Explainer: normalizeJoinWindow defaults to a large count join window and threads scheduler into GC if available.
@@ -933,13 +935,28 @@ function QueryBuilder:_build()
 		local leftRecords = flattenRecords(current, leftFilter)
 		local rightRecords = flattenRecords(rightObservable, rightFilter)
 
-		local keySelector, bufferSizes = normalizeKeySelector(step)
+		local keySelector, bufferSizes, distinctSchemas = normalizeKeySelector(step)
 
 		local options = normalizeJoinWindow(step, resolveDefaultJoinWindow(self), self._scheduler)
 		options.joinType = step.joinType
 		options.on = keySelector
 		options.perKeyBufferSizeLeft = resolveBufferSize(bufferSizes, currentSchemas)
 		options.perKeyBufferSizeRight = resolveBufferSize(bufferSizes, rightSchemas or (step.sourceSchema and { step.sourceSchema }))
+		if distinctSchemas then
+			local function hasDistinct(schemas)
+				if not schemas then
+					return false
+				end
+				for _, name in ipairs(schemas) do
+					if distinctSchemas[name] then
+						return true
+					end
+				end
+				return false
+			end
+			options.distinctLeft = hasDistinct(currentSchemas)
+			options.distinctRight = hasDistinct(rightSchemas or (step.sourceSchema and { step.sourceSchema }))
+		end
 		if self._vizHook then
 			local vizOptions = self._vizHook({
 				stepIndex = stepIndex,

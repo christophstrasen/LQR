@@ -280,98 +280,105 @@ function Generator.generate(zones, opts)
 			basis = #spatial
 		end
 		local rate = zone.rate or (basis / tSpan)
+		local spatialCount = #spatial
 		local targetCount = 0
-		if #spatial > 0 then
+		if spatialCount > 0 then
 			targetCount = math.max(1, math.floor(rate * tSpan + 0.5))
 		end
-		-- Clamp to distinct cells by default so we don't silently over-count by looping
-		-- back over the same offsets when targetCount exceeds available cells. Emit a
-		-- debug note instead of a warning to avoid noisy logs in normal runs.
-		if targetCount > #spatial then
-			targetCount = #spatial
-			if opts.debug and opts.debug.logger then
-				opts.debug.logger(
-					string.format(
-						"[zone_gen] zone=%s clamped events to %d distinct cells",
-						tostring(zoneLabel),
-						targetCount
-					)
-				)
-			end
-		end
-
-		-- Build indices into spatial according to mode.
-		local indices = {}
+		if targetCount > 0 and spatialCount > 0 then
+			-- Build indices into spatial according to mode.
+		local indices = table.new and table.new(targetCount, 0) or {}
 		if mode == "monotonic" then
 			for i = 1, targetCount do
-				indices[#indices + 1] = ((i - 1) % #spatial) + 1
+				indices[#indices + 1] = ((i - 1) % spatialCount) + 1
 			end
 		else
-			local order = {}
-			for i = 1, #spatial do
+			local order = table.new and table.new(spatialCount, 0) or {}
+			for i = 1, spatialCount do
 				order[i] = i
 			end
 			local a, c, m = 1664525, 1013904223, 2 ^ 32
 			local seed = 42
-			for i = #order, 2, -1 do
-				seed = (a * seed + c) % m
-				local j = (seed % i) + 1
-				order[i], order[j] = order[j], order[i]
+			if targetCount <= spatialCount then
+				-- Truncated Fisher-Yates: shuffle only the first targetCount slots deterministically.
+				for i = spatialCount, spatialCount - targetCount + 1, -1 do
+					seed = (a * seed + c) % m
+					local j = (seed % i) + 1
+					order[i], order[j] = order[j], order[i]
+				end
+			else
+				-- Shuffle full order once, then wrap when filling indices to allow repeats.
+				for i = spatialCount, 2, -1 do
+					seed = (a * seed + c) % m
+					local j = (seed % i) + 1
+					order[i], order[j] = order[j], order[i]
+				end
 			end
 			for i = 1, targetCount do
-				indices[#indices + 1] = order[((i - 1) % #order) + 1]
+				indices[#indices + 1] = order[((i - 1) % spatialCount) + 1]
 			end
 		end
 
-		local times = buildTimeSlots(zone, #indices, opts)
-		local eventCount = math.min(#indices, #times)
-		local shape = zone.shape or "flat"
-		local needsProjection = not (shape == "continuous" or shape == "linear_in" or shape == "linear_out")
-		if needsProjection then
-			mappingHint = "spiral"
-		end
-		for i = 1, eventCount do
-			local idInfo = spatial[indices[i]]
-			local tick = times[i]
-			local effectiveId = idInfo.id
-			if idInfo.colOffset and idInfo.rowOffset then
-				local baseCol = math.floor((zone.center or startId) / rows)
-				local baseRow = (zone.center or startId) % rows
-				local col = baseCol + idInfo.colOffset
-				local row = baseRow + idInfo.rowOffset
-				if col >= 0 and col < columns and row >= 0 and row < rows then
-					effectiveId = startId + (col * rows) + row
-				end
+			local times = buildTimeSlots(zone, #indices, opts)
+			local eventCount = math.min(#indices, #times)
+			local needsProjection = not (shape == "continuous" or shape == "linear_in" or shape == "linear_out")
+			if needsProjection then
+				mappingHint = "spiral"
 			end
-			if effectiveId then
-				local payload = buildPayload(zone, effectiveId)
-				if opts.stampSourceTime and type(payload) == "table" then
-					payload.RxMeta = payload.RxMeta or {}
-					payload.RxMeta.sourceTime = tick
-					payload.RxMeta.schema = payload.RxMeta.schema or zone.schema
-					payload.RxMeta.id = payload.RxMeta.id or payload.id
-					if opts.debug then
-						local logger = opts.debug.logger or print
-						logger(
-							string.format(
-								"[zone_gen] zone=%s schema=%s id=%s tick=%.3f",
-								tostring(zoneLabel),
-								tostring(zone.schema),
-								tostring(effectiveId),
-								tick
-							)
-						)
+			local zoneSchema = zone.schema
+			local zoneCenter = zone.center or startId
+			local zoneIdField = zone.idField
+			local payloadBuilder = zone.payloadForId
+			for i = 1, eventCount do
+				local idInfo = spatial[indices[i]]
+				local tick = times[i]
+				local effectiveId = idInfo.id
+				if idInfo.colOffset and idInfo.rowOffset then
+					local baseCol = math.floor(zoneCenter / rows)
+					local baseRow = zoneCenter % rows
+					local col = baseCol + idInfo.colOffset
+					local row = baseRow + idInfo.rowOffset
+					if col >= 0 and col < columns and row >= 0 and row < rows then
+						effectiveId = startId + (col * rows) + row
 					end
 				end
-				local event = {
-					tick = tick,
-					schema = zone.schema,
-					payload = payload,
-					zone = zoneLabel,
-				}
-				warnDuplicates(seen, event, warnings)
-				events[#events + 1] = event
-				summarizeSchema(summaries, zone.schema, event, zoneLabel)
+				if effectiveId then
+					local payload
+					if payloadBuilder then
+						payload = payloadBuilder(effectiveId)
+					else
+						payload = buildPayload(zone, effectiveId)
+						if zoneIdField and type(payload) == "table" then
+							payload[zoneIdField] = payload[zoneIdField] or effectiveId
+						end
+					end
+					if opts.stampSourceTime and type(payload) == "table" then
+						payload.RxMeta = payload.RxMeta or {}
+						payload.RxMeta.sourceTime = tick
+						payload.RxMeta.schema = payload.RxMeta.schema or zoneSchema
+						payload.RxMeta.id = payload.RxMeta.id or payload.id
+						if opts.debug and opts.debug.logger then
+							opts.debug.logger(
+								string.format(
+									"[zone_gen] zone=%s schema=%s id=%s tick=%.3f",
+									tostring(zoneLabel),
+									tostring(zoneSchema),
+									tostring(effectiveId),
+									tick
+								)
+							)
+						end
+					end
+					local event = {
+						tick = tick,
+						schema = zoneSchema,
+						payload = payload,
+						zone = zoneLabel,
+					}
+					warnDuplicates(seen, event, warnings)
+					events[#events + 1] = event
+					summarizeSchema(summaries, zoneSchema, event, zoneLabel)
+				end
 			end
 		end
 	end

@@ -7,7 +7,7 @@ local Driver = require("viz_high_level.demo.common.driver")
 local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 local Log = require("log").withTag("demo")
 
-local PLAY_DURATION = 40
+local PLAY_DURATION = 20
 local JOINT_TTL = 10
 local demoClock = {
 	value = 0,
@@ -27,13 +27,13 @@ local function build()
 	local builder = Query.from(customers, "customers")
 		:antiOuterJoin(orders, "orders")
 		:onSchemas({
-			customers = { field = "id" },
-			orders = { field = "customerId" },
+			customers = { field = "id", distinct = true },
+			orders = { field = "customerId", distinct = true },
 		})
 		:rightJoin(shipments, "shipments")
 		:onSchemas({
-			orders = { field = "id" },
-			shipments = { field = "orderId" },
+			orders = { field = "id", distinct = true },
+			shipments = { field = "orderId", distinct = true },
 		})
 		:withDefaultJoinWindow({
 			time = JOINT_TTL,
@@ -124,7 +124,7 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 30,
+			rate = 20,
 			t0 = 0.05,
 			t1 = 0.8,
 			rate_shape = "constant",
@@ -139,7 +139,7 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 30,
+			rate = 20,
 			t0 = 0.2,
 			t1 = 0.9,
 			rate_shape = "constant",
@@ -157,7 +157,7 @@ local function buildZones()
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 30,
+			rate = 20,
 			t0 = 0.4,
 			t1 = 0.8,
 			rate_shape = "constant",

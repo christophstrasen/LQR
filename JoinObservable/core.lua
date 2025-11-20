@@ -432,6 +432,27 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				end
 			end
 
+			local function consumeMatched(side, cache, order, record)
+				if not record then
+					return
+				end
+				local buffer = cache[record.key]
+				if not buffer or not buffer.entries then
+					return
+				end
+				for i = #buffer.entries, 1, -1 do
+					if buffer.entries[i] == record then
+						table.remove(buffer.entries, i)
+						removeFromOrder(order, record)
+						publishExpiration(side, record.key, record, "distinct_match")
+						if #buffer.entries == 0 then
+							cache[record.key] = nil
+						end
+						break
+					end
+				end
+			end
+
 			local function handleMatch(leftRecord, rightRecord)
 				leftRecord.matched = true
 				rightRecord.matched = true
@@ -473,6 +494,12 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					})
 				end
 				strategy.onMatch(observer, leftRecord, rightRecord)
+				if options.distinctLeft then
+					consumeMatched("left", leftCache, leftOrder, leftRecord)
+				end
+				if options.distinctRight then
+					consumeMatched("right", rightCache, rightOrder, rightRecord)
+				end
 			end
 
 			local closed = false
