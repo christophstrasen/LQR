@@ -301,4 +301,27 @@ end
 			error(err)
 		end
 	end)
+
+	it("describes additional join strategies (right/outer/anti)", function()
+		local left = SchemaHelpers.observableFromTable("left", { { id = 1 } })
+		local right = SchemaHelpers.observableFromTable("right", { { id = 1 } })
+
+		local rightPlan = Query.from(left, "left")
+			:rightJoin(right, "right")
+			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:describe()
+		assert.are.equal("right", rightPlan.joins[1].type)
+
+		local outerPlan = Query.from(left, "left")
+			:outerJoin(right, "right")
+			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:describe()
+		assert.are.equal("outer", outerPlan.joins[1].type)
+
+		local antiPlan = Query.from(left, "left")
+			:antiLeftJoin(right, "right")
+			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:describe()
+		assert.are.equal("anti_left", antiPlan.joins[1].type)
+	end)
 end)

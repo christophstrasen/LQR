@@ -49,7 +49,9 @@ describe("zone generator", function()
 			playStart = 0,
 		})
 
-		assert.are.equal(5, #events)
+		-- With clamping to distinct cells, coverage reduces spatial ids to 3 and we cap
+		-- emissions accordingly (no repeats).
+		assert.are.equal(3, #events)
 		for i = 1, #events do
 			assert.is_true(events[i].payload.id >= 8 and events[i].payload.id <= 12)
 		end
@@ -57,12 +59,10 @@ describe("zone generator", function()
 		-- Rate weights 1..5 over span -> ticks strictly increasing
 		assert.is_true(events[1].tick < events[2].tick)
 		assert.is_true(events[2].tick < events[3].tick)
-		assert.is_true(events[3].tick < events[4].tick)
-		assert.is_true(events[4].tick < events[5].tick)
 
-		assert.are.same(5, summary.total)
-		assert.are.same(5, summary.schemas.customers.count)
-		assert.are.same({ a = 5 }, summary.schemas.customers.perZone)
+		assert.are.same(3, summary.total)
+		assert.are.same(3, summary.schemas.customers.count)
+		assert.are.same({ a = 3 }, summary.schemas.customers.perZone)
 		assert.are.same("linear", summary.mappingHint)
 	end)
 

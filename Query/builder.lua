@@ -664,6 +664,46 @@ function QueryBuilder:leftJoin(source, opts)
 	return self:_addStep("left", source, opts)
 end
 
+---Adds a right join to the builder.
+---@param source rx.Observable|QueryBuilder
+---@param opts table|string|nil
+---@return QueryBuilder
+function QueryBuilder:rightJoin(source, opts)
+	return self:_addStep("right", source, opts)
+end
+
+---Adds a full/outer join to the builder.
+---@param source rx.Observable|QueryBuilder
+---@param opts table|string|nil
+---@return QueryBuilder
+function QueryBuilder:outerJoin(source, opts)
+	return self:_addStep("outer", source, opts)
+end
+
+---Adds an anti-left join (emit only unmatched left rows) to the builder.
+---@param source rx.Observable|QueryBuilder
+---@param opts table|string|nil
+---@return QueryBuilder
+function QueryBuilder:antiLeftJoin(source, opts)
+	return self:_addStep("anti_left", source, opts)
+end
+
+---Adds an anti-right join (emit only unmatched right rows) to the builder.
+---@param source rx.Observable|QueryBuilder
+---@param opts table|string|nil
+---@return QueryBuilder
+function QueryBuilder:antiRightJoin(source, opts)
+	return self:_addStep("anti_right", source, opts)
+end
+
+---Adds an anti-outer join (emit unmatched from both sides) to the builder.
+---@param source rx.Observable|QueryBuilder
+---@param opts table|string|nil
+---@return QueryBuilder
+function QueryBuilder:antiOuterJoin(source, opts)
+	return self:_addStep("anti_outer", source, opts)
+end
+
 ---Configures grouping key function (aggregate view).
 ---@param groupNameOrKeyFn string|fun(row:table):string|number|boolean
 ---@param keyFn fun(row:table):string|number|boolean|nil

@@ -7,8 +7,8 @@ local Driver = require("viz_high_level.demo.common.driver")
 local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 local Log = require("log").withTag("demo")
 
-local PLAY_DURATION = 20
-local JOINT_TTL = 3
+local PLAY_DURATION = 40
+local JOINT_TTL = 10
 local demoClock = {
 	value = 0,
 	now = function(self)
@@ -25,12 +25,12 @@ local function build()
 	local shipmentsSubject, shipments = SchemaHelpers.subjectWithSchema("shipments", { idField = "id" })
 
 	local builder = Query.from(customers, "customers")
-		:innerJoin(orders, "orders")
+		:antiOuterJoin(orders, "orders")
 		:onSchemas({
 			customers = { field = "id" },
 			orders = { field = "customerId" },
 		})
-		:innerJoin(shipments, "shipments")
+		:rightJoin(shipments, "shipments")
 		:onSchemas({
 			orders = { field = "id" },
 			shipments = { field = "orderId" },
@@ -49,7 +49,7 @@ local function build()
 		:groupBy("orders_per_customer", function(row)
 			return row.customers.id
 		end)
-		:groupWindow({ time = 5, field = "sourceTime" })
+		:groupWindow({ time = 25, field = "sourceTime" })
 		:aggregates({
 			count = true,
 			sum = { "customers.orders.total" },
@@ -57,39 +57,48 @@ local function build()
 		})
 		:having(function(g)
 			-- Keep all groups (threshold 1) so the demo always emits aggregates.
-			return (g._count or 0) >= 1
+			return g._count >= 1
 		end)
 
 	local groupedEnriched = builder
 		:groupByEnrich("_groupBy:customers", function(row)
 			return row.customers.id
 		end)
-		:groupWindow({ time = 5, field = "sourceTime" })
+		:groupWindow({ time = 25, field = "sourceTime" })
 		:aggregates({
 			count = true,
 			sum = { "customers.orders.total" },
 			avg = { "customers.orders.total" },
 		})
 		:having(function(row)
-			return (row._count or 0) >= 1
+			return row._count >= 1
 		end)
 
 	-- Console/info logging to observe aggregates without a visual component.
 	groupedAggregate:subscribe(function(row)
 		local sum = row.customers and row.customers.orders and row.customers.orders._sum
 		local avg = row.customers and row.customers.orders and row.customers.orders._avg
-		Log:info("[agg][cust=%s] count=%s sum=%s avg=%s schema=%s", tostring(row.key), tostring(row._count),
-			tostring(sum and sum.total), tostring(avg and avg.total),
-			tostring(row.RxMeta and row.RxMeta.schema))
+		Log:info(
+			"[agg][cust=%s] count=%s sum=%s avg=%s schema=%s",
+			tostring(row.key),
+			tostring(row._count),
+			tostring(sum and sum.total),
+			tostring(avg and avg.total),
+			tostring(row.RxMeta and row.RxMeta.schema)
+		)
 	end)
 
 	groupedEnriched:subscribe(function(row)
 		local sum = row.customers and row.customers.orders and row.customers.orders._sum
 		local avg = row.customers and row.customers.orders and row.customers.orders._avg
-		Log:info("[enr][cust=%s] count=%s latestOrderTotal=%s sum=%s avg=%s",
-			tostring(row._groupKey), tostring(row._count),
+		Log:info(
+			"[enr][cust=%s] count=%s latestOrderTotal=%s sum=%s avg=%s",
+			tostring(row._groupKey),
+			tostring(row._count),
 			tostring(row.orders and row.orders.total),
-			tostring(sum and sum.total), tostring(avg and avg.total))
+			tostring(sum and sum.total),
+			tostring(avg and avg.total)
+		)
 	end)
 
 	return {
@@ -109,30 +118,30 @@ local function buildZones()
 		{
 			label = "cust_circle",
 			schema = "customers",
-			center = 35,
+			center = 1020,
 			range = 1,
-			radius = 3,
+			radius = 7,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 4,
+			rate = 30,
 			t0 = 0.05,
-			t1 = 0.4,
+			t1 = 0.8,
 			rate_shape = "constant",
 			idField = "id",
 		},
 		{
 			label = "ord_circle",
 			schema = "orders",
-			center = 55,
+			center = 1312,
 			range = 1,
-			radius = 3,
+			radius = 7,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 4,
-			t0 = 0.15,
-			t1 = 0.8,
+			rate = 30,
+			t0 = 0.2,
+			t1 = 0.9,
 			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)
@@ -142,15 +151,15 @@ local function buildZones()
 		{
 			label = "ship_circle",
 			schema = "shipments",
-			center = 75,
+			center = 1520,
 			range = 1,
-			radius = 3,
+			radius = 7,
 			shape = "circle10",
 			coverage = 1,
 			mode = "random",
-			rate = 4,
-			t0 = 0.25,
-			t1 = 0.95,
+			rate = 30,
+			t0 = 0.4,
+			t1 = 0.8,
 			rate_shape = "constant",
 			idField = "id",
 			payloadForId = function(id)
@@ -162,10 +171,12 @@ end
 
 local function buildTimeline()
 	local zones = buildZones()
+	-- Keep the zone generator aligned with the viewport: 100x100 window starting at id 0.
+	local grid = { startId = 0, columns = 100, rows = 100 }
 	return ZonesTimeline.build(zones, {
 		totalPlaybackTime = PLAY_DURATION,
 		completeDelay = 0.5,
-		grid = { startId = 0, columns = 10, rows = 10 },
+		grid = grid,
 		stampSourceTime = true,
 		clock = demoClock,
 		debug = {
@@ -224,8 +235,8 @@ ThreeCirclesDemo.loveDefaults = LoveDefaults.merge({
 	visualsTTLFactors = {
 		-- NOTE: "joined" refers to join layers; "final" controls the outer post-WHERE ring.
 		source = 1.0,
-		joined = 1,
-		final = 3,
+		joined = 1.5,
+		final = 7,
 		expire = 0.02,
 	},
 	visualsTTLLayerFactors = {
@@ -240,8 +251,8 @@ ThreeCirclesDemo.loveDefaults = LoveDefaults.merge({
 	clockMode = "driver",
 	clockRate = 1,
 	totalPlaybackTime = PLAY_DURATION,
-	maxColumns = 10,
-	maxRows = 10,
+	maxColumns = 100,
+	maxRows = 100,
 	startId = 0,
 	lockWindow = true,
 })

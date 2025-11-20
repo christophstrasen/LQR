@@ -284,6 +284,21 @@ function Generator.generate(zones, opts)
 		if #spatial > 0 then
 			targetCount = math.max(1, math.floor(rate * tSpan + 0.5))
 		end
+		-- Clamp to distinct cells by default so we don't silently over-count by looping
+		-- back over the same offsets when targetCount exceeds available cells. Emit a
+		-- debug note instead of a warning to avoid noisy logs in normal runs.
+		if targetCount > #spatial then
+			targetCount = #spatial
+			if opts.debug and opts.debug.logger then
+				opts.debug.logger(
+					string.format(
+						"[zone_gen] zone=%s clamped events to %d distinct cells",
+						tostring(zoneLabel),
+						targetCount
+					)
+				)
+			end
+		end
 
 		-- Build indices into spatial according to mode.
 		local indices = {}

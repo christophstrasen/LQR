@@ -14,7 +14,9 @@ and Rx-native.
 
 ## Core verbs
 - `Query.from(sourceObservable)` → returns a JoinObservable-bound query (schema-aware).
-- `:innerJoin(other)` / `:leftJoin(other)` → chain more sources (raw observables or join outputs).
+- Joins: `:innerJoin(other)` / `:leftJoin(other)` / `:rightJoin(other)` / `:outerJoin(other)` /
+  `:antiLeftJoin(other)` / `:antiRightJoin(other)` / `:antiOuterJoin(other)` → chain more
+  sources (raw observables or join outputs).
 - `:onSchemas{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
 - `:joinWindow{ time=seconds | count=n, field="sourceTime", currentFn=os.time, gcIntervalSeconds? }`
   → join window/retention/expiration policy for the most recent join. Use `:withDefaultJoinWindow{...}`
