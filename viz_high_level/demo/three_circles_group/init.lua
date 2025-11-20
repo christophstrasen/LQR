@@ -8,7 +8,7 @@ local LoveDefaults = require("viz_high_level.demo.common.love_defaults")
 local Log = require("log").withTag("demo")
 
 local PLAY_DURATION = 20
-local JOINT_TTL = 10
+local JOINT_TTL = 5
 local demoClock = {
 	value = 0,
 	now = function(self)
@@ -25,12 +25,12 @@ local function build()
 	local shipmentsSubject, shipments = SchemaHelpers.subjectWithSchema("shipments", { idField = "id" })
 
 	local builder = Query.from(customers, "customers")
-		:antiOuterJoin(orders, "orders")
+		:innerJoin(orders, "orders")
 		:onSchemas({
 			customers = { field = "id", distinct = true },
 			orders = { field = "customerId", distinct = true },
 		})
-		:rightJoin(shipments, "shipments")
+		:innerJoin(shipments, "shipments")
 		:onSchemas({
 			orders = { field = "id", distinct = true },
 			shipments = { field = "orderId", distinct = true },
