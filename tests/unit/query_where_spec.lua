@@ -23,7 +23,7 @@ describe("Query WHERE clause", function()
 
 		local query = Query.from(customers, "customers")
 			:innerJoin(orders, "orders")
-			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:where(function(r)
 				return r.customers.status == "active" and (r.orders.amount or 0) > 10
 			end)
@@ -48,7 +48,7 @@ describe("Query WHERE clause", function()
 
 		local query = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:where(function(r)
 				-- orders is {} when absent; accessing id is safe
 				return r.orders.id == nil and r.customers.segment == "trial"

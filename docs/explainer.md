@@ -26,7 +26,7 @@ We compose stream joins with a fluent DSL:
 ```lua
 local attachment = Query.from(customersObservable, "customers")
     :leftJoin(ordersObservable, "orders")
-    :onSchemas({ customers = "id", orders = "customerId" })
+    :on({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 5 })
 ```
 
@@ -42,7 +42,7 @@ On top of the join structure itself, the high-level API exposes a single `WHERE`
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :onSchemas({ customers = "id", orders = "customerId" })
+    :on({ customers = "id", orders = "customerId" })
     :joinWindow({ time = 4, field = "sourceTime" })
     :where(function(row)
       local c = row.customers
@@ -104,7 +104,7 @@ The logical order for the high-level API is:
 
 1. `FROM` / root source(s) via `Query.from(...)`.
 2. Zero or more join steps:
-   - `:innerJoin(...)`, `:leftJoin(...)`, each with its own `onSchemas` and optional `joinWindow`.
+   - `:innerJoin(...)`, `:leftJoin(...)`, each with its own `on` and optional `joinWindow`.
 3. **At most one** `WHERE` step:
    - `:where(function(row) ... end)` against the row view described above.
 4. Optional projection:
@@ -143,7 +143,7 @@ The aggregate view collapses many events per key into a single synthetic schema 
 local grouped =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :onSchemas({ customers = "id", orders = "customerId" })
+    :on({ customers = "id", orders = "customerId" })
     :joinWindow({ time = 7, field = "sourceTime" })
     :where(function(row)
       return row.customers.segment == "VIP"
@@ -251,10 +251,10 @@ Whenever the join window decides that an entry has overstayed its welcome—beca
 
 On top of the global join window, each side of the join maintains a small **per-key buffer** (a ring) for every join key. This buffer answers the second question: how many records sharing the same key you are willing to keep at the same time, which in turn controls whether your join behaves like a “latest snapshot per key” or like a “short history of events per key”. When you set `bufferSize = 1`, you get distinct-by-key behavior where each new arrival for a key overwrites the previous one, the overwritten entry is evicted with `reason="replaced"` and sent down the expired stream, and only the newest record can ever match future partners. When you set `bufferSize > 1`, multiple arrivals per key can coexist in the buffer until the join window or the buffer itself prunes them, and each new partner can see several recent events instead of just the last one.
 
-You configure this at the high level through `onSchemas` by using the table form for each schema, for example:
+You configure this at the high level through `on` by using the table form for each schema, for example:
 
 ```lua
-:onSchemas({
+:on({
   customers = { field = "id", bufferSize = 10 },
   orders    = { field = "customerId", bufferSize = 3 },
 })
@@ -285,7 +285,7 @@ Limitations to keep in mind:
 ### Checklist for Designing Reactive Joins
 
 1. **Tag every source**: use `SchemaHelpers.subjectWithSchema` or similar helpers so `RxMeta` is present.
-2. **Always call `:onSchemas`**: explicit mappings keep projection/alignment and observability accurate.
+2. **Always call `:on`**: explicit mappings keep projection/alignment and observability accurate.
 3. **Choose a join window**: count-based join windows are simpler; time-based join windows mirror real-world latency. Tune `gcOnInsert`/`gcIntervalSeconds` to balance freshness vs. throughput.
 4. **Handle expirations**: subscribe to `builder:expired()` if unmatched/aged-out records matter to your domain.
 5. **Inspect both streams**: when debugging layered joins, observe both the joined stream and the expiration stream. Match status metadata, projection metadata, and the dedup cache help you correlate how the join pipeline behaves over time.

@@ -49,7 +49,7 @@ function QueryBuilder:where(predicate) -> QueryBuilder
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :onSchemas{ customers = "id", orders = "customerId" }
+    :on{ customers = "id", orders = "customerId" }
     :joinWindow{ time = 4, field = "sourceTime" }
     :where(function(row)
       -- example shown with the row view flavor
@@ -121,7 +121,7 @@ row = {
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :onSchemas{ customers = "id", orders = "customerId" }
+    :on{ customers = "id", orders = "customerId" }
     :where(function(r)
       local c = r.customers
       local o = r.orders  -- {} when no matching order
@@ -151,7 +151,7 @@ Logical order of operations for the high-level API:
 
 1. `FROM` / root source(s) (via `Query.from(...)`).
 2. Zero or more `JOIN` steps:
-   - `innerJoin` / `leftJoin`, each with required `onSchemas` and optional `joinWindow`.
+   - `innerJoin` / `leftJoin`, each with required `on` and optional `joinWindow`.
 3. Zero or more `WHERE` steps:
    - `where(predicate)`; each filters joined rows.
 4. Optional `SELECT`-style projection:

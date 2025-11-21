@@ -34,8 +34,8 @@ local function cloneArray(values)
 	return copy
 end
 
--- Explainer: unionSchemas builds a sorted de-duped list so describe/select stay stable.
-local function unionSchemas(left, right)
+-- Explainer: union builds a sorted de-duped list so describe/select stay stable.
+local function union(left, right)
 	local set, output = {}, {}
 	for _, name in ipairs(left or {}) do
 		if not set[name] then
@@ -71,7 +71,7 @@ local function selectionTargets(selection)
 	if #targets == 0 then
 		return nil
 	end
-	return unionSchemas(targets)
+	return union(targets)
 end
 
 -- Explainer: schemaSet enables O(1) membership checks when filtering flattened schemas.
@@ -262,14 +262,14 @@ local function selectorFromSchemas(map)
 		if not field then
 			if schemaName and not missingWarned[schemaName] then
 				missingWarned[schemaName] = true
-				Log:warn("Query.onSchemas missing selector for schema '%s'", schemaName)
+				Log:warn("Query.on missing selector for schema '%s'", schemaName)
 			end
 			return nil
 		end
 		local value = entry and entry[field]
 		if value == nil and schemaName and not missingWarned[schemaName .. "::field"] then
 			missingWarned[schemaName .. "::field"] = true
-			Log:warn("Query.onSchemas('%s') missing field '%s'", schemaName, field)
+			Log:warn("Query.on('%s') missing field '%s'", schemaName, field)
 		end
 		return value
 	end
@@ -279,25 +279,25 @@ end
 -- Explainer: normalizeKeySelector converts builder specs into the callable expected by the core join.
 local function normalizeKeySelector(step)
 	local spec = step.keySpec
-	assert(spec and spec.kind == "schemas", "onSchemas(...) is required for join keys")
+	assert(spec and spec.kind == "schemas", "on(...) is required for join keys")
 	local normalized = {}
 	local bufferSizes = {}
 	local distinctSchemas = {}
 	for schema, value in pairs(spec.map) do
 		if type(schema) ~= "string" or schema == "" then
-			error("onSchemas keys must be non-empty schema names")
+			error("on keys must be non-empty schema names")
 		end
 		local field = value
 		local perKeyBufferSize
 		if type(value) == "table" then
 			field = value.field or value.selector and value.field
 			if value.bufferSize ~= nil and value.perKeyBufferSize ~= nil then
-				Log:warn("onSchemas[%s]: both bufferSize and perKeyBufferSize provided; bufferSize wins", tostring(schema))
+				Log:warn("on[%s]: both bufferSize and perKeyBufferSize provided; bufferSize wins", tostring(schema))
 			end
 			perKeyBufferSize = value.bufferSize or value.perKeyBufferSize
 			local distinct = value.distinct
 			if distinct ~= nil and perKeyBufferSize ~= nil then
-				Log:warn("onSchemas[%s]: both distinct and bufferSize provided; distinct wins", tostring(schema))
+				Log:warn("on[%s]: both distinct and bufferSize provided; distinct wins", tostring(schema))
 			end
 			if distinct == true then
 				perKeyBufferSize = 1
@@ -307,13 +307,13 @@ local function normalizeKeySelector(step)
 			end
 		end
 		if type(field) ~= "string" or field == "" then
-			error(("onSchemas entry for '%s' must define a field (string)"):format(schema))
+			error(("on entry for '%s' must define a field (string)"):format(schema))
 		end
 		normalized[schema] = field
 		if perKeyBufferSize then
 			assert(type(perKeyBufferSize) == "number", "perKeyBufferSize must be a positive number")
 			if perKeyBufferSize < 1 then
-				Log:warn("onSchemas[%s]: bufferSize < 1; clamping to 1", tostring(schema))
+				Log:warn("on[%s]: bufferSize < 1; clamping to 1", tostring(schema))
 				perKeyBufferSize = 1
 			end
 			bufferSizes[schema] = perKeyBufferSize
@@ -536,7 +536,7 @@ end
 -- Explainer: ensureStep prevents configuring keys/joinWindow before any join is staged.
 local function ensureStep(builder)
 	if #builder._steps == 0 then
-		error("Call innerJoin/leftJoin before onSchemas/joinWindow")
+		error("Call innerJoin/leftJoin before on/joinWindow")
 	end
 end
 
@@ -553,13 +553,13 @@ local function hasMappingFor(map, schemas)
 	return false
 end
 
--- Explainer: ensureOnSchemasCoverage enforces at least one mapping on each side when using onSchemas.
-local function ensureOnSchemasCoverage(map, leftSchemas, rightSchemas)
+-- Explainer: ensureOnCoverage enforces at least one mapping on each side when using on.
+local function ensureOnCoverage(map, leftSchemas, rightSchemas)
 	if leftSchemas and #leftSchemas > 0 and not hasMappingFor(map, leftSchemas) then
-		error("onSchemas must map at least one left-side schema")
+		error("on must map at least one left-side schema")
 	end
 	if rightSchemas and #rightSchemas > 0 and not hasMappingFor(map, rightSchemas) then
-		error("onSchemas must map at least one right-side schema")
+		error("on must map at least one right-side schema")
 	end
 end
 
@@ -645,7 +645,7 @@ function QueryBuilder:_addStep(joinType, source, opts)
 		sourceSchema = schemaName,
 	}
 	if schemaName then
-		nextBuilder._schemaNames = unionSchemas(nextBuilder._schemaNames, { schemaName })
+		nextBuilder._schemaNames = union(nextBuilder._schemaNames, { schemaName })
 	end
 	return nextBuilder
 end
@@ -828,18 +828,18 @@ end
 ---Configures explicit schema->field mappings for join keys.
 ---@param map table
 ---@return QueryBuilder
-function QueryBuilder:onSchemas(map)
-	assert(type(map) == "table", "onSchemas expects a table")
-	warnIfBuilt(self, "onSchemas")
+function QueryBuilder:on(map)
+	assert(type(map) == "table", "on expects a table")
+	warnIfBuilt(self, "on")
 	ensureStep(self)
 	local hasEntries = next(map) ~= nil
-	assert(hasEntries, "onSchemas expects at least one mapping")
+	assert(hasEntries, "on expects at least one mapping")
 	for schemaName, selector in pairs(map) do
-		assert(type(schemaName) == "string" and schemaName ~= "", "onSchemas keys must be non-empty schema names")
+		assert(type(schemaName) == "string" and schemaName ~= "", "on keys must be non-empty schema names")
 		local selectorType = type(selector)
 		assert(
 			selectorType == "string" or selectorType == "table",
-			("onSchemas[%s] must be a string field name or table"):format(schemaName)
+			("on[%s] must be a string field name or table"):format(schemaName)
 		)
 	end
 	local nextBuilder = self:_clone()
@@ -848,7 +848,7 @@ function QueryBuilder:onSchemas(map)
 	if step and getmetatable(step.source) == QueryBuilder then
 		rightSchemas = step.source._schemaNames or rightSchemas
 	end
-	ensureOnSchemasCoverage(map, self._schemaNames, rightSchemas)
+	ensureOnCoverage(map, self._schemaNames, rightSchemas)
 	nextBuilder._steps[#nextBuilder._steps].keySpec = { kind = "schemas", map = map }
 	return nextBuilder
 end
@@ -927,7 +927,7 @@ function QueryBuilder:_build()
 		end
 
 		local keySpec = step.keySpec
-		assert(keySpec and keySpec.kind == "schemas", "onSchemas(...) is required for each join step")
+		assert(keySpec and keySpec.kind == "schemas", "on(...) is required for each join step")
 		local leftFilter, rightFilter
 		leftFilter = filterFromMap(keySpec.map, schemaSet(currentSchemas))
 		rightFilter = filterFromMap(keySpec.map, schemaSet(rightSchemas or (step.sourceSchema and { step.sourceSchema })))
@@ -973,7 +973,7 @@ function QueryBuilder:_build()
 		expiredStreams[#expiredStreams + 1] = expired
 
 		current = joinObservable:map(reattachParentSchemas)
-		currentSchemas = unionSchemas(currentSchemas, rightSchemas or (step.sourceSchema and { step.sourceSchema }))
+		currentSchemas = union(currentSchemas, rightSchemas or (step.sourceSchema and { step.sourceSchema }))
 	end
 
 	if self._wherePredicate then

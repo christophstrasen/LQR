@@ -10,16 +10,16 @@ local QueryVizAdapter = require("viz_high_level.core.query_adapter")
 
 ---@diagnostic disable: undefined-global
 describe("Query projection map", function()
-	it("derives projection fields from the first join onSchemas map", function()
+	it("derives projection fields from the first join on map", function()
 		local customers = SchemaHelpers.observableFromTable("customers", { { id = 1 } })
 		local orders = SchemaHelpers.observableFromTable("orders", { { id = 1, customerId = 1 } })
 		local refunds = SchemaHelpers.observableFromTable("refunds", { { id = 2, orderId = 1 } })
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
-			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
+			:on({ orders = { field = "id" }, refunds = { field = "orderId" } })
 
 		local attachment = QueryVizAdapter.attach(builder)
 		local projection = attachment.header.projection

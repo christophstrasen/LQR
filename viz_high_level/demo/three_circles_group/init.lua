@@ -26,12 +26,12 @@ local function build()
 
 	local builder = Query.from(customers, "customers")
 		:innerJoin(orders, "orders")
-		:onSchemas({
+		:on({
 			customers = { field = "id", distinct = true },
 			orders = { field = "customerId", distinct = true },
 		})
 		:innerJoin(shipments, "shipments")
-		:onSchemas({
+		:on({
 			orders = { field = "id", distinct = true },
 			shipments = { field = "orderId", distinct = true },
 		})

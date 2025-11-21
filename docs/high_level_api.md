@@ -17,7 +17,7 @@ and Rx-native.
 - Joins: `:innerJoin(other)` / `:leftJoin(other)` / `:rightJoin(other)` / `:outerJoin(other)` /
   `:antiLeftJoin(other)` / `:antiRightJoin(other)` / `:antiOuterJoin(other)` → chain more
   sources (raw observables or join outputs).
-- `:onSchemas{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
+- `:on{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
   - Per-entry options: `{ field = "...", distinct = true }`:
     - implies a per-key buffer size of `1` for that schema’s side, and
     - causes matched records on that side to be consumed on match, expiring them with reason
@@ -48,7 +48,7 @@ and Rx-native.
 ## Chaining without manual fan-out
 - Join verbs accept either raw schema-tagged observables **or** JoinResult observables directly.
 - Internally we auto-fan-out the schemas referenced by the key selector and selection step, so users
-  never call a separate `chain` helper. Schema names in `onSchemas/selectSchemas` make data
+  never call a separate `chain` helper. Schema names in `on/selectSchemas` make data
   flow explicit.
 
 ## Example flow
@@ -56,10 +56,10 @@ and Rx-native.
 local joined =
   Query.from(customers)                   -- schema "customers"
     :leftJoin(orders)                     -- schema "orders"
-    :onSchemas{ customers = "id", orders = "customerId" }
+    :on{ customers = "id", orders = "customerId" }
     :joinWindow{ time = 4, field = "sourceTime" }
     :innerJoin(refunds)                   -- schema "refunds"
-    :onSchemas{ orders = "id", refunds = "orderId" }
+    :on{ orders = "id", refunds = "orderId" }
     :selectSchemas{ "customers", "orders", "refunds" }
 
 local plan = joined:describe()            -- stable summary for tests/debugging
@@ -76,10 +76,10 @@ local subscription = joined:subscribe(...) -- standard Rx subscription
 
 ## Implementation plan (draft)
 - **Query facade surface**
-  - Implement `Query.from/innerJoin/leftJoin/onSchemas/joinWindow/selectSchemas/describe/into` as a thin
+  - Implement `Query.from/innerJoin/leftJoin/on/joinWindow/selectSchemas/describe/into` as a thin
     layer over existing join internals.
-  - `onSchemas` resolves to a normalized key map per schema; missing fields at runtime emit warnings
-    (not hard errors). `onSchemas` coverage gaps are config errors up front.
+  - `on` resolves to a normalized key map per schema; missing fields at runtime emit warnings
+    (not hard errors). `on` coverage gaps are config errors up front.
 - **Schema enforcement**
   - Keep `Schema.wrap` (or equivalent) mandatory so every record has `RxMeta.schema/id/...`. Emit a
     clear warning if `id` is missing at runtime.
@@ -106,7 +106,7 @@ local subscription = joined:subscribe(...) -- standard Rx subscription
   - Warn-and-continue on selector field misses; rely on underlying Rx for pcall-wrapping subscribe
     callbacks. Avoid extra wrapping here until predicates are introduced.
 - **Tests**
-  - Selector validation: `onSchemas` missing coverage errors.
+  - Selector validation: `on` missing coverage errors.
   - Auto-chaining with JoinResult inputs.
   - Join window/expiration behavior (time/count) with injected clock/scheduler.
   - `describe` stability (table shape) and `into` append behavior.

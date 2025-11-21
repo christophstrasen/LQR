@@ -4,7 +4,7 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
 
 ## Scope and Phasing
 1) **Low-level core (JoinObservable)**: swap single-record caches for per-key ring buffers, unify eviction semantics, and emit expire on every removal (including overwrites). Keep matching logic symmetric and configurable per side.
-2) **High-level Query API**: extend `onSchemas` to accept per-schema options (`field/selector`, `perKeyBufferSize`, `distinct` sugar). Remove `onField/onId` remains already done. Plumb normalized config into core.
+2) **High-level Query API**: extend `on` to accept per-schema options (`field/selector`, `perKeyBufferSize`, `distinct` sugar). Remove `onField/onId` remains already done. Plumb normalized config into core.
 3) **Tests & docs**: update expectations, add coverage for overwrite/replace expirations, per-key buffers, and asymmetric configs. Refresh guides/examples.
 
 ## Detailed Steps
@@ -27,7 +27,7 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
   - Overwriting resets matched on the new entry to false; the displaced entry retains its own matched flag in the expire record.
 
 ### High-level Query (builder)
-- Extend `onSchemas` map entries to support tables:
+- Extend `on` map entries to support tables:
   - Shorthand string `schema = "field"` → `{ field = "field" }` with default perKeyBufferSize (10).
   - Table form: `{ field = "...", perKeyBufferSize = N, distinct = bool }` where `distinct=true` forces size=1; `distinct=false` picks default (10) if none provided.
   - Reject missing field/selector; require per-schema coverage as today.
@@ -46,8 +46,8 @@ Goal: make join cache behavior explicit and configurable via per-key record buff
 
 ### Docs & Examples
 - Update high-level API docs to describe per-key buffers, distinct vs non-distinct, defaults, and new expire reason.
-- Refresh examples (including viz demos) to use `onSchemas` table form where needed.
-- Document migration: `onField/onId` gone; `onSchemas` table entries replace them; overwrite now emits `replaced` expirations.
+- Refresh examples (including viz demos) to use `on` table form where needed.
+- Document migration: `onField/onId` gone; `on` table entries replace them; overwrite now emits `replaced` expirations.
 
 ## Open Decisions to Resolve During Implementation
 - Default `perKeyBufferSize` when unspecified: 1 (distinct) vs a small >1 vs unbounded.

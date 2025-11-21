@@ -210,14 +210,14 @@
 
 ### Highlights
 - **Per-key buffers with full expiration signaling:** Join caches now use small per-key ring buffers (`perKeyBufferSize`, default 10) instead of single entries; every removal path emits on the expired stream (`evicted`, `expired_*`, `replaced`, `completed`/`disposed`/`error`), closing the old silent overwrite gap.
-- **High-level `onSchemas` with distinct knobs:** The Query API’s `onSchemas` accepts rich entries like `{ field = "id", bufferSize = 10, distinct = false }`, so “latest only” vs “recent history” is an explicit choice. String shorthand stays, but table form is the canonical way to align high-level intent with low-level per-key buffers.
+- **High-level `on` with distinct knobs:** The Query API’s `on` accepts rich entries like `{ field = "id", bufferSize = 10, distinct = false }`, so “latest only” vs “recent history” is an explicit choice. String shorthand stays, but table form is the canonical way to align high-level intent with low-level per-key buffers.
 - **Symmetric GC and richer counts:** `gcOnInsert` still defaults to true, but per-insert sweeps now walk both left and right caches; periodic GC reuses the same helper. The viz pipeline counts expirations by reason and surfaces them in the outer legend/header, so we can see at a glance how much churn comes from `evicted` vs `expired_interval` vs `replaced`, etc.
 - **Two-circles demo wired to lifetimes:** The `two_circles` scenario uses the shared join TTL, per-layer `visualsTTLFactors`/`visualsTTLLayerFactors`, and timed snapshots (“rise/mix/trail”) to make overlaps and expirations readable. Love defaults (playback speed, locked 10×10 grid) are tuned to show per-key buffers, GC symmetry, and expiration-reason counts without overwhelming the viewer.
 
 ### What we learned
 1. **Two levers, two questions:** Windowing answers “how long/how many entries overall stay warm,” while per-key buffers answer “how many events per key stay warm at once.” Keeping those concerns separate made configuration less mysterious.
 2. **Every removal deserves a story and a count:** With explicit expire packets and per-reason counts, we can now reconstruct why a record left the join and see aggregate churn broken down by `reason`, which is far more useful than a single expire total.
-3. **High-level sugar should describe intent:** Encoding distinctness as `bufferSize`/`distinct` on `onSchemas` means the same call captures both join fields and “latest vs history” semantics, matching how people actually think about joins.
+3. **High-level sugar should describe intent:** Encoding distinctness as `bufferSize`/`distinct` on `on` means the same call captures both join fields and “latest vs history” semantics, matching how people actually think about joins.
 4. **Symmetric GC and stretched visuals help humans:** Sweeping both caches on insert makes stale ownership less surprising while periodic GC covers idle periods; decoupling visual TTL from logical TTL lets demos exaggerate lifetimes just enough for people to see what’s happening without lying about when the engine actually drops records.
 
 ## Day 15 – WHERE semantics and final visualization layer
@@ -275,7 +275,7 @@
   - Updated `high_level_api` docs to list the full join verb set and wired tests to assert plan types.
 
 - **Distinct semantics upgraded (per-side, consume-on-match):**
-  - Reinterpreted `distinct = true` in `onSchemas` from “just shrink buffer” into a stronger contract:
+  - Reinterpreted `distinct = true` in `on` from “just shrink buffer” into a stronger contract:
     - per-key buffer size is forced to 1 for that schema’s side, and
     - matched records on that side are **consumed** on match: they are removed from the buffer and emit an expiration with reason `distinct_match`.
   - Distinct flags are tracked per side (`distinctLeft` / `distinctRight`) so callers can:

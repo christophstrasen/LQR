@@ -24,7 +24,7 @@ describe("viz_high_level headless renderer", function()
 		local adapter = QueryVizAdapter.attach(
 			Query.from(customers, "customers")
 				:leftJoin(customers, "customers") -- self-join to reuse schema in projection map
-				:onSchemas({ customers = { field = "id" } })
+				:on({ customers = { field = "id" } })
 		)
 
 		local runtime = Runtime.new({

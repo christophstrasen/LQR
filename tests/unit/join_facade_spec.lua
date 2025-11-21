@@ -50,14 +50,14 @@ local function summarizePair(result)
 	}
 end
 
-	it("raises configuration errors when onSchemas lacks coverage for known schemas", function()
+	it("raises configuration errors when on lacks coverage for known schemas", function()
 		local left = SchemaHelpers.observableFromTable("left", { { id = 1 } })
 		local right = SchemaHelpers.observableFromTable("right", { { id = 1 } })
 
 		assert.has_error(function()
 			Query.from(left, "left")
 				:innerJoin(right, "right")
-				:onSchemas({ left = { field = "id" } }) -- missing right
+				:on({ left = { field = "id" } }) -- missing right
 		end)
 	end)
 
@@ -68,9 +68,9 @@ end
 
 		local joined = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:innerJoin(refunds, "refunds")
-			:onSchemas({ orders = { field = "id" }, refunds = { field = "orderId" } })
+			:on({ orders = { field = "id" }, refunds = { field = "orderId" } })
 			:selectSchemas({ "customers", "orders", "refunds" })
 
 		local results = {}
@@ -99,7 +99,7 @@ end
 
 		local joined = Query.from(left, "left")
 			:leftJoin(right, "right")
-			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:on({ left = { field = "id" }, right = { field = "id" } })
 			:joinWindow({ count = 1 })
 
 		local expiredPackets = collect(joined:expired())
@@ -122,13 +122,13 @@ end
 		assert.are.same({ "evicted", "evicted" }, expiredReasons)
 	end)
 
-	it("honors bufferSize configured via onSchemas table entries", function()
+	it("honors bufferSize configured via on table entries", function()
 		local leftSubject, left = SchemaHelpers.subjectWithSchema("left", { idField = "id" })
 		local rightSubject, right = SchemaHelpers.subjectWithSchema("right", { idField = "id" })
 
 		local joined = Query.from(left, "left")
 			:leftJoin(right, "right")
-			:onSchemas({
+			:on({
 				left = { field = "id", bufferSize = 1 }, -- distinct
 				right = { field = "id", bufferSize = 2 }, -- allow two rights per key
 			})
@@ -190,7 +190,7 @@ end
 
 			local joined = Query.from(left, "left")
 				:leftJoin(right, "right")
-				:onSchemas({
+				:on({
 					left = { field = "id", bufferSize = 1 },
 					right = { field = "id", bufferSize = 5 },
 				})
@@ -218,7 +218,7 @@ end
 
 	local plan = Query.from(left, "left")
 		:leftJoin(right, "right")
-		:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+		:on({ left = { field = "id" }, right = { field = "id" } })
 		:joinWindow({ count = 5 })
 		:selectSchemas({ left = "L", right = "R" })
 		:describe()
@@ -269,7 +269,7 @@ end
 					gcIntervalSeconds = 1,
 				})
 				:leftJoin(right, "right")
-				:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+				:on({ left = { field = "id" }, right = { field = "id" } })
 
 			local plan = joined:describe()
 			assert.are.same({ "left" }, plan.from)
@@ -308,19 +308,19 @@ end
 
 		local rightPlan = Query.from(left, "left")
 			:rightJoin(right, "right")
-			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:on({ left = { field = "id" }, right = { field = "id" } })
 			:describe()
 		assert.are.equal("right", rightPlan.joins[1].type)
 
 		local outerPlan = Query.from(left, "left")
 			:outerJoin(right, "right")
-			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:on({ left = { field = "id" }, right = { field = "id" } })
 			:describe()
 		assert.are.equal("outer", outerPlan.joins[1].type)
 
 		local antiPlan = Query.from(left, "left")
 			:antiLeftJoin(right, "right")
-			:onSchemas({ left = { field = "id" }, right = { field = "id" } })
+			:on({ left = { field = "id" }, right = { field = "id" } })
 			:describe()
 		assert.are.equal("anti_left", antiPlan.joins[1].type)
 	end)
@@ -331,7 +331,7 @@ end
 
 		local joined = Query.from(left, "left")
 			:innerJoin(right, "right")
-			:onSchemas({
+			:on({
 				left = { field = "id", distinct = true },
 				right = { field = "id", distinct = true },
 			})

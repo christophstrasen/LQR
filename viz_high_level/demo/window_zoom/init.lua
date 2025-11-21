@@ -13,7 +13,7 @@ local function buildSubjects()
 
 	local builder = Query.from(customers, "customers")
 		:leftJoin(orders, "orders")
-		:onSchemas({
+		:on({
 			customers = { field = "id", bufferSize = 10 },
 			orders = { field = "customerId", bufferSize = 10 },
 		})

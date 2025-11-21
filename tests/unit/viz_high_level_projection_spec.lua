@@ -113,7 +113,7 @@ describe("viz_high_level projection enrichment", function()
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:onSchemas({ customers = "id", orders = "customerId" })
+			:on({ customers = "id", orders = "customerId" })
 
 		local attachment = QueryVizAdapter.attach(builder)
 		local events = {}
