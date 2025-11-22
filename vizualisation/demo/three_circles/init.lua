@@ -1,0 +1,198 @@
+local ThreeCirclesDemo = {}
+
+local Query = require("Query")
+local SchemaHelpers = require("tests.support.schema_helpers")
+local ZonesTimeline = require("vizualisation.demo.common.zones_timeline")
+local Driver = require("vizualisation.demo.common.driver")
+local LoveDefaults = require("vizualisation.demo.common.love_defaults")
+local Log = require("log").withTag("demo")
+
+local PLAY_DURATION = 20
+local JOINT_TTL = 3
+local demoClock = {
+	value = 0,
+	now = function(self)
+		return self.value or 0
+	end,
+	set = function(self, v)
+		self.value = v or 0
+	end,
+}
+
+local function build()
+	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+	local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
+	local shipmentsSubject, shipments = SchemaHelpers.subjectWithSchema("shipments", { idField = "id" })
+
+	local builder = Query.from(customers, "customers")
+		:innerJoin(orders, "orders")
+		:on({
+			customers = { field = "id" },
+			orders = { field = "customerId" },
+		})
+		:innerJoin(shipments, "shipments")
+		:on({
+			orders = { field = "id" },
+			shipments = { field = "orderId" },
+		})
+		:withDefaultJoinWindow({
+			time = JOINT_TTL,
+			field = "sourceTime",
+			currentFn = function()
+				return demoClock:now()
+			end,
+		})
+
+	return {
+		subjects = {
+			customers = customersSubject,
+			orders = ordersSubject,
+			shipments = shipmentsSubject,
+		},
+		builder = builder,
+	}
+end
+
+local function buildZones()
+	return {
+		{
+			label = "cust_circle",
+			schema = "customers",
+			center = 35,
+			range = 1,
+			radius = 3,
+			shape = "circle10",
+			coverage = 1,
+			mode = "random",
+			rate = 4,
+			t0 = 0.05,
+			t1 = 0.4,
+			rate_shape = "constant",
+			idField = "id",
+		},
+		{
+			label = "ord_circle",
+			schema = "orders",
+			center = 55,
+			range = 1,
+			radius = 3,
+			shape = "circle10",
+			coverage = 1,
+			mode = "random",
+			rate = 4,
+			t0 = 0.15,
+			t1 = 0.8,
+			rate_shape = "constant",
+			idField = "id",
+			payloadForId = function(id)
+				return { id = id, customerId = id, total = 20 + ((id % 5) * 15) }
+			end,
+		},
+		{
+			label = "ship_circle",
+			schema = "shipments",
+			center = 75,
+			range = 1,
+			radius = 3,
+			shape = "circle10",
+			coverage = 1,
+			mode = "random",
+			rate = 4,
+			t0 = 0.25,
+			t1 = 0.95,
+			rate_shape = "constant",
+			idField = "id",
+			payloadForId = function(id)
+				return { id = id, orderId = id, carrier = "c" .. (id % 3), status = "in_transit" }
+			end,
+		},
+	}
+end
+
+local function buildTimeline()
+	local zones = buildZones()
+	return ZonesTimeline.build(zones, {
+		totalPlaybackTime = PLAY_DURATION,
+		completeDelay = 0.5,
+		grid = { startId = 0, columns = 10, rows = 10 },
+		stampSourceTime = true,
+		clock = demoClock,
+		debug = {
+			logger = function(msg)
+				Log:debug("%s", msg)
+			end,
+		},
+		snapshots = {
+			{ tick = PLAY_DURATION * 0.2, label = "rise" },
+			{ tick = PLAY_DURATION * 0.55, label = "mix" },
+			{ tick = PLAY_DURATION * 0.9, label = "trail" },
+		},
+	})
+end
+
+---@return table
+function ThreeCirclesDemo.build()
+	return build()
+end
+
+---@param subjects table
+function ThreeCirclesDemo.complete(subjects)
+	for _, subject in pairs(subjects or {}) do
+		if subject.onCompleted then
+			subject:onCompleted()
+		end
+	end
+end
+
+---@param subjects table
+---@param opts table|nil
+---@return table driver
+function ThreeCirclesDemo.start(subjects, opts)
+	opts = opts or {}
+	local ticksPerSecond = opts.playbackSpeed or opts.ticksPerSecond or 2
+	local clock = opts.clock or demoClock
+	demoClock = clock
+	local events, snapshots, summary = buildTimeline()
+	ThreeCirclesDemo.snapshots = snapshots
+	ThreeCirclesDemo.timeline = events
+	ThreeCirclesDemo.summary = summary
+
+	return Driver.new({
+		events = events,
+		subjects = subjects,
+		ticksPerSecond = ticksPerSecond,
+		clock = clock,
+		label = "three_circles",
+		onCompleteAll = ThreeCirclesDemo.complete,
+	})
+end
+
+ThreeCirclesDemo.loveDefaults = LoveDefaults.merge({
+	label = "three circles",
+	visualsTTLFactor = 1.2,
+	visualsTTLFactors = {
+		-- NOTE: "joined" refers to join layers; "final" controls the outer post-WHERE ring.
+		source = 1.0,
+		joined = 1,
+		final = 3,
+		expire = 0.02,
+	},
+	visualsTTLLayerFactors = {
+		-- Layer 1 = final ring, layers 2+ = join rings for this demo.
+		[1] = 1,
+		[2] = 1,
+		[3] = 1,
+	},
+	playbackSpeed = 0.7,
+	visualsTTL = JOINT_TTL,
+	adjustInterval = 0.25,
+	clockMode = "driver",
+	clockRate = 1,
+	totalPlaybackTime = PLAY_DURATION,
+	maxColumns = 10,
+	maxRows = 10,
+	startId = 0,
+	lockWindow = true,
+})
+
+return ThreeCirclesDemo

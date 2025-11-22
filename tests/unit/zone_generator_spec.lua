@@ -4,8 +4,8 @@ package.cpath = "./?.so;" .. package.cpath
 
 require("bootstrap")
 
-local ShapeWeights = require("viz_high_level.zones.shape_weights")
-local Generator = require("viz_high_level.zones.generator")
+local ShapeWeights = require("vizualisation.zones.shape_weights")
+local Generator = require("vizualisation.zones.generator")
 
 ---@diagnostic disable: undefined-global
 describe("zone generator", function()

@@ -5,7 +5,7 @@ package.cpath = "./?.so;" .. package.cpath
 require("bootstrap")
 
 local Query = require("Query")
-local QueryVizAdapter = require("viz_high_level.core.query_adapter")
+local QueryVizAdapter = require("vizualisation.core.query_adapter")
 local SchemaHelpers = require("tests.support.schema_helpers")
 
 local function rgbToHue(color)

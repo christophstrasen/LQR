@@ -4,11 +4,11 @@ package.cpath = "./?.so;" .. package.cpath
 
 require("bootstrap")
 
-local Runtime = require("viz_high_level.core.runtime")
-local Renderer = require("viz_high_level.core.headless_renderer")
+local Runtime = require("vizualisation.core.runtime")
+local Renderer = require("vizualisation.core.headless_renderer")
 
 ---@diagnostic disable: undefined-global
-describe("viz_high_level headless renderer", function()
+describe("vizualisation headless renderer", function()
 	it("maps inner and layered borders to grid cells", function()
 		local palette = {
 			customers = { 0.1, 0.2, 0.3, 1 },
@@ -17,7 +17,7 @@ describe("viz_high_level headless renderer", function()
 		}
 		local SchemaHelpers = require("tests.support.schema_helpers")
 		local Query = require("Query")
-		local QueryVizAdapter = require("viz_high_level.core.query_adapter")
+		local QueryVizAdapter = require("vizualisation.core.query_adapter")
 
 		-- Build a small query to drive projection enrichment.
 		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })

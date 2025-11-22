@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require("bootstrap")
 
-local CellLayers = require("viz_high_level.core.cell_layers")
+local CellLayers = require("vizualisation.core.cell_layers")
 
 ---@diagnostic disable: undefined-global
 describe("cell_layers helper", function()

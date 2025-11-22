@@ -6,7 +6,7 @@ require("bootstrap")
 
 local Query = require("Query")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local QueryVizAdapter = require("viz_high_level.core.query_adapter")
+local QueryVizAdapter = require("vizualisation.core.query_adapter")
 
 ---@diagnostic disable: undefined-global
 describe("Query projection map", function()

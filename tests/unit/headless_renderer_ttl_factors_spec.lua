@@ -4,11 +4,11 @@ package.cpath = "./?.so;" .. package.cpath
 
 require("bootstrap")
 
-local Runtime = require("viz_high_level.core.runtime")
-local Renderer = require("viz_high_level.core.headless_renderer")
+local Runtime = require("vizualisation.core.runtime")
+local Renderer = require("vizualisation.core.headless_renderer")
 
 ---@diagnostic disable: undefined-global
-describe("viz_high_level headless renderer TTL factors", function()
+describe("vizualisation headless renderer TTL factors", function()
 	it("applies per-kind and per-layer TTL scaling", function()
 		local baseTTL = 2
 		local factors = {
