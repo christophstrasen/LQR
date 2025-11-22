@@ -253,11 +253,11 @@ The helper subscribes lazily and unsubscribes upstream when the downstream obser
 
 ### Determinism Policy
 
-We intentionally **do not guarantee strict deterministic emission ordering**. The default merge streams records as soon as they arrive and cache flushes iterate via Lua tables (`pairs`), both chosen for speed and low latency. Enforcing stable global ordering would force extra buffering, sorting, and bookkeeping that would slow the low-level API. If you need deterministic ordering, supply a custom `merge` (see `examples/custom_merge_right_first.lua`) or pre-stage your streams with sequence numbers/timestamps before feeding them into `JoinObservable`.
+We intentionally **do not guarantee strict deterministic emission ordering**. The default merge streams records as soon as they arrive and cache flushes iterate via Lua tables (`pairs`), both chosen for speed and low latency. Enforcing stable global ordering would force extra buffering, sorting, and bookkeeping that would slow the low-level API. If you need deterministic ordering, supply a custom `merge` (e.g., one that prioritizes right-side emissions) or pre-stage your streams with sequence numbers/timestamps before feeding them into `JoinObservable`.
 
 ## Examples to Build
 
-_(These will live under `examples/` in future work.)_
+_(Example scripts can be added later if needed.)_
 
 - Inner join with default options, demonstrating key selector and unmatched suppression.
 - Custom key selector (function) and functional `on` example.
@@ -270,7 +270,6 @@ _(These will live under `examples/` in future work.)_
 ## Testing & Debugging Tips
 
 - Use `Log.supressBelow("error", function() ... end)` to mute join warnings during noisy test sections; restore afterwards.
-- The experiment scripts under `experiments/join_lua_events_*` provide runnable scenarios for retention join windows and join types.
 - When debugging unexpected expirations, subscribe to the `expired` stream and log both `reason` and any relevant record fields (e.g., timestamps, TTLs).
 - If you see `"mergeSources must return an observable"`, ensure your custom merge returns an object with `.subscribe`.
 
