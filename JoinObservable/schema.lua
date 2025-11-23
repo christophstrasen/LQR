@@ -7,7 +7,7 @@
 ---@field subscribe fun(self:rx.Observable, onNext:fun(value:any), onError:fun(err:any)|nil, onCompleted:fun()|nil):rx.Subscription
 
 local rx = require("reactivex")
-local Log = require("log").withTag("join")
+local Log = require("util.log").withTag("join")
 local Schema = {}
 local invalidVersionNotified = {}
 

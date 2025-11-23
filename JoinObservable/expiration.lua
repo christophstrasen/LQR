@@ -1,5 +1,5 @@
 -- Expiration utilities that prune cached join rows based on count/interval/predicate rules.
-local Log = require("log").withTag("join")
+local Log = require("util.log").withTag("join")
 
 local Expiration = {}
 

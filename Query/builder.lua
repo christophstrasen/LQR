@@ -14,8 +14,9 @@
 local rx = require("reactivex")
 local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
-local Log = require("log").withTag("query")
+local Log = require("util.log").withTag("query")
 local GroupByObservable = require("groupByObservable")
+local TableUtil = require("util.table")
 
 local DEFAULT_WINDOW_COUNT = 1000
 local DEFAULT_PER_KEY_BUFFER_SIZE = 10
@@ -24,15 +25,6 @@ local defaultJoinWindowOverride = nil
 
 local QueryBuilder = {}
 QueryBuilder.__index = QueryBuilder
-
--- Explainer: cloneArray keeps builder state immutable across chained calls.
-local function cloneArray(values)
-	local copy = {}
-	for i = 1, #values do
-		copy[i] = values[i]
-	end
-	return copy
-end
 
 -- Explainer: union builds a sorted de-duped list so describe/select stay stable.
 local function union(left, right)
@@ -501,26 +493,18 @@ end
 function QueryBuilder:_clone()
 	local copy = setmetatable({}, QueryBuilder)
 	copy._rootSource = self._rootSource
-	copy._rootSchemas = self._rootSchemas and cloneArray(self._rootSchemas) or nil
+	copy._rootSchemas = self._rootSchemas and TableUtil.shallowArray(self._rootSchemas) or nil
 	copy._steps = {}
 	for i = 1, #self._steps do
 		local step = self._steps[i]
-		local stepCopy = {}
-		for key, value in pairs(step) do
-			if key == "keySpec" and type(value) == "table" then
-				local clone = {}
-				for k, v in pairs(value) do
-					clone[k] = v
-				end
-				stepCopy[key] = clone
-			else
-				stepCopy[key] = value
-			end
+		local stepCopy = TableUtil.shallowCopy(step)
+		if type(step.keySpec) == "table" then
+			stepCopy.keySpec = TableUtil.shallowCopy(step.keySpec)
 		end
 		copy._steps[i] = stepCopy
 	end
 	copy._selection = self._selection
-	copy._schemaNames = self._schemaNames and cloneArray(self._schemaNames) or nil
+	copy._schemaNames = self._schemaNames and TableUtil.shallowArray(self._schemaNames) or nil
 	copy._defaultJoinWindow = self._defaultJoinWindow
 	copy._scheduler = self._scheduler
 	copy._vizHook = self._vizHook
@@ -626,7 +610,7 @@ local function newBuilder(source, opts)
 	local builder = setmetatable({}, QueryBuilder)
 	builder._rootSource = observable
 	builder._rootSchemas = schemaName and { schemaName } or nil
-	builder._schemaNames = builder._rootSchemas and cloneArray(builder._rootSchemas) or nil
+	builder._schemaNames = builder._rootSchemas and TableUtil.shallowArray(builder._rootSchemas) or nil
 	builder._steps = {}
 	builder._defaultJoinWindow = defaultJoinWindowOverride
 	builder._scheduler = schedulerOverride
@@ -918,7 +902,7 @@ function QueryBuilder:_build()
 	-- NOTE: use the left pipeline schemas (root) here instead of the global union so
 	-- per-side buffer sizes reflect only the schemas that have actually flowed through
 	-- the left side so far.
-	local currentSchemas = self._rootSchemas and cloneArray(self._rootSchemas) or nil
+	local currentSchemas = self._rootSchemas and TableUtil.shallowArray(self._rootSchemas) or nil
 
 	for stepIndex, step in ipairs(self._steps) do
 		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source)
@@ -977,7 +961,7 @@ function QueryBuilder:_build()
 	end
 
 	if self._wherePredicate then
-		local rowSchemas = currentSchemas and cloneArray(currentSchemas) or nil
+		local rowSchemas = currentSchemas and TableUtil.shallowArray(currentSchemas) or nil
 		local predicate = self._wherePredicate
 		current = current:map(function(value)
 			return toJoinResult(value) or value
@@ -1025,7 +1009,7 @@ function QueryBuilder:_build()
 		local groupOpts = self._group
 		local groupWindow = self._groupWindow or {}
 		local aggregates = self._aggregates or {}
-		local rowSchemas = currentSchemas and cloneArray(currentSchemas) or nil
+		local rowSchemas = currentSchemas and TableUtil.shallowArray(currentSchemas) or nil
 		current = current:map(function(value)
 			local result = toJoinResult(value)
 			if not result then

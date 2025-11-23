@@ -7,7 +7,7 @@ require("bootstrap")
 local Query = require("Query")
 local JoinObservable = require("JoinObservable")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local Log = require("log")
+local Log = require("util.log")
 
 ---@diagnostic disable: undefined-global
 describe("Join high-level facade", function()

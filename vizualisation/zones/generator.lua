@@ -1,4 +1,5 @@
 local ShapeWeights = require("vizualisation.zones.shape_weights")
+local Math = require("util.math")
 
 local Generator = {}
 
@@ -44,15 +45,6 @@ local RATE_SHAPES = {
 		return 0.5 - 0.5 * math.cos((math.pi * 2) * t)
 	end,
 }
-
-local function clamp01(v)
-	if v < 0 then
-		return 0
-	elseif v > 1 then
-		return 1
-	end
-	return v
-end
 
 local function assertNumber(value, label)
 	if type(value) ~= "number" then
@@ -140,7 +132,7 @@ local function applyCoverage(cells, coverage)
 end
 
 local function pickSpatialIds(zone)
-	local coverage = clamp01(assertNumber(zone.coverage or zone.density or 1, "zone.coverage"))
+	local coverage = Math.clamp01(assertNumber(zone.coverage or zone.density or 1, "zone.coverage"))
 	local weights = ShapeWeights.build(zone)
 	local baseCount = #weights
 	if baseCount == 0 or coverage <= 0 then
@@ -153,8 +145,8 @@ local function buildTimeSlots(zone, eventCount, opts)
 	if eventCount <= 0 then
 		return {}
 	end
-	local t0 = clamp01(assertNumber(zone.t0 or 0, "zone.t0"))
-	local t1 = clamp01(assertNumber(zone.t1 or 1, "zone.t1"))
+	local t0 = Math.clamp01(assertNumber(zone.t0 or 0, "zone.t0"))
+	local t1 = Math.clamp01(assertNumber(zone.t1 or 1, "zone.t1"))
 	local span = math.max(0, t1 - t0)
 	if span <= 0 then
 		return {}
@@ -168,7 +160,7 @@ local function buildTimeSlots(zone, eventCount, opts)
 
 	local weights = {}
 	for i = 1, eventCount do
-		weights[i] = clamp01(rateShape(eventCount, i))
+		weights[i] = Math.clamp01(rateShape(eventCount, i))
 	end
 
 	local totalWeight = 0
@@ -271,7 +263,7 @@ function Generator.generate(zones, opts)
 			warnings[#warnings + 1] = string.format("zone '%s' produced no spatial ids", tostring(zoneLabel))
 		end
 		local mode = zone.mode or "random"
-		local tSpan = (clamp01(zone.t1 or 1) - clamp01(zone.t0 or 0)) * opts.totalPlaybackTime
+	local tSpan = (Math.clamp01(zone.t1 or 1) - Math.clamp01(zone.t0 or 0)) * opts.totalPlaybackTime
 		if tSpan <= 0 then
 			tSpan = 1
 		end

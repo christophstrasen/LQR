@@ -1,8 +1,8 @@
--- Headless-friendly high-level viz runtime that consumes normalized adapter events
 -- and maintains expandable grid/window state plus per-layer event buffers.
 -- Think of this as the brains behind the snapshots: it maps ids onto a sliding grid,
 -- tracks when rows were last "seen", and enforces auto-zoom rules so renderers only
 -- worry about pixels.
+local Math = require("util.math")
 local Runtime = {}
 Runtime.__index = Runtime
 
@@ -11,16 +11,6 @@ local DEFAULT_MARGIN_COLUMNS_PERCENT = 0.2
 local ZOOM_SMALL = { columns = 10, rows = 10 }
 local ZOOM_LARGE = { columns = 100, rows = 100 }
 local SLIDE_BUFFER_PERCENT = 0.2
-
-local function clamp(value, min, max)
-	if value < min then
-		return min
-	end
-	if value > max then
-		return max
-	end
-	return value
-end
 
 local function normalizeId(value)
 	if value == nil then
@@ -276,10 +266,10 @@ function Runtime:ingest(event, now)
 			table.insert(self.events.source, event)
 		end
 	elseif event.type == "match" or event.type == "joinresult" then
-		event.layer = clamp(event.layer or 1, 1, self.maxLayers)
+	event.layer = Math.clamp(event.layer or 1, 1, self.maxLayers)
 		table.insert(self.events.match, event)
 	elseif event.type == "expire" then
-		event.layer = clamp(event.layer or 1, 1, self.maxLayers)
+	event.layer = Math.clamp(event.layer or 1, 1, self.maxLayers)
 		table.insert(self.events.expire, event)
 	end
 

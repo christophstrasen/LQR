@@ -1,24 +1,15 @@
 -- High-level visualization adapter: taps Query builder joins to emit normalized events
 -- (sources, matches, expirations) for dynamic renderers without touching core scheduling.
 local rx = require("reactivex")
-local JoinLog = require("log").withTag("join")
-local VizLog = require("log").withTag("viz-hi")
+local JoinLog = require("util.log").withTag("join")
+local VizLog = require("util.log").withTag("viz-hi")
 local Result = require("JoinObservable.result")
+local Math = require("util.math")
+local TableUtil = require("util.table")
 
 local QueryVizAdapter = {}
 
 local DEFAULT_MAX_LAYERS = 5
-
-local function toSet(list)
-	if not list then
-		return {}
-	end
-	local set = {}
-	for _, value in ipairs(list) do
-		set[value] = true
-	end
-	return set
-end
 
 -- Simple HSV->RGB converter to generate evenly spaced schema colors.
 local function hsvToRgb(h, s, v)
@@ -155,16 +146,7 @@ local function rainbowPalette(names)
 end
 
 local function clampLayer(depth, maxLayers)
-	if not depth then
-		return 1
-	end
-	if depth < 1 then
-		return 1
-	end
-	if depth > maxLayers then
-		return maxLayers
-	end
-	return depth
+	return Math.clamp(depth or 1, 1, maxLayers)
 end
 
 local function tokenFor(schema, id)
@@ -536,7 +518,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	end
 
 	local primaries = queryBuilder.primarySchemas and queryBuilder:primarySchemas() or (plan.from or {})
-	local primarySet = toSet(primaries)
+	local primarySet = TableUtil.toSet(primaries)
 	local palette = opts.palette or rainbowPalette(primaries)
 	local projectionFields, projectionDomainSchema, projectionField = buildProjectionMap(plan)
 	local joins = describeJoins(plan, depthForStep)

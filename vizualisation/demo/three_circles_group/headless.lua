@@ -4,7 +4,7 @@ require("bootstrap")
 local Runtime = require("vizualisation.core.runtime")
 local Renderer = require("vizualisation.core.headless_renderer")
 local DebugViz = require("vizualisation.vizLogFormatter")
-local Log = require("log")
+local Log = require("util.log")
 local QueryVizAdapter = require("vizualisation.core.query_adapter")
 local ThreeCirclesDemo = require("vizualisation.demo.three_circles_group")
 

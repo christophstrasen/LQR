@@ -1,4 +1,5 @@
-local Log = require("log")
+local Log = require("util.log")
+local Color = require("util.color")
 
 local CellLayer = {}
 CellLayer.__index = CellLayer
@@ -7,19 +8,10 @@ local function nowSeconds()
 	return love and love.timer and love.timer.getTime() or os.clock()
 end
 
-local function cloneColor(color)
-	return {
-		(color and color[1]) or 0,
-		(color and color[2]) or 0,
-		(color and color[3]) or 0,
-		(color and color[4]) or 1,
-	}
-end
-
 local function newLayer(bgColor, ttl)
 	return setmetatable({
-		bgColor = cloneColor(bgColor or { 0, 0, 0, 1 }),
-		calcColor = cloneColor(bgColor or { 0, 0, 0, 1 }),
+		bgColor = Color.clone(bgColor, { 0, 0, 0, 1 }),
+		calcColor = Color.clone(bgColor, { 0, 0, 0, 1 }),
 		show = true,
 		defaultTTL = ttl or 1,
 		layers = {},
@@ -31,7 +23,7 @@ function CellLayer.new(bgColor, ttl)
 end
 
 function CellLayer:setBackground(color)
-	self.bgColor = cloneColor(color or self.bgColor)
+	self.bgColor = Color.clone(color or self.bgColor)
 	return self
 end
 
@@ -75,7 +67,7 @@ function CellLayer:addLayer(opts)
 	local ts = opts.ts or nowSeconds()
 	self.layers[key] = {
 		id = key,
-		color = cloneColor(opts.color),
+		color = Color.clone(opts.color),
 		ts = ts,
 		ttl = opts.ttl or self.defaultTTL or 1,
 		label = opts.label,

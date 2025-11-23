@@ -1,6 +1,6 @@
 local debug = require('debug')
 local package = require('package')
-require('zomboid_stubs')
+require('util.zomboid_stubs')
 
 -- Explainer: Collect canonical search paths for any vendored libraries we keep under external/.
 local LIBRARY_PATHS = {

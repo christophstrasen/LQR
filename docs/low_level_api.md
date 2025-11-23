@@ -179,7 +179,7 @@ All removals emit to the expired channel: buffer overwrites (`replaced`), count-
 
 ## Warning & Lifecycle Hooks
 
-Join warnings now flow through the shared logger (`log.lua`, tag `join`), so adjust `LOG_LEVEL` or use `Log.supressBelow("error", fn)` in tests to mute them temporarily.
+Join warnings now flow through the shared logger (`util/log.lua`, tag `join`), so adjust `LOG_LEVEL` or use `Log.supressBelow("error", fn)` in tests to mute them temporarily.
 
 ### Observable lifecycle
 

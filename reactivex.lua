@@ -1,3 +1,5 @@
+-- Explainer: Root entrypoint that mirrors 4O4/lua-reactivex but force-loads operators and
+-- collects helpers so other modules can `require("reactivex")` without wiring schedulers.
 local Observable = require("reactivex.observable")
 local Subject = require("reactivex.subjects.subject")
 local Subscription = require("reactivex.subscription")
@@ -33,6 +35,8 @@ function schedulerHelpers.get()
 	return ensureScheduler()
 end
 
+-- Explainer: Tests/demos frequently reset time to deterministic baselines; this keeps the
+-- shared scheduler controllable instead of pulling from a global singleton.
 function schedulerHelpers.reset(currentTime)
 	defaultScheduler = CooperativeScheduler.create(currentTime)
 	return defaultScheduler

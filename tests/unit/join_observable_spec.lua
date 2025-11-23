@@ -10,7 +10,7 @@ local SchemaHelpers = require("tests.support.schema_helpers")
 local Result = require("JoinObservable.result")
 
 local Schema = require("JoinObservable.schema")
-local Log = require("log")
+local Log = require("util.log")
 
 local function collectValues(observable)
 	local results = {}

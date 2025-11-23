@@ -1,21 +1,15 @@
-local Log = require("log").withTag("demo")
+local Log = require("util.log").withTag("demo")
 local QueryVizAdapter = require("vizualisation.core.query_adapter")
 local Runtime = require("vizualisation.core.runtime")
 local Renderer = require("vizualisation.core.headless_renderer")
 local DebugViz = require("vizualisation.vizLogFormatter")
 local Draw = require("vizualisation.core.draw")
+local Color = require("util.color")
 
 local LoveRunner = {}
 
 local DEFAULT_BACKGROUND = { 0.08, 0.08, 0.08, 1 }
 local HOVER_HISTORY_LIMIT = 6 -- match runtime default for consistency
-
-local function cloneColor(color)
-	if not color then
-		return { 0, 0, 0, 1 }
-	end
-	return { color[1] or 0, color[2] or 0, color[3] or 0, color[4] or 1 }
-end
 
 local function fieldLabel(join)
 	local keyDesc = join.displayKey or "id"
@@ -307,7 +301,7 @@ function LoveRunner.bootstrap(opts)
 	local adjustInterval = opts.adjustInterval or defaults.adjustInterval or 1.5
 	local windowWidth = (defaults.windowSize and defaults.windowSize[1]) or 800
 	local windowHeight = (defaults.windowSize and defaults.windowSize[2]) or 600
-	local background = cloneColor(defaults.backgroundColor or DEFAULT_BACKGROUND)
+	local background = Color.clone(defaults.backgroundColor, DEFAULT_BACKGROUND)
 	local lockWindow = defaults.lockWindow or opts.lockWindow
 	local clockMode = opts.clockMode or defaults.clockMode or "love" -- "driver" keeps time in scenario/driver, "love" advances per frame
 	local clockRate = opts.clockRate or defaults.clockRate or playbackSpeed or 1

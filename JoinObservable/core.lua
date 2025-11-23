@@ -4,7 +4,7 @@ local Schema = require("JoinObservable.schema")
 local Result = require("JoinObservable.result")
 local Strategies = require("JoinObservable.strategies")
 local Expiration = require("JoinObservable.expiration")
-local Log = require("log").withTag("join")
+local Log = require("util.log").withTag("join")
 
 local JoinObservableCore = {}
 

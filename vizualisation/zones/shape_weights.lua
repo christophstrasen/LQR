@@ -1,16 +1,11 @@
+local Math = require("util.math")
+
 local ShapeWeights = {}
 
 local TWO_PI = math.pi * 2
 local FIXED_SEED = 42
 
-local function clamp01(v)
-	if v < 0 then
-		return 0
-	elseif v > 1 then
-		return 1
-	end
-	return v
-end
+local clamp01 = Math.clamp01
 
 local function linProgress(idx, count)
 	if count <= 1 then
