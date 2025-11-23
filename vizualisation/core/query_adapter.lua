@@ -6,33 +6,11 @@ local VizLog = require("util.log").withTag("viz-hi")
 local Result = require("JoinObservable.result")
 local Math = require("util.math")
 local TableUtil = require("util.table")
+local Color = require("util.color")
 
 local QueryVizAdapter = {}
 
 local DEFAULT_MAX_LAYERS = 5
-
--- Simple HSV->RGB converter to generate evenly spaced schema colors.
-local function hsvToRgb(h, s, v)
-	local i = math.floor(h * 6)
-	local f = h * 6 - i
-	local p = v * (1 - s)
-	local q = v * (1 - f * s)
-	local t = v * (1 - (1 - f) * s)
-	local mod = i % 6
-	if mod == 0 then
-		return v, t, p
-	elseif mod == 1 then
-		return q, v, p
-	elseif mod == 2 then
-		return p, v, t
-	elseif mod == 3 then
-		return p, q, v
-	elseif mod == 4 then
-		return t, p, v
-	else
-		return v, p, q
-	end
-end
 
 local RESERVED_HUES = { 0.0, 1 / 3 }
 local MIN_HUE_DISTANCE = 0.08
@@ -136,7 +114,7 @@ local function rainbowPalette(names)
 		local unit = ((i - 0.5) / total) % 1
 		local offset = unit * totalRange
 		local hue = hueAtOffset(allowed, offset)
-		local r, g, b = hsvToRgb(hue, 0.7, 0.95)
+		local r, g, b = Color.hsvToRgb(hue, 0.7, 0.95)
 		palette[name] = { r, g, b, 1 }
 	end
 	-- Standard outer colors for join/expired.

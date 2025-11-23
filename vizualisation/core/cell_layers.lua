@@ -1,12 +1,9 @@
 local Log = require("util.log")
 local Color = require("util.color")
+local Time = require("util.time")
 
 local CellLayer = {}
 CellLayer.__index = CellLayer
-
-local function nowSeconds()
-	return love and love.timer and love.timer.getTime() or os.clock()
-end
 
 local function newLayer(bgColor, ttl)
 	return setmetatable({
@@ -63,8 +60,8 @@ local function logFade(layer, reason)
 end
 
 function CellLayer:addLayer(opts)
-	local key = opts.id or opts.key or tostring(nowSeconds())
-	local ts = opts.ts or nowSeconds()
+	local key = opts.id or opts.key or tostring(Time.nowSeconds())
+	local ts = opts.ts or Time.nowSeconds()
 	self.layers[key] = {
 		id = key,
 		color = Color.clone(opts.color),
