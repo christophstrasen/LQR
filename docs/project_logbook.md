@@ -242,12 +242,12 @@
 ### Highlights
 - **Low-level grouping core (`groupByObservable`):** Introduced a new low-level operator that consumes a joined+filtered row stream and produces three observables:
   - an **aggregate stream** (one synthetic schema per group with `_count` and `_sum/_avg/_min/_max` under nested tables);
-  - an **enriched stream** (original row view with `_groupKey/_groupName/_count` plus inline aggregates on each schema);
+  - an **enriched stream** (original row view with `_count`, inline aggregates on each schema, and grouping metadata in `RxMeta`);
   - an **expired stream** (raw evictions/expirations per key for debugging).
   Windows are time-based (`time/field/currentFn`) or count-based (`count`), with `gcOnInsert`/`gcIntervalSeconds`/`gcScheduleFn`/`flushOnComplete` matching join GC semantics. Aggregate rows are tagged with `RxMeta.schema = groupName` (default `_groupBy:<firstSchema>`/`_groupBy`), while enriched rows preserve source schemas and add a synthetic `"_groupBy:<groupName>"` payload for downstream consumption.
 
 - **Data model + tests:** Locked down the aggregate and enriched shapes in `groupByObservable.data_model` and validated them via `group_by_data_model_spec` and `group_by_core_spec`:
-  - aggregate rows: `key`, `groupName`, `_count`, `window`, `RxMeta.schema`, nested `_sum/_avg/_min/_max`;
+  - aggregate rows: `_count`, `window`, `RxMeta.{schema,groupKey,groupName,view}`, nested `_sum/_avg/_min/_max`;
   - enriched rows: top-level `_groupKey/_groupName/_count`, per-schema `_sum/_avg/_min/_max`, plus a synthetic `"_groupBy:<groupName>"` subtree mirroring aggregates.
 
 - **High-level API integration:** Extended `QueryBuilder` with `groupBy` / `groupByEnrich` / `groupWindow` / `aggregates` / `having`:

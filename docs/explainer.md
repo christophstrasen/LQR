@@ -166,7 +166,7 @@ local grouped =
 Subscribing to `grouped` yields **one row per group key**, emitted whenever a new event enters or leaves the group window:
 
 - `g.key` is the normalized group key.
-- `g.groupName` is `"customers_grouped"`; `g.RxMeta.schema` is also `"customers_grouped"`, so this
+- `g.RxMeta.groupName` is `"customers_grouped"`; `g.RxMeta.schema` is also `"customers_grouped"`, so this
   stream can be fed into further joins as a synthetic schema.
 - `g._count` is the number of events in the group window.
 - `g.customers.orders._sum.amount` is the sum of `row.customers.orders.amount` over the last 10
@@ -211,15 +211,15 @@ Each enriched row:
 - is still a **row view** built from the `JoinResult`:
   - `row.animals` is the original record for that schema;
   - other schemas from earlier joins (e.g. `row.location`) remain available.
-- carries group-wide metadata at the top level:
-  - `_groupKey` — the group key returned by `groupByEnrich`’s key function;
-  - `_groupName` — `"animals"` in the example above;
+- carries group-wide metadata in `RxMeta`:
+  - `RxMeta.groupKey` — the group key returned by `groupByEnrich`’s key function;
+  - `RxMeta.groupName` — `"animals"` in the example above;
   - `_count` — number of events in the group window for that key.
 - enriches each schema table with aggregate subtables:
   - `row.animals._sum.weight` (sum of weights for that animal type in the window);
   - `row.animals._avg.weight` if requested.
 - optionally includes a **synthetic grouping schema** keyed as `"_groupBy:<groupName>"`:
-  - `row["_groupBy:animals"]` contains `_count`, `_groupKey`, `_groupName`, and the same aggregate
+  - `row["_groupBy:animals"]` contains `_count`, aggregates, and `RxMeta` with `groupKey/groupName`
     prefixes; this is useful if you want to treat grouped events as a single schema in downstream
     pipelines.
 

@@ -46,7 +46,8 @@ describe("GroupByObservable core", function()
 		assert.are.equal(50, lastAgg.schema._sum.value)
 		assert.are.equal(25, lastAgg.schema._avg.value)
 		assert.is_table(lastAgg.RxMeta)
-		assert.are.equal("k1", lastAgg.RxMeta.schema)
+		assert.are.equal("k1", lastAgg.RxMeta.groupKey)
+		assert.are.equal("k1", lastAgg.RxMeta.groupName)
 
 		-- last enriched mirrors aggregate values and keeps original field
 		local lastEnriched = enriched[#enriched]

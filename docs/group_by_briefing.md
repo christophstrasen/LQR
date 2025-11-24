@@ -220,12 +220,6 @@ values and emit them as they change.
 
 ```lua
 aggregateRow = {
-  key = <groupKey>, -- canonical form (string/number)
-
-  -- Optional human-friendly name/label for the group.
-  -- Default: stringified key. Can be overridden via configuration.
-  groupName = <string>|nil, -- default: "_groupBy:<firstSchema>" or "_groupBy"
-
   -- Aggregated values derived from the rows in the current group window.
   -- Shape mirrors configured aggregates and uses prefix tables per aggregator:
   --   - _count         : group size (always present)
@@ -237,8 +231,6 @@ aggregateRow = {
   -- Example for a "battle" schema with nested combat/healing fields:
   --
   -- aggregateRow = {
-  --   key = "battle:zone42",
-  --   groupName = "battle",
   --   _count = 7,
   --   battle = {
   --     combat = {
@@ -248,6 +240,12 @@ aggregateRow = {
   --     healing = {
   --       _sum = { received = 124 },
   --     },
+  --   },
+  --   RxMeta = {
+  --     schema = "battle",
+  --     groupKey = "battle:zone42",
+  --     groupName = "battle",
+  --     view = "aggregate",
   --   },
   -- }
 
@@ -319,10 +317,14 @@ Example:
 
 ```lua
 enrichedEvent = {
-  -- group-wide
-  _groupKey = <primitive>,
-  _groupName = "battle",
+  -- group-wide (metadata lives in RxMeta)
   _count = <number>, -- count including this row within the window
+  RxMeta = {
+    schema = "_groupBy:battle",
+    groupKey = <primitive>,
+    groupName = "battle",
+    view = "enriched",
+  },
 
   -- original schemas, enriched
   customers = {
@@ -356,8 +358,6 @@ enrichedEvent = {
 
   -- synthetic grouping schema (optional) to make enriched rows consumable as a single schema
   ["_groupBy:battle"] = {
-    _groupKey = <primitive>,
-    _groupName = "battle",
     _count = <number>,
     battle = {
       combat = {
@@ -367,6 +367,12 @@ enrichedEvent = {
       healing = {
         _sum = { received = 124 },
       },
+    },
+    RxMeta = {
+      schema = "_groupBy:battle",
+      groupKey = <primitive>,
+      groupName = "battle",
+      view = "enriched",
     },
   },
 }

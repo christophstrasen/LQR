@@ -68,7 +68,7 @@ if demo.groupedAggregate then
 		local avg = row.customers and row.customers.orders and row.customers.orders._avg
 		Log:info(
 			"[group][agg][cust=%s] count=%s sum=%s avg=%s schema=%s",
-			tostring(row.key),
+			tostring(row.RxMeta and row.RxMeta.groupKey),
 			tostring(row._count),
 			tostring(sum and sum.total),
 			tostring(avg and avg.total),
@@ -83,7 +83,7 @@ if demo.groupedEnriched then
 		local avg = row.customers and row.customers.orders and row.customers.orders._avg
 		Log:info(
 			"[group][enr][cust=%s] count=%s latestOrderTotal=%s sum=%s avg=%s",
-			tostring(row._groupKey),
+			tostring(row.RxMeta and row.RxMeta.groupKey),
 			tostring(row._count),
 			tostring(row.orders and row.orders.total),
 			tostring(sum and sum.total),

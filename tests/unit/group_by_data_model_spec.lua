@@ -25,9 +25,13 @@ describe("GroupBy data model", function()
 				window = { start = 1, ["end"] = 2 },
 		})
 
-		assert.are.equal("battle:zone42", aggregate.key)
-		assert.are.equal("battle", aggregate.groupName)
 		assert.are.equal(7, aggregate._count)
+		assert.are.same({
+			schema = "battle",
+			groupKey = "battle:zone42",
+			groupName = "battle",
+			view = "aggregate",
+		}, aggregate.RxMeta)
 		assert.are.equal(81, aggregate.battle.combat._sum.damage)
 		assert.are.equal(13.5, aggregate.battle.combat._avg.damage)
 		assert.are.equal(124, aggregate.battle.healing._sum.received)
@@ -57,9 +61,13 @@ describe("GroupBy data model", function()
 			},
 		})
 
-		assert.are.equal("k1", enriched._groupKey)
-		assert.are.equal("battle", enriched._groupName)
 		assert.are.equal(2, enriched._count)
+		assert.are.same({
+			schema = "battle",
+			groupKey = "k1",
+			groupName = "battle",
+			view = "enriched",
+		}, enriched.RxMeta)
 
 		-- preserves original fields
 		assert.are.equal(10, enriched.battle.combat.damage)
@@ -73,6 +81,12 @@ describe("GroupBy data model", function()
 		-- synthetic schema for grouping
 		assert.is_table(enriched["_groupBy:battle"])
 		assert.are.equal(2, enriched["_groupBy:battle"]._count)
+		assert.are.same({
+			schema = "battle",
+			groupKey = "k1",
+			groupName = "battle",
+			view = "enriched",
+		}, enriched["_groupBy:battle"].RxMeta)
 		assert.are.equal(81, enriched["_groupBy:battle"].battle.combat._sum.damage)
 	end)
 end)

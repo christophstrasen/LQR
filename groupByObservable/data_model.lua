@@ -69,14 +69,15 @@ function M.buildAggregateRow(opts)
 	local aggregates = opts.aggregates or {}
 
 	local payload = {
-		key = opts.key,
-		groupName = groupName,
 		_count = aggregates.count or aggregates._count or 0,
 		window = opts.window,
 	}
-	if groupName then
-		payload.RxMeta = { schema = groupName }
-	end
+	payload.RxMeta = {
+		schema = groupName,
+		groupKey = opts.key,
+		groupName = groupName,
+		view = "aggregate",
+	}
 	if opts.rawState ~= nil then
 		payload._raw_state = opts.rawState
 	end
@@ -108,9 +109,13 @@ function M.buildEnrichedRow(row, opts)
 		end
 	end
 
-	enriched._groupKey = opts.key
-	enriched._groupName = opts.groupName or (opts.key ~= nil and tostring(opts.key)) or nil
 	enriched._count = aggregates.count or aggregates._count or 0
+	enriched.RxMeta = {
+		schema = opts.groupName or (opts.key ~= nil and tostring(opts.key)) or nil,
+		groupKey = opts.key,
+		groupName = opts.groupName or (opts.key ~= nil and tostring(opts.key)) or nil,
+		view = "enriched",
+	}
 
 	applyAggregateKind(enriched, "sum", aggregates.sum)
 	applyAggregateKind(enriched, "avg", aggregates.avg)
@@ -118,17 +123,21 @@ function M.buildEnrichedRow(row, opts)
 	applyAggregateKind(enriched, "max", aggregates.max)
 
 	-- Optionally expose a synthetic schema so enriched rows can be wrapped/consumed downstream.
-	if enriched._groupName then
+	if enriched.RxMeta.groupName then
 		local synthetic = {
-			_groupKey = enriched._groupKey,
-			_groupName = enriched._groupName,
 			_count = enriched._count,
+			RxMeta = {
+				schema = enriched.RxMeta.groupName,
+				groupKey = enriched.RxMeta.groupKey,
+				groupName = enriched.RxMeta.groupName,
+				view = "enriched",
+			},
 		}
 		applyAggregateKind(synthetic, "sum", aggregates.sum)
 		applyAggregateKind(synthetic, "avg", aggregates.avg)
 		applyAggregateKind(synthetic, "min", aggregates.min)
 		applyAggregateKind(synthetic, "max", aggregates.max)
-		local syntheticKey = enriched._groupName
+		local syntheticKey = enriched.RxMeta.groupName
 		if not syntheticKey:match("^_groupBy:") then
 			syntheticKey = "_groupBy:" .. syntheticKey
 		end
