@@ -258,42 +258,15 @@
   - `describe()` now surfaces a `plan.group` section (mode, window, aggregates, having marker).
   A new `query_group_by_spec` covers basic count-window grouping, aggregates, and HAVING on both aggregate and enriched streams.
 
-- **Docs and explainer updates:** Added `docs/group_by_briefing.md` as a full design spec and integrated a new “Grouping and Aggregates (GROUP BY / HAVING)” section into `explainer.md`:
-  - explains how grouping sits after joins/WHERE;
-  - clarifies separate join vs group windows;
-  - documents aggregate and enriched shapes, including the synthetic `_groupBy:` schema;
-  - shows fluent examples (groupBy/groupByEnrich + groupWindow + aggregates + having).
+## Day 17 – Gentle cleanup and utilities consolidation
 
-- **Demos:** Built grouping-aware demos to make behavior tangible:
-  - `three_circles_group`: extends the existing three-way join scenario with per-customer grouping of orders, aggregate + enriched streams, and logging of grouped stats;
-  - `single_group`: a simpler single-schema demo (`events`), grouped by `events.type` with a short time window, sum/avg aggregates, and a headless runner that prints post-HAVING aggregates clearly.
-  Both continue to work with the existing `QueryVizAdapter` (grouping is bolted on after the join+viz pipeline).
+### Highlights
+- **Visualization rename and pruning:** Retired old low-level viz code and renamed the remaining high-level package to `vizualisation/`, updating imports, demos, and specs to match.
+- **Shared utility layer:** Introduced a focused `util/` tier for cross-cutting helpers: logging, Zomboid stubs, math (`clamp`/`clamp01`), color (clone + `hsvToRgb`), table (shallow copies/sets), and time (`nowSeconds`).
+- **Callsite consolidation:** Swapped local helper implementations in query builder, viz adapter, runtime, and zone code to use the new `util` modules, reducing duplication and making intent clearer.
+- **Bootstrap safety:** Commented out `util.zomboid_stubs` in `bootstrap.lua` with a TODO so tests and standalone runs don’t implicitly pull Zomboid globals.
 
-- **Join strategy surface completed:** Exposed all low-level join strategies through the high-level `Query` facade:
-  - Added `rightJoin`, `outerJoin`, `antiLeftJoin`, `antiRightJoin`, and `antiOuterJoin` alongside the existing `innerJoin`/`leftJoin`.
-  - `QueryBuilder:describe()` now reports the concrete join type (`inner`, `left`, `right`, `outer`, `anti_left`, `anti_right`, `anti_outer`) so docs, viz, and tests can reason about it uniformly.
-  - Updated `high_level_api` docs to list the full join verb set and wired tests to assert plan types.
-
-- **Distinct semantics upgraded (per-side, consume-on-match):**
-  - Reinterpreted `distinct = true` in `on` from “just shrink buffer” into a stronger contract:
-    - per-key buffer size is forced to 1 for that schema’s side, and
-    - matched records on that side are **consumed** on match: they are removed from the buffer and emit an expiration with reason `distinct_match`.
-  - Distinct flags are tracked per side (`distinctLeft` / `distinctRight`) so callers can:
-    - mark both sides for one-and-done pair behavior (closest to a “SQL DISTINCT ON pair” experience);
-    - or mark a single side to consume only that side’s entries while letting the opposite side continue matching future arrivals.
-  - Updated docs to make the per-side nature of `distinct` explicit and added a focused test to ensure matches are consumed and expirations fired.
-
-- **Viz pipeline refinements and hover details:**
-  - Extended the high-level viz adapter to emit a synthetic `final` layer (post-WHERE/HAVING) while keeping join layers intact, clarifying the separation between “join mechanics” and “subscriber-visible results.”
-  - Added a hover overlay in the Love2D runner:
-    - hit-tests the grid to find the hovered cell and highlights it;
-    - shows the last N events for that cell (sources, joins, final, expires) in a flowing text panel in the top-right corner for quick inspection.
-  - Threaded per-cell history through the runtime and renderer metadata so hover tooling can render recent activity without replaying the whole stream.
-  - Tightened legend labeling for join layers (including right/outer/anti variants) and wired the projection/domain logic so “final” rings only draw when a valid projection key exists.
-
-### What we learned
-1. **Grouping is another stateful operator, not “magic SQL”:** Treating GROUP BY as a per-key window + aggregate state machine (with its own GC knobs) made it straightforward to plug into the existing join/WHERE pipeline without special-casing it.
-2. **Two views are both useful:** An aggregate stream (synthetic schema per group) is great for dashboards and further joins; enriched events (row view + inline aggregates) are ideal for per-event decisions (“let this through only once the group is large enough”). Supporting both from the same core pays off.
-3. **Join vs group windows must stay conceptually separate:** Join windows answer “how long can records wait to meet partners,” while group windows answer “over which slice do we aggregate?” Keeping them distinct but time-consistent (same notion of time, shared GC policy) avoids surprising interactions when data lingers in join caches.
-4. **Synthetic schemas and prefixes keep things composable:** Using prefixed aggregators (`_sum/_avg/_min/_max`, `_count`) and synthetic `_groupBy:<schema>` schemas keeps grouped outputs composable with the rest of the system, while avoiding collisions with source schemas.
-5. **Good demos need a focused scenario:** A single-schema grouping demo (with carefully chosen event types and values) makes it much easier to “feel” group windows and HAVING thresholds than a complex multi-join scenario where several moving parts interact at once.
+### Takeaways
+1. **Central utilities reduce friction without adding layers:** Moving truly generic helpers (logging, math, color, table, time) into `util/` removed repetition and made intent clearer, without introducing new abstractions or “god modules.”
+2. **Naming and paths matter for ergonomics:** Aligning everything on `vizualisation.*` and `util.*` makes imports predictable and keeps domain code cleaner.
+3. **Host-specific shims should be opt-in:** Parking Zomboid stubs behind `util` and a commented bootstrap keeps the repo friendly for tests while acknowledging the eventual game runtime.
