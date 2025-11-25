@@ -77,6 +77,7 @@ function M.buildAggregateRow(opts)
 		groupKey = opts.key,
 		groupName = groupName,
 		view = "aggregate",
+		shape = "group_aggregate",
 	}
 	if opts.rawState ~= nil then
 		payload._raw_state = opts.rawState
@@ -115,6 +116,7 @@ function M.buildEnrichedRow(row, opts)
 		groupKey = opts.key,
 		groupName = opts.groupName or (opts.key ~= nil and tostring(opts.key)) or nil,
 		view = "enriched",
+		shape = "group_enriched",
 	}
 
 	applyAggregateKind(enriched, "sum", aggregates.sum)
@@ -131,6 +133,7 @@ function M.buildEnrichedRow(row, opts)
 				groupKey = enriched.RxMeta.groupKey,
 				groupName = enriched.RxMeta.groupName,
 				view = "enriched",
+				shape = "group_enriched",
 			},
 		}
 		applyAggregateKind(synthetic, "sum", aggregates.sum)

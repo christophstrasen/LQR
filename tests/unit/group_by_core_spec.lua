@@ -48,6 +48,7 @@ describe("GroupByObservable core", function()
 		assert.is_table(lastAgg.RxMeta)
 		assert.are.equal("k1", lastAgg.RxMeta.groupKey)
 		assert.are.equal("k1", lastAgg.RxMeta.groupName)
+		assert.are.equal("group_aggregate", lastAgg.RxMeta.shape)
 
 		-- last enriched mirrors aggregate values and keeps original field
 		local lastEnriched = enriched[#enriched]
@@ -55,6 +56,7 @@ describe("GroupByObservable core", function()
 		assert.are.equal(30, lastEnriched.schema.value)
 		assert.are.equal(50, lastEnriched.schema._sum.value)
 		assert.are.equal(25, lastEnriched.schema._avg.value)
+		assert.are.equal("group_enriched", lastEnriched.RxMeta.shape)
 
 		-- evicted oldest entry once window exceeded
 		assert.are.equal(1, #expired)

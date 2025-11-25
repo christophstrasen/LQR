@@ -47,6 +47,7 @@ function Result.new()
 	return setmetatable({
 		RxMeta = {
 			schemaMap = {},
+			shape = "join_result",
 		},
 	}, Result)
 end

@@ -2,11 +2,18 @@
 
 This note captures the exact shapes we feed into the query system and the structures that come out of joins and grouping (aggregate view and enriched event view). All examples are simple and schema-tagged.
 
+**RxMeta.shape values:**
+- `record` — plain schema-tagged source emissions
+- `join_result` — join outputs (multi-schema container)
+- `group_enriched` — grouped per-event view
+- `group_aggregate` — grouped aggregate view
+
 ## 1) Inputs: schema-tagged records
 
 - Create sources with `SchemaHelpers.subjectWithSchema(schemaName, opts?)` → returns `subject, observable`.
 - `Schema.wrap` (used inside the helper) enforces/attaches `record.RxMeta`.
 - `RxMeta` after wrapping:
+  - `shape = "record"`
   - `schema` (string, required)
   - `id` (required: from `RxMeta.id` or `opts.idField`/`idSelector` or `record.id`)
   - `idField` label (derived from the chosen id source)
@@ -33,6 +40,7 @@ result = {
   customers = { id=1, name="Ada", RxMeta={ schema="customers", id=1, sourceTime=10 } },
   orders    = { id=101, customerId=1, total=50, RxMeta={ schema="orders", id=101, sourceTime=11 } },
   RxMeta    = {
+    shape = "join_result",
     schemaMap = {
       customers = { schema="customers", schemaVersion=nil, sourceTime=10, joinKey=1 },
       orders    = { schema="orders",    schemaVersion=nil, sourceTime=11, joinKey=1 },
@@ -67,6 +75,7 @@ Shape:
 - `window = { start, end }` — event-time boundaries
 - optional `_raw_state` for engine internals
 - Grouping metadata lives in `RxMeta`:
+  - `RxMeta.shape = "group_aggregate"`
   - `RxMeta.groupKey`, `RxMeta.groupName`, `RxMeta.view = "aggregate"`, `RxMeta.schema = groupName`
 
 Example (groupName `"customers_grouped"`, key by customer id, sum+avg of `orders.total`):
@@ -86,6 +95,7 @@ g = {
     groupKey = 1,
     groupName = "customers_grouped",
     view = "aggregate",
+    shape = "group_aggregate",
   },
 }
 -- emitted each time the group window changes (insert/evict)
@@ -102,7 +112,7 @@ Notes:
 Shape:
 - `_count` on the enriched row
 - Each schema table gains `_sum` / `_avg` / `_min` / `_max` mirrors for configured fields
-- Grouping metadata lives in `RxMeta` (`groupKey`, `groupName`, `view = "enriched"`)
+- Grouping metadata lives in `RxMeta` (`shape = "group_enriched"`, `groupKey`, `groupName`, `view = "enriched"`)
 - Optional synthetic grouping schema `_groupBy:<groupName>` containing aggregates + its own `RxMeta`
 
 Example (grouping animals by `type`, count + weight aggregates):
@@ -115,6 +125,7 @@ enriched = {
     groupKey = "Zebra",
     groupName = "animals",
     view = "enriched",
+    shape = "group_enriched",
   },
 
   animals = {
@@ -135,6 +146,7 @@ enriched = {
       groupKey = "Zebra",
       groupName = "animals",
       view = "enriched",
+      shape = "group_enriched",
     },
   },
 }

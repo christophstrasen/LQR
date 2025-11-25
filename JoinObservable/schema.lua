@@ -86,6 +86,7 @@ function Schema.assertRecordHasMeta(record, context)
 		)
 	end
 
+	meta.shape = meta.shape or "record"
 	return meta
 end
 
@@ -199,6 +200,7 @@ end
 			meta.idField = meta.idField or idField or (idSelector and idLabel) or meta.idField or "unknown"
 	end
 
+		meta.shape = meta.shape or "record"
 	return record
 end
 

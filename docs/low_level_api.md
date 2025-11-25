@@ -27,6 +27,7 @@ Every emission from `joinStream` is a `JoinResult`. It behaves like a table whos
 result:get("customers") -- returns the customer record or nil
 result:schemaNames()    -- sorted list of attached schema names
 result.RxMeta.schemaMap -- metadata per schema (schema name, version, joinKey, sourceTime)
+result.RxMeta.shape     -- "join_result" for join emissions
 ```
 
 Records are attached using the schema supplied to `Schema.wrap("schemaName", observable)`. If the same schema is used multiple times, wrap the stream with unique schema names so you can address them unambiguously.
@@ -180,6 +181,15 @@ All removals emit to the expired channel: buffer overwrites (`replaced`), count-
 ## Warning & Lifecycle Hooks
 
 Join warnings now flow through the shared logger (`util/log.lua`, tag `join`), so adjust `LOG_LEVEL` or use `Log.supressBelow("error", fn)` in tests to mute them temporarily.
+
+### RxMeta shapes
+
+We stamp `RxMeta.shape` to help downstream code decide how to treat emissions:
+
+- `"record"` — plain schema-tagged source records (`Schema.wrap` output).
+- `"join_result"` — emissions from `JoinObservable` (multi-schema containers).
+- `"group_enriched"` — per-event grouped view.
+- `"group_aggregate"` — aggregate/group-state view.
 
 ### Observable lifecycle
 

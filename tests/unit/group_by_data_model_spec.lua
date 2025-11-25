@@ -31,6 +31,7 @@ describe("GroupBy data model", function()
 			groupKey = "battle:zone42",
 			groupName = "battle",
 			view = "aggregate",
+			shape = "group_aggregate",
 		}, aggregate.RxMeta)
 		assert.are.equal(81, aggregate.battle.combat._sum.damage)
 		assert.are.equal(13.5, aggregate.battle.combat._avg.damage)
@@ -67,6 +68,7 @@ describe("GroupBy data model", function()
 			groupKey = "k1",
 			groupName = "battle",
 			view = "enriched",
+			shape = "group_enriched",
 		}, enriched.RxMeta)
 
 		-- preserves original fields
@@ -86,6 +88,7 @@ describe("GroupBy data model", function()
 			groupKey = "k1",
 			groupName = "battle",
 			view = "enriched",
+			shape = "group_enriched",
 		}, enriched["_groupBy:battle"].RxMeta)
 		assert.are.equal(81, enriched["_groupBy:battle"].battle.combat._sum.damage)
 	end)
