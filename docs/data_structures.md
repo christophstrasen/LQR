@@ -67,7 +67,7 @@ row = {
 
 ## 3) GroupBy Aggregate view (group state stream)
 
-`groupBy` produces one synthetic record per group/window update. Payload sits under `groupName` and is tagged `RxMeta.schema = groupName` (default `_groupBy:<firstSchema>`).
+`groupBy` produces one synthetic record per group/window update. It is a **single-schema record** whose schema name is `groupName`, i.e. `g.RxMeta.schema = groupName` (default `_groupBy:<firstSchema>`), but its payload can contain aggregates for multiple upstream schemas under their own keys (e.g. `g.customers`, `g.orders`, `g.refunds`).
 
 Shape:
 - `_count` — events in the group window
@@ -78,16 +78,18 @@ Shape:
   - `RxMeta.shape = "group_aggregate"`
   - `RxMeta.groupKey`, `RxMeta.groupName`, `RxMeta.view = "aggregate"`, `RxMeta.schema = groupName`
 
-Example (groupName `"customers_grouped"`, key by customer id, sum+avg of `orders.total`):
+Example (groupName `"customers_grouped"`, key by customer id, sum+avg of `orders.total` and `refunds.amount`):
 
 ```lua
 g = {
   _count = 3,
-  customers = {
-    orders = {
-      _sum = { total = 150 },
-      _avg = { total = 50 },
-    },
+  orders = {
+    _sum = { total = 150 },
+    _avg = { total = 50 },
+  },
+  refunds = {
+    _sum = { amount = 30 },
+    _avg = { amount = 15 },
   },
   window = { start = 100, end = 110 },
   RxMeta = {
@@ -103,7 +105,7 @@ g = {
 
 Notes:
 - `_count` is always present; other aggregates appear only if requested via `:aggregates`.
-- Aggregates mirror the payload tree: `schema.path._sum.field`.
+- Aggregates mirror the payload tree per schema: e.g. a field path `orders.total` ends up at `g.orders._sum.total`.
 
 ## 4) GroupBy Enriched event view (per-event with group context)
 
