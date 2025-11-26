@@ -16,6 +16,7 @@ local JoinObservable = require("JoinObservable")
 local Result = require("JoinObservable.result")
 local Log = require("util.log").withTag("query")
 local GroupByObservable = require("groupByObservable")
+local Schema = require("JoinObservable.schema")
 local TableUtil = require("util.table")
 
 local DEFAULT_WINDOW_COUNT = 1000
@@ -114,6 +115,110 @@ local function normalizeSourceArg(source, opts)
 		schemaName = opts.schema or opts.name or opts.as
 	end
 	return source, schemaName
+end
+
+local function ensureId(meta, record, opts)
+	if not meta then
+		return
+	end
+	if meta.id ~= nil then
+		return
+	end
+	opts = opts or {}
+	if type(opts.idSelector) == "function" then
+		local ok, value = pcall(opts.idSelector, record)
+		if ok then
+			meta.id = value
+			meta.idField = meta.idField or opts.idField or "custom"
+			return
+		end
+	end
+	if opts.idField and type(record) == "table" then
+		meta.id = record[opts.idField]
+		meta.idField = meta.idField or opts.idField
+		return
+	end
+	if meta.groupKey ~= nil then
+		meta.id = meta.groupKey
+		meta.idField = meta.idField or "groupKey"
+	end
+end
+
+local function maybeResetTime(record, opts)
+	if not opts or not opts.resetTime then
+		return
+	end
+	if type(record) ~= "table" then
+		return
+	end
+	local field = opts.timeField or "sourceTime"
+	local currentFn = opts.currentFn or os.time
+	record[field] = currentFn()
+end
+
+local function buildJoinResultFromEnriched(row, opts)
+	if type(row) ~= "table" then
+		return nil
+	end
+	local result = Result.new()
+	for key, value in pairs(row) do
+		if key ~= "RxMeta" and type(value) == "table" then
+			local meta = value.RxMeta
+			if type(meta) == "table" and type(meta.schema) == "string" and meta.schema ~= "" then
+				ensureId(meta, value, opts)
+				maybeResetTime(value, opts)
+				result:attach(meta.schema, value)
+			end
+		end
+	end
+	return result
+end
+
+local function adaptInput(source, opts)
+	local schemaName = type(opts) == "string" and opts
+		or (type(opts) == "table" and (opts.schema or opts.name or opts.as))
+
+	if getmetatable(source) == QueryBuilder then
+		local built = source:_build()
+		return adaptInput(built.observable, opts)
+	end
+
+	local function adaptValue(value)
+		if isJoinResult(value) then
+			return value
+		end
+		if type(value) ~= "table" then
+			return nil
+		end
+		local meta = value.RxMeta
+		if type(meta) ~= "table" then
+			return nil
+		end
+		local shape = meta.shape or "record"
+		if schemaName and shape ~= "join_result" then
+			meta.schema = schemaName
+		end
+
+		if shape == "group_enriched" then
+			return buildJoinResultFromEnriched(value, opts)
+		end
+
+		if shape == "group_aggregate" or shape == "record" or meta.schema then
+			ensureId(meta, value, opts)
+			maybeResetTime(value, opts)
+			local r = Result.new()
+			return r:attach(meta.schema, value)
+		end
+
+		return nil
+	end
+
+	local adapted = source:map(adaptValue):filter(function(v)
+		return v ~= nil
+	end)
+
+	local inferredSchemas = schemaName and { schemaName } or nil
+	return adapted, inferredSchemas
 end
 
 -- Explainer: makeEmptyObservable offers a no-op observable for missing side channels.
@@ -592,10 +697,14 @@ local function collectPrimarySchemas(builder, set)
 	return set
 end
 
-local function resolveObservable(source)
+local function resolveObservable(source, opts)
 	if getmetatable(source) == QueryBuilder then
 		local built = source:_build()
 		return built.observable, built.expired, source._schemaNames
+	end
+	if source and source.subscribe then
+		local adapted, schemas = adaptInput(source, opts)
+		return adapted, nil, schemas
 	end
 	return source, nil, nil
 end
@@ -606,10 +715,11 @@ end
 ---@return QueryBuilder
 local function newBuilder(source, opts)
 	assert(source and source.subscribe, "Query.from expects an observable")
-	local observable, schemaName = normalizeSourceArg(source, opts)
+	local normalizedSource, schemaName = normalizeSourceArg(source, opts)
+	local observable, inferredSchemas = adaptInput(normalizedSource, opts)
 	local builder = setmetatable({}, QueryBuilder)
 	builder._rootSource = observable
-	builder._rootSchemas = schemaName and { schemaName } or nil
+	builder._rootSchemas = inferredSchemas or (schemaName and { schemaName }) or nil
 	builder._schemaNames = builder._rootSchemas and TableUtil.shallowArray(builder._rootSchemas) or nil
 	builder._steps = {}
 	builder._defaultJoinWindow = defaultJoinWindowOverride
@@ -627,6 +737,7 @@ function QueryBuilder:_addStep(joinType, source, opts)
 		joinType = joinType,
 		source = observable,
 		sourceSchema = schemaName,
+		sourceOpts = type(opts) == "table" and opts or nil,
 	}
 	if schemaName then
 		nextBuilder._schemaNames = union(nextBuilder._schemaNames, { schemaName })
@@ -905,7 +1016,7 @@ function QueryBuilder:_build()
 	local currentSchemas = self._rootSchemas and TableUtil.shallowArray(self._rootSchemas) or nil
 
 	for stepIndex, step in ipairs(self._steps) do
-		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source)
+		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source, step.sourceOpts)
 		if rightExpired then
 			expiredStreams[#expiredStreams + 1] = rightExpired
 		end
