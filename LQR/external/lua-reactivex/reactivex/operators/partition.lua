@@ -1,0 +1,13 @@
+local Observable = require 'reactivex.observable'
+
+require("reactivex.operators.filter")
+require("reactivex.operators.reject")
+
+--- Returns two Observables: one that produces values for which the predicate returns truthy for,
+-- and another that produces values for which the predicate returns falsy.
+-- @arg {function} predicate - The predicate used to partition the values.
+-- @returns {Observable}
+-- @returns {Observable}
+function Observable:partition(predicate)
+  return self:filter(predicate), self:reject(predicate)
+end

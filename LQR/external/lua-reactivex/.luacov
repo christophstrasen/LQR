@@ -1,0 +1,11 @@
+include = {
+   "^.*/reactivex"
+}
+
+coveralls = {
+   pathcorrect = {
+      {"^.*/reactivex", "reactivex"};
+   },
+}
+
+reporter = "lcov"

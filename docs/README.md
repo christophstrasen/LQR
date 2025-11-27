@@ -1,0 +1,26 @@
+# LiQoR Documentation
+
+This folder is the entry point for LiQoR’s user‑facing documentation. It is meant to stay concise and structured, while deeper design notes and historical documents live under `LQR/raw_internal_docs/`.
+
+At the moment, the main places to explore are:
+
+- **Overview & Quickstart**
+  - `README.md` in the repository root — high‑level description of LiQoR and a minimal join example.
+
+- **Concepts (streaming joins & grouping)**
+  - `docs/concepts/records_and_schemas.md` — user‑facing introduction to records, schemas, `RxMeta`, `JoinResult`, and the row view used by `where` and grouping.
+  - `LQR/raw_internal_docs/explainer.md` — how LiQoR thinks about records, schemas, join windows, expirations, and visualization.
+  - `LQR/raw_internal_docs/data_structures.md` — precise shapes for inputs, join outputs, and grouped views.
+
+- **High‑level query API drafts**
+  - `LQR/raw_internal_docs/high_level_api.md` — intended fluent surface (`Query.from`, joins, `on`, `joinWindow`, selection).
+  - `LQR/raw_internal_docs/where_clause_briefing.md` — `WHERE`‑style filtering over joined rows.
+  - `LQR/raw_internal_docs/group_by_briefing.md` — `GROUP BY` / `HAVING` semantics and aggregate/enriched views.
+
+- **Low‑level internals**
+  - `LQR/raw_internal_docs/low_level_api.md` — `JoinObservable.createJoinObservable` and retention/expiration mechanics.
+  - `LQR/raw_internal_docs/project_logbook.md` — day‑by‑day evolution of the join, grouping, distinct, and viz layers.
+  - `LQR/raw_internal_docs/per_key_buffer_refactor.md` — design notes for per‑key buffers and overwrite expirations.
+  - `LQR/raw_internal_docs/logging.md` — logging conventions and log‑level helpers.
+
+As the API stabilizes, new, cleaned‑up guides and references will be added under `docs/` itself (e.g., `docs/concepts/`, `docs/guides/`, `docs/reference/`) and this README will be updated into a full table of contents.

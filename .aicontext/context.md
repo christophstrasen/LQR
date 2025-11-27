@@ -1,7 +1,8 @@
 # AI Context — LiQoR (Lua integrated Query over ReactiveX)
 
 Project: **LiQoR** – Lua integrated Query over ReactiveX  
-A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.  
+Internal prefix / namespacing shorthand: **LQR** (use `LQR` in code and module names; “LiQoR” is external-facing only).
 
 > Single source of truth for how ChatGPT should think and work in this repo.
 
@@ -46,17 +47,13 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 tbd
 ```
 
-
 ## 5) External Sources of Truth (in order)
 
 - **ReactiveX main website** 
   https://reactivex.io/documentation
 
 - **Lua-ReactiveX github**
-  https://github.com/4O4/lua-reactivex
-
-- **Lua-ReactiveX luarocks module**
-  https://luarocks.org/modules/4o4/reactivex
+  https://github.com/christophstrasen/lua-reactivex (a patched fork of https://github.com/4O4/lua-reactivex)
 
 - **Starlot LuaEvent** 
   https://github.com/demiurgeQuantified/StarlitLibrary/blob/main/Contents/mods/StarlitLibrary/42/media/lua/shared/Starlit/LuaEvent.lua
@@ -69,6 +66,16 @@ tbd
 
 - **This projects github**
   https://github.com/christophstrasen/Lua-ReactiveX-exploration
+
+- **end user documentation**
+  README.md
+  docs/
+
+- **documentation guidance**
+  raw_internal_docs/documentation_principles.md
+
+- **Other internal docs**
+  raw_internal_docs/
 
 ## 7) Coding Style & Conventions
 - **Lua:** EmmyLua on all public functions; keep lines ≤ 100 chars. Scene prefabs are exempt from strict style enforcement. 
