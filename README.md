@@ -1,4 +1,6 @@
-# Lua ReactiveX Exploration
+# LiQoR – Lua integrated Query over ReactiveX
+
+*A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.*
 
 [![CI](https://github.com/christophstrasen/Lua-ReactiveX-exploration/actions/workflows/ci.yml/badge.svg)](https://github.com/christophstrasen/Lua-ReactiveX-exploration/actions/workflows/ci.yml)
 

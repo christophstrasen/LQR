@@ -1,3 +1,6 @@
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+
 ## High-Level Reactive Joins vs. Classical SQL (Day 10)
 
 This project treats every record emission flowing through a join as a **record** (a Lua table with `RxMeta` metadata). Instead of querying static tables, we observe infinite streams and compose joins declaratively using `Query`. This explainer highlights the key differences from classical SQL and maps the terminology you will see in the codebase.

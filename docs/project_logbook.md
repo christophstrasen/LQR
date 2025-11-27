@@ -1,5 +1,8 @@
 # Experimentation Logbook – Lua Reactive Joins
 
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+
 ## Day 1 – Foundations
 
 ### Topics explored
@@ -265,8 +268,10 @@
 - **Shared utility layer:** Introduced a focused `util/` tier for cross-cutting helpers: logging, Zomboid stubs, math (`clamp`/`clamp01`), color (clone + `hsvToRgb`), table (shallow copies/sets), and time (`nowSeconds`).
 - **Callsite consolidation:** Swapped local helper implementations in query builder, viz adapter, runtime, and zone code to use the new `util` modules, reducing duplication and making intent clearer.
 - **Bootstrap safety:** Commented out `util.zomboid_stubs` in `bootstrap.lua` with a TODO so tests and standalone runs don’t implicitly pull Zomboid globals.
+- **Result shape tagging + re-ingest path:** Standardized `RxMeta.shape` across all emissions (`record`, `join_result`, `group_enriched`, `group_aggregate`), moved group metadata into `RxMeta` (no more `_groupKey/_groupName` at the top level), and taught `Query.from` to auto-adapt grouped aggregate/enriched streams back into join-ready observables (optional schema override, `resetTime`, and id selection). Added `query_rewrap_spec` plus a small `vizualisation/demo/reingest_group` demo that shows grouping → aggregate stream → second query re-ingestion.
 
 ### Takeaways
 1. **Central utilities reduce friction without adding layers:** Moving truly generic helpers (logging, math, color, table, time) into `util/` removed repetition and made intent clearer, without introducing new abstractions or “god modules.”
 2. **Naming and paths matter for ergonomics:** Aligning everything on `vizualisation.*` and `util.*` makes imports predictable and keeps domain code cleaner.
 3. **Host-specific shims should be opt-in:** Parking Zomboid stubs behind `util` and a commented bootstrap keeps the repo friendly for tests while acknowledging the eventual game runtime.
+4. **Explicit shapes make re-use simple:** Tagging result structures in `RxMeta` and normalizing grouping metadata into `RxMeta` gives us a clean, universal way to distinguish records, joins, and grouped views—and makes “feed this stream into another query” a matter of configuration instead of ad-hoc wrapping.

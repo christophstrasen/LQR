@@ -1,5 +1,8 @@
 # Reactive Event Query System – Briefing
 
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+
 This briefing captures the principles we discussed for an RxLua-backed event query layer that works with Starlit LuaEvents and may be used later by WorldScanner. It focuses on goals, constraints, and design choices so far, then closes with an updated example API.
 
 ## Goals (please confirm/clarify)

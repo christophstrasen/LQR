@@ -1,4 +1,7 @@
-# AI Context — Lua-ReactiveX-exploration
+# AI Context — LiQoR (Lua integrated Query over ReactiveX)
+
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
 
 > Single source of truth for how ChatGPT should think and work in this repo.
 

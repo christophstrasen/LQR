@@ -1,5 +1,8 @@
 # JoinObservable Low-Level API
 
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+
 This document targets power users who want direct control over Lua ReactiveX joins. It covers the behavior of `JoinObservable.createJoinObservable`, its configuration surface, retention/expiration mechanics, and the warning/lifecycle hooks available when composing custom stream topologies.
 
 We follow the reactive programming paradigm defined by [ReactiveX](https://reactivex.io/) and build directly on [4O4/lua-reactivex](https://github.com/4O4/lua-reactivex). If you are new to observables, subjects, or cooperative schedulers, skim those resources first—having the basics down will make the rest of this guide far easier to absorb.

@@ -2,6 +2,9 @@ Maybe outdated???
 
 # High-Level Join API (Draft)
 
+Project: **LiQoR** – Lua integrated Query over ReactiveX  
+A Lua library for expressing complex, SQL-like joins and queries over ReactiveX observable streams.
+
 This captures the intended fluent API for our Lua-ReactiveX join layer. It assumes every
 incoming record is schema-tagged via `Schema.wrap` and focuses on being declarative, chainable,
 and Rx-native.
