@@ -1,15 +1,16 @@
-# LiQoR Documentation
+# LQR Documentation
 
-This folder is the entry point for LiQoR’s user‑facing documentation. It is meant to stay concise and structured, while deeper design notes and historical documents live under `LQR/raw_internal_docs/`.
+This folder is the entry point for LQR’s user‑facing documentation. It is meant to stay concise and structured, while deeper design notes and historical documents live under `LQR/raw_internal_docs/`.
 
 At the moment, the main places to explore are:
 
 - **Overview & Quickstart**
-  - `README.md` in the repository root — high‑level description of LiQoR and a minimal join example.
+  - `README.md` in the repository root — high‑level description of LQR and a minimal join example.
 
 - **Concepts (streaming joins & grouping)**
   - `docs/concepts/records_and_schemas.md` — user‑facing introduction to records, schemas, `RxMeta`, `JoinResult`, and the row view used by `where` and grouping.
-  - `LQR/raw_internal_docs/explainer.md` — how LiQoR thinks about records, schemas, join windows, expirations, and visualization.
+  - `docs/concepts/joins_and_windows.md` — how streaming joins work in LQR, join types, join windows (count/time), per‑key buffers, and the `expired()` side channel.
+  - `LQR/raw_internal_docs/explainer.md` — how LQR thinks about records, schemas, join windows, expirations, and visualization.
   - `LQR/raw_internal_docs/data_structures.md` — precise shapes for inputs, join outputs, and grouped views.
 
 - **High‑level query API drafts**
