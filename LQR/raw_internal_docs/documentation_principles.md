@@ -42,6 +42,7 @@ When in doubt: if a document primarily exists to help end‑users build queries,
     - `record` — single emission flowing through Rx graphs.
     - `schema` / `schema name` — logical label describing record type and how we address it in joins.
     - `JoinResult` — container emitted by joins, indexed by schema name.
+    - `row` — schema‑aware view over a joined emission (`row.<schema>` tables used by `where`/grouping), built from a `JoinResult`.
     - `join window` — retention policy for join caches.
     - `group window` — retention policy for grouping windows.
     - `expired` stream — observability stream of removals from caches/windows, not “business results”.
@@ -116,4 +117,3 @@ Before merging a new or heavily edited document, check:
 - If it is largely historical or exploratory, does it live under `LQR/raw_internal_docs/`?
 
 Following these principles should make LiQoR approachable for new users while still reflecting the full complexity of streaming joins and grouped analytics on top of ReactiveX.
-

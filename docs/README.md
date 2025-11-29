@@ -11,6 +11,7 @@ At the moment, the main places to explore are:
   - `docs/concepts/records_and_schemas.md` — user‑facing introduction to records, schemas, `RxMeta`, `JoinResult`, and the row view used by `where` and grouping.
   - `docs/concepts/joins_and_windows.md` — how streaming joins work in LQR, join types, join windows (count/time), per‑key buffers, and the `expired()` side channel.
   - `docs/concepts/where_and_row_view.md` — row‑level filtering with `where`, how the row view looks, and how to write predicates that behave well for inner and outer joins.
+  - `docs/concepts/grouping_and_having.md` — how to express streaming `GROUP BY` / `HAVING` with `groupBy` / `groupByEnrich`, group windows, and group‑level predicates.
 
 - **Guides**
   - `docs/guides/building_a_join_query.md` — end‑to‑end example: define schema‑tagged sources, join them by key with a window, filter with `where`, and subscribe to both joined rows and `expired()`.
