@@ -319,3 +319,16 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 1. **Docs deserve a real architecture too:** Having a clear separation between overview, user docs, and internal notes should make it much easier to grow LiQoR without burying new users under Day 1–19 history.
 2. **Quickstart should show observability early:** Including `expired()` and a simple `where` in the very first example nudges users toward thinking about join windows, unmatched records, and streaming semantics right away instead of treating them as advanced topics.
 3. **Writing down documentation principles now saves future us:** Capturing how we want to talk about records, schemas, windows, and grouping (and which examples/domains we reuse) should keep future docs and examples from drifting into conflicting terminology or tutorial styles.
+
+## Day 21 – First user-facing docs slice
+
+### Highlights
+- **New concepts section under `docs/`:** Drafted and iterated the first batch of user-facing concept docs: `records_and_schemas`, `joins_and_windows`, `where_and_row_view`, and `grouping_and_having`, all aligned with our documentation principles and sticky vocabulary.
+- **Practical join guide:** Added `guides/building_a_join_query.md`, an end‑to‑end walkthrough that starts from schema-wrapped tables, builds a left join with a join window and `where`, and subscribes to both the main stream and `expired()` with links into lua‑reactivex / reactivex.io for follow‑up operators.
+- **Grouping and `having` refined:** Tightened the `grouping_and_having.md` concept, clarified the role of the group key function, and sharpened the recommendation to prefer `groupByEnrich` as the default for per-event decisions with group context, including how `having` can combine aggregates and per-row fields.
+- **Observable-state mindset:** Strengthened phrasing around “observing join/group state over time” so joins, `where`, and grouping all teach the same streaming mental model instead of a snapshot mentality.
+
+### Takeaways
+1. **We now have a real user-facing docs entry point:** New users can move from the README into a coherent `docs/` slice that explains records/schemas, joins/windows, row-level filters, and grouping/HAVING with consistent examples.
+2. **Concept docs are converging on one vocabulary:** Records/schemas/rows/groups and “windows over streams” now read consistently across joins, `where`, and grouping, which should reduce cognitive load for new users.
+3. **Small wording tweaks still matter:** Clarifying defaults, knobs, and what each emission represents makes the behavior of joins and grouping easier to reason about without changing the API surface.
