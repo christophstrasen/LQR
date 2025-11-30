@@ -1,6 +1,6 @@
 # Joins and Join Windows
 
-LiQoR’s core feature is **joining streaming records** from multiple observables. This page explains:
+LQR’s core feature is **joining streaming records** from multiple observables. This page explains:
 
 - how streaming joins differ from classic SQL joins;
 - which join types the high‑level API exposes; and
@@ -156,7 +156,7 @@ Here:
   - for inner joins, it simply disappears from the cache and is reported on `expired()`;
   - for join types that surface unmatched rows (left/outer/anti joins), this is the moment where that record is treated as “no partner arrived in time” for that join
 
-When you specify only `time` in `joinWindow({ time = ... })`, LiQoR assumes:
+When you specify only `time` in `joinWindow({ time = ... })`, LQR assumes:
 
 - `field = "sourceTime"` (it looks at `record.RxMeta.sourceTime` by default); and
 - `currentFn = os.time`.
@@ -167,11 +167,53 @@ Interval windows are a good fit when:
 - you want window behavior to be directly tied to event timestamps.
 - you can accept that event spikes may grow cache and compute
 
+## Controlling multiplicity: `oneShot` and `distinct`
+
+Joins in LQR operate on **events in a window**, not on “one row per entity”. If both sides can emit several records per key while they are in the window, an `innerJoin` will match **every pair of records** with the same key that overlap in the join window.
+
+For a single join key:
+
+- 3 left‑side records
+- 4 right‑side records
+- all valid in the current window
+
+Can produce up to **12** join results for that key!
+
+> Even if “at the entity level” you think of it as a 1:1 relationship on `id`, it is not. **Observations of a thing are not the thing itself.**
+
+And as all records truly match, this is the correct and bias‑free streaming behavior, but it often surprises first‑time users who expect “one joined row per id”.
+
+LQR exposes two knobs that help you control this multiplicity:
+
+### **Join‑side `oneShot`**
+(via `on{ ..., oneShot = true }` on a given side)  
+
+After a cached record on that side produces its **first** match on this join step, it is removed from that side’s cache. Later records with the same join key are still allowed in and may match against other cached records, but that particular cached entry will not be reused for further matches.  
+This is about “each cached record is used at most once”, not about deduping the upstream schema.
+
+> `oneShot` does not mean “only one match per key”; it means “this **record** has a single match ticket”:
+
+- with `oneShot = true` on the **left** only, each left record is used at most once, but a right record can still match several different left records;
+- with `oneShot = true` on the **right** only, the situation is symmetric;
+- with `oneShot = true` on **both sides**, each record is used at most once, so the total number of matches per key is bounded by `min(#left events, #right events)` rather than `#left × #right`.
+
+### **Schema‑level `distinct`**
+(via `QueryBuilder:distinct(schema, opts)`)
+
+Runs as a separate builder stage before/after joins and keeps at most one entry per key in its own cache, suppressing later events with the same key while that key is remembered. This is the right tool when you want to treat repeated observations of an entity as duplicates for a while. See `distinct_and_dedup.md` for details.
+
+As a rule of thumb:
+
+- use **`oneShot`** when you conceptually want “each cached record on this join side may participate in at most one match” (for example, lookups or dimension‑style joins that should not fan out indefinitely within the window);
+- use **`distinct`** when you want **schema‑level deduplication** that applies across joins, `where`, and grouping, and you want to reduce noise from repeated observations before they even reach the join.
+
 ---
 
 ## Many records per key: per‑key buffers
 
-Real streams often have **many records per join key** (e.g. many orders per customer). LQR handles this by maintaining a small per‑key buffer rather than just the “latest value”.
+This section is more advanced; you can ignore per‑key buffers for most basic queries. It matters when you consciously want “up to the last N observations per key” rather than “whatever happens to be in the global window”.
+
+Even without multiplicity, real streams often have **many records per join key** from upstream sources (e.g. many orders per customer). LQR handles this by maintaining a small per‑key buffer rather than just the “latest value”.
 
 At a high level:
 

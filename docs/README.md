@@ -12,6 +12,7 @@ At the moment, the main places to explore are:
   - `docs/concepts/joins_and_windows.md` — how streaming joins work in LQR, join types, join windows (count/time), per‑key buffers, and the `expired()` side channel.
   - `docs/concepts/where_and_row_view.md` — row‑level filtering with `where`, how the row view looks, and how to write predicates that behave well for inner and outer joins.
   - `docs/concepts/grouping_and_having.md` — how to express streaming `GROUP BY` / `HAVING` with `groupBy` / `groupByEnrich`, group windows, and group‑level predicates.
+  - `docs/concepts/distinct_and_dedup.md` — schema‑aware deduplication with `distinct`, how distinct windows remember keys, and how this interacts with join/group windows and `expired()`.
 
 - **Guides**
   - `docs/guides/building_a_join_query.md` — end‑to‑end example: define schema‑tagged sources, join them by key with a window, filter with `where`, and subscribe to both joined rows and `expired()`.

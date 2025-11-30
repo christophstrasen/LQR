@@ -152,7 +152,7 @@ Cons:
 
 ## Accessing aggregate values
 
-Both views expose aggregate values in the same shape; the only difference is whether you read them off a **grouped row** from `groupBy` or an **enriched row** from `groupByEnrich`. 
+Both views expose aggregate values in the same shape; the only difference is whether you read them off a **grouped row** from `groupBy` or an **enriched row** from `groupByEnrich`. In the examples below we will call this grouped state `groupResult`; in the enriched view, `groupResult` is simply the `row` you receive in `having` or downstream operators.
 
 - **Row count per group*** (always on by default) 
   `groupResult._count_all` — number of rows in the group window for this key (`COUNT(*)`‑style).
@@ -224,7 +224,7 @@ Typical uses:
 - “only emit the state of groups whose sum/avg crosses a threshold” → check fields like `groupResult.orders._sum.total` or `groupResult.orders._avg.total`;
 - “only let enriched rows through where a row‑level condition and a group condition hold” → e.g. VIP customers **and** `(groupResult._count_all or 0) >= 3` in the last 10 seconds.
 
-> As in the the enriched view `having` can access the full `row` it can serve both as aggregate filter _and_ as final filter stage to apply row‑level conditions but now with full group context.
+> As in the enriched view `having` can access the full `row` (which is also your `groupResult`), it can serve both as aggregate filter _and_ as final filter stage to apply row‑level conditions but now with full group context.
 
 `having` does not change group windows; it simply decides which grouped emissions are visible downstream.
 

@@ -8,7 +8,7 @@ If you understand this page, the later docs on joins, windows, and grouping will
 
 ## Records are events, not rows
 
-In LiQoR, a **record** is a single emission on an Rx observable:
+In LQR, a **record** is a single emission on an Rx observable:
 
 - It is just a Lua table.
 - It always carries a `record.RxMeta` table with metadata.
@@ -72,7 +72,7 @@ After wrapping:
 
 If you do not have a natural `id` field, you can supply an `idSelector` function instead of `idField` and generate a **synthetic, but stable** identifier, e.g. a UUID or an auto‑incrementing counter you maintain for that stream.
 
-LiQoR does not *enforce* global uniqueness of `RxMeta.id`, but treating `id` as “this logical record’s identity” is strongly recommended:
+LQR does not *enforce* global uniqueness of `RxMeta.id`, but treating `id` as “this logical record’s identity” is strongly recommended:
 
 - joins and grouping rely on join keys / group keys, not on `id`, so non‑unique ids will not break the core mechanics; but
 - logs, metrics, visualization, and any dedupe logic that uses `id` as a key become much easier to reason about when each record for a given schema has a stable, unique id.
