@@ -262,7 +262,7 @@ documentation and examples that use it.
 - Add a simple marker (e.g., `plan.where = true`) to `describe()` when a predicate is configured; do not serialize the function.
 
 **Phase 4 — Tests**
-- Add a new spec (e.g., `LQR/tests/unit/query_where_spec.lua`):
+- Add a new spec (e.g., `tests/unit/query_where_spec.lua`):
   - inner join happy path: predicate keeps expected matches;
   - left join: missing right side yields `{}` and predicate can safely read `row.orders.id`;
   - selection-only query with `where` filters root stream;

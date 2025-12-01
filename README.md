@@ -81,7 +81,7 @@ In a real project you would typically:
 - build observables from event buses or subjects instead of static tables; and
 - layer additional operators like more complex `:where(...)` predicates, `:groupBy(...)`, and `:distinct(...)` on top of the join.
 
-See the `examples.lua` file and the tests under `LQR/tests/unit` for more complete scenarios.
+See the `examples.lua` file and the tests under `tests/unit` for more complete scenarios.
 
 ---
 
@@ -112,7 +112,7 @@ Run this once after cloning:
 pre-commit install
 ```
 
-This installs the Git hook that automatically runs `busted LQR/tests/unit` before each commit.
+This installs the Git hook that automatically runs `busted tests/unit` before each commit.
 
 ### Manual Run
 

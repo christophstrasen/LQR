@@ -27,4 +27,4 @@ jobs:
         run: luarocks install busted
 
       - name: Run unit tests
-        run: busted LQR/tests/unit
+        run: busted tests/unit

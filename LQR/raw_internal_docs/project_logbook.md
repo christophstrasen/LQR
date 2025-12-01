@@ -28,7 +28,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ### Highlights
 - **Modular core:** Broke the monolithic `JoinObservable/init.lua` into focused helpers (`strategies`, `expiration`, `warnings`) and kept only the observable factory + key-selector/touch helpers in the entry module. This makes reasoning about join behavior, warning plumbing, and expiration logic far easier.
 - **Powerful expiration join windows:** Replaced the lone `maxCacheSize` knob with `joinWindow` modes (`count`, `interval`, `time`, `predicate`). Each mode emits structured expiration packets (“evicted”, “expired_interval”, “expired_time”, etc.) and replays unmatched rows according to the strategy, giving users stronger control over correctness join windows. A new LuaEvents experiment demonstrates every mode with timestamped data.
-- **Test depth:** Suite now covers default joins, functional selectors, count/interval/time/predicate retention, nil-key drops, malformed packets, warning suppression, merge ordering + failure, matched-record guarantees, and manual disposal. Everything runs cleanly via `busted LQR/tests/unit/join_observable_spec.lua`.
+- **Test depth:** Suite now covers default joins, functional selectors, count/interval/time/predicate retention, nil-key drops, malformed packets, warning suppression, merge ordering + failure, matched-record guarantees, and manual disposal. Everything runs cleanly via `busted tests/unit/join_observable_spec.lua`.
 
 ### Key learnings
 1. **Visibility beats silence:** Dropped packets (nil keys, malformed merge output, predicate errors) must surface via warnings; use the shared logger tag (`join`) and `Log.supressBelow("error", fn)` in tests to mute noise without sacrificing production observability.
@@ -91,7 +91,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **Observable helpers:** New `viz/observables.lua` and `viz/observable_delay.lua` build the demo streams, normalize join/expired records, and inject randomized delays without patching upstream `lua-reactivex`.
 - **Flexible layouts:** Added `startOffset` at the grid and layer level so scenarios can offset ID placement without touching code. `viz/pre_render.lua` automatically derives the right mapper.
 - **Lean pre-render core:** Removed legacy extractors and redundant helpers; a single schema-aware builder now handles track/label/hover/meta selection for every stream.
-- **Testing + hygiene:** Extended `LQR/tests/unit/pre_render_spec.lua` to cover delay behavior and start offsets, ensuring viz regressions get caught in pre-commit/CI. Vendor edits to `lua-reactivex` were reverted, keeping the upstream dependency clean.
+- **Testing + hygiene:** Extended `tests/unit/pre_render_spec.lua` to cover delay behavior and start offsets, ensuring viz regressions get caught in pre-commit/CI. Vendor edits to `lua-reactivex` were reverted, keeping the upstream dependency clean.
 
 ### Next steps
 1. Document the stream descriptor schema (fields, optional `track_schema`, hover syntax) and consider loading it from scenario files.

@@ -3,6 +3,6 @@ repos:
     hooks:
       - id: busted-tests
         name: Run busted tests
-        entry: busted LQR/tests/unit
+        entry: busted tests/unit
         language: system
         pass_filenames: false

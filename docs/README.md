@@ -34,14 +34,6 @@ These pages explain the main concepts you will use in most queries:
 - [distinct_and_dedup](concepts/distinct_and_dedup.md)  
   Schema‑aware deduplication with `distinct(schema, opts)`, how distinct windows remember keys (count/time), how duplicates surface on `expired()`, and how `distinct` composes with join/group windows and `oneShot`.
 
-Suggested reading order:
-
-1. [records_and_schemas](concepts/records_and_schemas.md)
-2. [joins_and_windows](concepts/joins_and_windows.md)
-3. [where_and_row_view](concepts/where_and_row_view.md)
-4. [grouping_and_having](concepts/grouping_and_having.md)
-5. [distinct_and_dedup](concepts/distinct_and_dedup.md)
-
 ---
 
 ## Guides (step‑by‑step)
