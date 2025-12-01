@@ -162,7 +162,7 @@ If you omit `window`, `distinct` uses a count‑based window with a reasonable d
 
 ## How `distinct` interacts with other windows
 
-If you have read `joins_and_windows.md`, you have already seen join windows. It helps to separate the roles of the different windows:
+If you have read [joins_and_windows](joins_and_windows.md), you have already seen join windows. It helps to separate the roles of the different windows:
 
 - **Join window** (`joinWindow`)  
   Controls how long individual **records** stay eligible to participate in joins.

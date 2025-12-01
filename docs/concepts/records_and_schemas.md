@@ -12,7 +12,8 @@ In LQR, a **record** is a single emission on an Rx observable:
 
 - It is just a Lua table.
 - It always carries a `record.RxMeta` table with metadata.
-- It represents something that happened at a point in (event) time.
+- It represents something that happened, potentially *to* a more static entity, at a point in (event) time, .
+- Rarely in business logic is the record the entity itself.
 
 Typical source record (before any joins):
 

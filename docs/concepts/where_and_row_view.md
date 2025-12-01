@@ -23,7 +23,7 @@ row = {
 }
 ```
 
-Think of `row` as “one table per schema in the query”, with missing partners represented as empty tables. The full row view also carries `_raw_result` with the underlying `JoinResult` as described in `records_and_schemas.md`; in this concept we focus on the per‑schema tables you normally use in `where` predicates.
+Think of `row` as “one table per schema in the query”, with missing partners represented as empty tables. The full row view also carries `_raw_result` with the underlying `JoinResult` as described in [records_and_schemas](records_and_schemas.md); in this concept we focus on the per‑schema tables you normally use in `where` predicates.
 
 ---
 

@@ -6,7 +6,7 @@ LQR’s core feature is **joining streaming records** from multiple observables.
 - which join types the high‑level API exposes; and
 - how **join windows** control memory and “how long records can wait for a partner”.
 
-If you already read `records_and_schemas.md`, you know what records, schemas, and `JoinResult`s are. This page builds directly on that.
+If you already read [records_and_schemas](records_and_schemas.md), you know what records, schemas, and `JoinResult`s are. This page builds directly on that.
 
 ---
 
@@ -200,7 +200,7 @@ This is about “each cached record is used at most once”, not about deduping 
 ### **Schema‑level `distinct`**
 (via `QueryBuilder:distinct(schema, opts)`)
 
-Runs as a separate builder stage before/after joins and keeps at most one entry per key in its own cache, suppressing later events with the same key while that key is remembered. This is the right tool when you want to treat repeated observations of an entity as duplicates for a while. See `distinct_and_dedup.md` for details.
+Runs as a separate builder stage before/after joins and keeps at most one entry per key in its own cache, suppressing later events with the same key while that key is remembered. This is the right tool when you want to treat repeated observations of an entity as duplicates for a while. See [distinct_and_dedup](distinct_and_dedup.md) for details.
 
 As a rule of thumb:
 
