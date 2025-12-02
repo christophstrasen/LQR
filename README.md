@@ -85,12 +85,64 @@ See the `examples.lua` file and the tests under `tests/unit` for more complete s
 
 ---
 
+## When would you want to use LQR or reactive programming?
+
+Reach for L*i*Q*o*R the when you need to relate and group several event sources in real time; use plain reactive streams for simpler live work, and if polling already gives timely answers in a simple enough manner, you don’t need to "go reactive" at all.
+
+**In a nutshell:**
+
+1) **Skip reactive programming when:**
+- You can poll or call when needed and still meet latency
+- correctness/completeness matters more than immediacy
+- You need strict ordering/transactions 
+1) **Use Plain Rx when:**
+- You can’t pull all data in one go
+- You’re following/observing a single stream/thing
+- You're handling primarily scalars/simple value
+- “live enough” matters more than full completeness
+1) **Try out LQR when:** 
+- You can’t pull all data in one go
+- You need to relate multiple streams/observations
+- You need to support more complex shapes and different data rates
+- You don't need to create a perfectly complete snapshot. 
+
+### Tradeoffs at a glance
+
+Quick comparison of what each approach may deliver
+
+| Concern           | Non-reactive (poll) | Plain Rx | LQR      |
+| ----------------- | ------------------- | -------- | -------- |
+| Connectedness     | **High**            | Low      | **High** |
+| Completeness      | **High**            | Low      | Depends  |
+| Simplicity        | Depends             | **High** | Low      |
+| Real-time Ability | Limited             | **High** | **High** |
+
+### How to combine Plain Rx and LQR
+
+- Rx **before** LQR: clean/normalize sources (map/filter/debounce).
+- LQR for correlation/state: joins, anti-joins, distinct, grouped aggregates with explicit retention.
+- Rx **after** LQR: map/filter/share results to consumers or side-effects without redoing correlation.
+
+---
+
+
 ## Documentation
 
 - **Overview & Quickstart:** this `README.md`.
 - **User & API docs:** see `docs/` (table of contents and links into conceptual guides, how‑tos, and references).
 - **Development workflow:** see `docs/development.md`.
 - **GC & scheduling:** see `docs/concepts/gc_and_scheduling.md` for retention/expiration and scheduler setup.
+
+## Use cases
+
+- **Game programming:** If a player enters zone Z and triggers beacon B within 3s, spawn encounter X; otherwise mark the attempt stale. 
+> LQR handles the keyed, time-bounded join and emits unmatched/expired events for debugging balance.
+- **Realtime personalization/ads:** Show offer O to users who viewed product P and then searched for related term T within 10s; drop the impression if no add-to-cart happens within 30s.
+> LQR keeps streams keyed by user/session, joins them in windows, and emits expirations for dropped/late flows.
+- **Security/fraud:** Flag logins from device X if they are followed by a high-value transaction from a different IP within 15s; rate-limit per account across sliding 5-minute windows.
+> LQR joins streams by account/device and provides grouped aggregates for rate controls.
+- **IoT/telemetry:** Join telemetry from sensor D with its latest config/firmware event; if no telemetry arrives for 60s, emit a stale alert; group per site to cap concurrent stale devices.
+> LQR bring Cross-stream correlation, staleness, and grouped caps.
 
 ---
 
