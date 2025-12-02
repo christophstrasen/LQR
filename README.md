@@ -85,7 +85,7 @@ In a real project you would typically:
 - build observables from event buses or subjects instead of static tables; and
 - layer additional operators like more complex `:where(...)` predicates, `:groupBy(...)`, and `:distinct(...)` on top of the join.
 
-See the `examples.lua` file, `tests/unit` and the `vizualisation/demo` folders for more varied scenarios.
+See [examples.lua](examples.lua), [tests/unit](tests/unit), and [vizualisation/demo](vizualisation/demo) for more varied scenarios.
 
 ---
 
@@ -127,17 +127,8 @@ Quick comparison of what each approach may deliver
 - LQR for correlation/state: joins, anti-joins, distinct, grouped aggregates with explicit retention.
 - Rx **after** LQR: map/filter/share results to consumers or side-effects without redoing correlation.
 
----
 
-
-## Documentation
-
-- **Overview & Quickstart:** this `README.md`.
-- **User & API docs:** see `docs/` (table of contents and links into conceptual guides, how‑tos, and references).
-- **Development workflow:** see `docs/development.md`.
-- **GC & scheduling:** see `docs/concepts/gc_and_scheduling.md` for retention/expiration and scheduler setup.
-
-## Use cases
+### Example Use cases
 
 - **Game programming:** If a player enters zone Z and triggers beacon B within 3s, spawn encounter X; otherwise mark the attempt stale. 
 > LQR handles the keyed, time-bounded join and emits unmatched/expired events for debugging balance.
@@ -149,6 +140,16 @@ Quick comparison of what each approach may deliver
 > LQR bring Cross-stream correlation, staleness, and grouped caps.
 
 ---
+
+## Documentation
+
+- **Overview & Quickstart:** this `README.md`.
+- **User & API docs:** see [docs/](docs/README.md) (table of contents and links into conceptual guides, how‑tos, and references).
+- **Development workflow:** see [docs/development.md](docs/development.md).
+- **GC & scheduling:** see [docs/concepts/gc_and_scheduling.md](docs/concepts/gc_and_scheduling.md) for retention/expiration and scheduler setup.
+
+---
+
 
 ## Props & Credits
 
