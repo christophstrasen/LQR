@@ -143,10 +143,8 @@ Quick comparison of what each approach may deliver
 
 ## Documentation
 
-- **Overview & Quickstart:** this `README.md`.
 - **User & API docs:** see [docs/](docs/README.md) (table of contents and links into conceptual guides, how‑tos, and references).
 - **Development workflow:** see [docs/development.md](docs/development.md).
-- **GC & scheduling:** see [docs/concepts/gc_and_scheduling.md](docs/concepts/gc_and_scheduling.md) for retention/expiration and scheduler setup.
 
 ---
 
