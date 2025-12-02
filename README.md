@@ -17,6 +17,10 @@ It is designed for in‑process, single‑threaded environments like Lua game ru
 
 ---
 
+https://github.com/user-attachments/assets/42733f4d-7063-4cf2-9047-0f6ada5b4172
+
+---
+
 ## Quickstart
 
 This example shows how to:
@@ -81,13 +85,13 @@ In a real project you would typically:
 - build observables from event buses or subjects instead of static tables; and
 - layer additional operators like more complex `:where(...)` predicates, `:groupBy(...)`, and `:distinct(...)` on top of the join.
 
-See the `examples.lua` file and the tests under `tests/unit` for more complete scenarios.
+See the `examples.lua` file, `tests/unit` and the `vizualisation/demo` folders for more varied scenarios.
 
 ---
 
 ## When would you want to use LQR or reactive programming?
 
-Reach for L*i*Q*o*R the when you need to relate and group several event sources in real time; use plain reactive streams for simpler live work, and if polling already gives timely answers in a simple enough manner, you don’t need to "go reactive" at all.
+Reach for the L*i*Q*o*R when you need to relate and group several event sources in real time; use plain reactive streams for simpler live work, and if polling already gives timely answers in a simple enough manner, you don’t need to "go reactive" at all.
 
 **In a nutshell:**
 
