@@ -1,1 +1,4 @@
 out.log
+
+# VS Code local overrides
+.vscode/LQR.local.code-workspace

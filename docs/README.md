@@ -47,6 +47,13 @@ More guides (grouped queries, integration how‑tos, recipes) will live under `d
 
 ---
 
+## Development
+
+- [development.md](development.md)  
+  Contributor workflow for this repo (pre-commit, busted, and hook setup).
+
+---
+
 ## Internal design notes (optional)
 
 These documents are **not** required to use LQR, but are useful if you want to understand internal mechanics or contribute to the library.

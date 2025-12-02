@@ -1,0 +1,18 @@
+{
+	// Copy this file to LQR.local.code-workspace for per-machine overrides and
+	// open that workspace in VS Code. It layers on top of the shared settings.
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		// Local binary paths
+		"Lua.misc.executablePath": "/run/current-system/sw/bin/lua-language-server",
+		"stylua.styluaPath": "/run/current-system/sw/bin/stylua",
+
+		// Editor preferences
+		"vim.enableNeovim": true,
+		"vim.disableExtension": true
+	}
+}

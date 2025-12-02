@@ -1,4 +1,6 @@
 {
+    // Shared VS Code settings for the workspace. Machine-specific overrides go in
+    // LQR.local.code-workspace (gitignored); see .vscode/README.md.
     "Lua.workspace.library": [
         "${workspaceFolder}/external/lua-reactivex",
         "${workspaceFolder}/external/StarlitLibrary/Contents/mods/StarlitLibrary/42/media/lua/shared"
@@ -10,7 +12,6 @@
     "Lua.completion.callSnippet": "Both",
     "Lua.hint.arrayIndex": "Enable",
     "Lua.hint.enable": true,
-    "Lua.misc.executablePath": "/run/current-system/sw/bin/lua-language-server",
     "Lua.runtime.path": [
         "?.lua",
         "?/init.lua",
@@ -19,25 +20,19 @@
     "Lua.completion.requireSeparator": "/",
     "Lua.workspace.preloadFileSize": 800,
     "Lua.diagnostics.globals": [
-    "require",
+        "require"
     ],
+
     // --- Stylua formatter integration ---
     "[lua]": {
         "editor.defaultFormatter": "JohnnyMorganz.stylua",
         "editor.formatOnSave": true
     },
-    "stylua.styluaPath": "/run/current-system/sw/bin/stylua",
     "stylua.targetReleaseVersion": "latest",
 
-    // in settings.json
-    "vim.enableNeovim": true,
-    "vim.disableExtension": true,
     "Lua.runtime.builtin": {
         "debug": "disable",
         "io": "disable",
         "package": "disable"
     }
-
-
-    
 }

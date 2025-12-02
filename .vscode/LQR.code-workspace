@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		// Workspace-wide shared settings live here; machine-specific overrides belong
+		// in LQR.local.code-workspace (gitignored).
+		"stylua.targetReleaseVersion": "latest"
+	}
+}
