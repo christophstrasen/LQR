@@ -90,6 +90,7 @@ See the `examples.lua` file and the tests under `tests/unit` for more complete s
 - **Overview & Quickstart:** this `README.md`.
 - **User & API docs:** see `docs/` (table of contents and links into conceptual guides, how‑tos, and references).
 - **Development workflow:** see `docs/development.md`.
+- **GC & scheduling:** see `docs/concepts/gc_and_scheduling.md` for retention/expiration and scheduler setup.
 
 ---
 

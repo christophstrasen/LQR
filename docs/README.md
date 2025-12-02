@@ -34,6 +34,9 @@ These pages explain the main concepts you will use in most queries:
 - [distinct_and_dedup](concepts/distinct_and_dedup.md)  
   Schema‑aware deduplication with `distinct(schema, opts)`, how distinct windows remember keys (count/time), how duplicates surface on `expired()`, and how `distinct` composes with join/group windows and `oneShot`.
 
+- [gc_and_scheduling](concepts/gc_and_scheduling.md)  
+  How GC runs (on insert vs periodic), scheduler requirements (`gcScheduleFn`), and how retention affects unmatched emissions and time windows during traffic lulls.
+
 ---
 
 ## Guides (step‑by‑step)

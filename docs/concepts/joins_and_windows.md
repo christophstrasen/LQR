@@ -8,6 +8,8 @@ LQR’s core feature is **joining streaming records** from multiple observables.
 
 If you already read [records_and_schemas](records_and_schemas.md), you know what records, schemas, and `JoinResult`s are. This page builds directly on that.
 
+For GC/scheduler options that keep time windows sweeping during traffic lulls, see [gc_and_scheduling](gc_and_scheduling.md).
+
 ---
 
 ## Streaming joins vs. SQL joins

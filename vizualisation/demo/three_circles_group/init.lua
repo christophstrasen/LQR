@@ -125,7 +125,7 @@ local function buildZones()
 		{
 			label = "cust_circle",
 			schema = "customers",
-			center = 1020,
+			center = 614,
 			range = 1,
 			radius = 7,
 			shape = "circle10",
@@ -149,7 +149,7 @@ local function buildZones()
 		{
 			label = "ord_circle",
 			schema = "orders",
-			center = 1312,
+			center = 906,
 			range = 1,
 			radius = 7,
 			shape = "circle10",
@@ -175,7 +175,7 @@ local function buildZones()
 		{
 			label = "ship_circle",
 			schema = "shipments",
-			center = 1520,
+			center = 1114,
 			range = 1,
 			radius = 7,
 			shape = "circle10",
