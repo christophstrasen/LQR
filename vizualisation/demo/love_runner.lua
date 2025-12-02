@@ -104,6 +104,7 @@ local function drawHeader(snapshot, lg, backgroundColor)
 		for _, entry in ipairs(outerLegend) do
 			local rectSize = 16
 			local x = 12
+			local textWidth = love.graphics.getWidth() - x - rectSize - 16
 			lg.setColor(entry.color or { 1, 1, 1, 1 })
 			lg.rectangle("fill", x, headerY, rectSize, rectSize)
 			local inset = 2
@@ -126,11 +127,18 @@ local function drawHeader(snapshot, lg, backgroundColor)
 				for _, reason in ipairs(entry.reasons) do
 					parts[#parts + 1] = string.format("%s: %d", reason.reason, reason.total)
 				end
-				reasonLabel = " Expiration reasons: [" .. table.concat(parts, ", ") .. "]"
+				reasonLabel = "reasons: [" .. table.concat(parts, ", ") .. "]"
 			end
-			local label = (entry.label or entry.kind) .. countLabel .. reasonLabel
-			lg.printf(label, x + rectSize + 8, headerY, love.graphics.getWidth() - x - rectSize - 16, "left")
-			headerY = headerY + 20
+			local lines = { (entry.label or entry.kind) .. countLabel }
+			if reasonLabel ~= "" then
+				lines[#lines + 1] = reasonLabel
+			end
+			local label = table.concat(lines, "\n")
+			lg.printf(label, x + rectSize + 8, headerY, textWidth, "left")
+			local font = love.graphics.getFont()
+			local _, wrapped = font:getWrap(label, textWidth)
+			local lineHeight = font:getHeight()
+			headerY = headerY + (#wrapped * lineHeight) + 8
 		end
 	end
 
