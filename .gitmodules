@@ -3,4 +3,4 @@
 	url = https://github.com/demiurgeQuantified/StarlitLibrary.git
 [submodule "LQR/external/lua-reactivex"]
 	path = LQR/external/lua-reactivex
-	url = git@github.com:christophstrasen/lua-reactivex.git
+	url = https://github.com/christophstrasen/lua-reactivex.git
