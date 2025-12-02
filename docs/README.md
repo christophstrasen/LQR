@@ -2,14 +2,14 @@
 
 This folder is the entry point for LQR’s user‑facing documentation.
 
-What follows is a “guide of guides”: where to start and how to deepen your understanding.
+What follows is a “guide of guides”:
 
 ---
 
 ## Start here
 
 - **Root README**  
-  [README.md](../README.md) — high‑level overview of LQR and a runnable Quickstart example, plus `expired()` explained early.
+  [README.md](../README.md) — high‑level overview of LQR and a runnable Quickstart example.
 
 - **Records & schemas**  
   [records_and_schemas](concepts/records_and_schemas.md) — what a **record** is (event with `RxMeta`), what **schemas** are, how `JoinResult` and the **row view** are shaped, and why “observations, not entities” is the core mental model.
@@ -28,14 +28,14 @@ These pages explain the main concepts you will use in most queries:
 - [where_and_row_view](concepts/where_and_row_view.md)  
   Row‑level filtering with `where`, using the row view (`row.<schema>` tables) for inner and outer joins, and how `where` relates to join windows and `expired()`.
 
+- [gc_and_scheduling](concepts/gc_and_scheduling.md)  
+  How GC runs (on insert vs periodic), scheduler requirements (`gcScheduleFn`), and how retention affects unmatched emissions and time windows during traffic lulls.
+
 - [grouping_and_having](concepts/grouping_and_having.md)  
   Streaming `GROUP BY` / `HAVING` with `groupBy` / `groupByEnrich`, group windows, aggregates, and `having`. Explains enriched vs aggregate views, how to access counts/sums/averages, and when to use `where` vs `having`.
 
 - [distinct_and_dedup](concepts/distinct_and_dedup.md)  
   Schema‑aware deduplication with `distinct(schema, opts)`, how distinct windows remember keys (count/time), how duplicates surface on `expired()`, and how `distinct` composes with join/group windows and `oneShot`.
-
-- [gc_and_scheduling](concepts/gc_and_scheduling.md)  
-  How GC runs (on insert vs periodic), scheduler requirements (`gcScheduleFn`), and how retention affects unmatched emissions and time windows during traffic lulls.
 
 ---
 
