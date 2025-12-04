@@ -96,13 +96,13 @@ Reach for the L*i*Q*o*R when you need to relate and group several event sources 
 **In a nutshell:**
 
 1) **Skip reactive programming when:**
-- You can poll or call when needed and still meet latency
+- You can poll or call when needed and still meet latency requirements
 - correctness/completeness matters more than immediacy
-- You need strict ordering/transactions 
+- You need strict ordering or transactions 
 1) **Use Plain Rx when:**
 - You can’t pull all data in one go
 - You’re following/observing a single stream/thing
-- You're handling primarily scalars/simple value
+- You're handling primarily scalars/simple values
 - “live enough” matters more than full completeness
 1) **Try out LQR when:** 
 - You can’t pull all data in one go
