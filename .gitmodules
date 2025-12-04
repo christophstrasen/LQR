@@ -1,6 +1,4 @@
-[submodule "LQR/external/StarlitLibrary"]
-	path = LQR/external/StarlitLibrary
-	url = https://github.com/demiurgeQuantified/StarlitLibrary.git
 [submodule "LQR/external/lua-reactivex"]
 	path = LQR/external/lua-reactivex
 	url = https://github.com/christophstrasen/lua-reactivex.git
+	branch = main

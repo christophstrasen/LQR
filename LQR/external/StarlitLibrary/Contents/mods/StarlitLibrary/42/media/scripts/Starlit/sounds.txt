@@ -1,8 +1,0 @@
-module Starlit {
-	sound StarlitError {
-		category = UI,
-		clip {
-			file = media/sound/Starlit/error.wav,
-		}
-	}
-}
