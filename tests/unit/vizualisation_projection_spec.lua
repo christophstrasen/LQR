@@ -113,7 +113,7 @@ describe("vizualisation projection enrichment", function()
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:on({ customers = "id", orders = "customerId" })
+			:using({ customers = "id", orders = "customerId" })
 
 		local attachment = QueryVizAdapter.attach(builder)
 		local events = {}

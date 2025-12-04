@@ -16,9 +16,9 @@ describe("Query high-level example", function()
 
 		local query = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:using({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
-			:on({ orders = { field = "id" }, refunds = { field = "orderId" } })
+			:using({ orders = { field = "id" }, refunds = { field = "orderId" } })
 			:joinWindow({ count = 2 }) -- keep a small buffer so flush emits on completion
 
 		local results, expiredPackets = {}, {}

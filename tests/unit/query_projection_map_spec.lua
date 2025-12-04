@@ -17,9 +17,9 @@ describe("Query projection map", function()
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:using({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
-			:on({ orders = { field = "id" }, refunds = { field = "orderId" } })
+			:using({ orders = { field = "id" }, refunds = { field = "orderId" } })
 
 		local attachment = QueryVizAdapter.attach(builder)
 		local projection = attachment.header.projection

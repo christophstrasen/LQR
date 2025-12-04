@@ -51,7 +51,7 @@ Next we create a `Query` that joins customers to orders by key, using a simple c
 local joined =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 })
 ```
 

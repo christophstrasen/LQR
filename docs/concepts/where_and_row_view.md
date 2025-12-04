@@ -35,7 +35,7 @@ Think of `row` as “one table per schema in the query”, with missing partners
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 })
     :where(function(row)
       -- keep VIP customers that currently have a matching order row

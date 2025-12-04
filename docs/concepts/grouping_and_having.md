@@ -34,7 +34,7 @@ Example: “VIP customers, grouped by customer id, with order count and total ov
 local grouped =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 })
     :where(function(row)
       return row.customers.segment == "VIP"

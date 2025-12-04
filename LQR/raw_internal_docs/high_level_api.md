@@ -20,7 +20,7 @@ and Rx-native.
 - Joins: `:innerJoin(other)` / `:leftJoin(other)` / `:rightJoin(other)` / `:outerJoin(other)` /
   `:antiLeftJoin(other)` / `:antiRightJoin(other)` / `:antiOuterJoin(other)` → chain more
   sources (raw observables or join outputs).
-- `:on{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
+- `:using{ schemaA = "id", schemaB = "orderId", ... }` → explicit map for join keys. Required.
   - Per-entry options: `{ field = "...", oneShot = true }`:
     - causes matched records on that side to be consumed on match, expiring them with reason
       `distinct_match`. Pair it with `bufferSize`/`perKeyBufferSize` if you want to retain more than
@@ -61,10 +61,10 @@ and Rx-native.
 local joined =
   Query.from(customers)                   -- schema "customers"
     :leftJoin(orders)                     -- schema "orders"
-    :on{ customers = "id", orders = "customerId" }
+    :using{ customers = "id", orders = "customerId" }
     :joinWindow{ time = 4, field = "sourceTime" }
     :innerJoin(refunds)                   -- schema "refunds"
-    :on{ orders = "id", refunds = "orderId" }
+    :using{ orders = "id", refunds = "orderId" }
     :selectSchemas{ "customers", "orders", "refunds" }
 
 local plan = joined:describe()            -- stable summary for tests/debugging

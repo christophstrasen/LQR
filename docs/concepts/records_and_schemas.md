@@ -103,7 +103,7 @@ For a simple customers ⟕ orders join:
 local joined =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
 
 joined:subscribe(function(result)
   local customer = result:get("customers")
@@ -181,7 +181,7 @@ This is what `QueryBuilder:where(...)` receives:
 ```lua
 Query.from(customers, "customers")
   :leftJoin(orders, "orders")
-  :on({ customers = "id", orders = "customerId" })
+  :using({ customers = "id", orders = "customerId" })
   :joinWindow({ count = 1000 })
   :where(function(row)
     local c = row.customers

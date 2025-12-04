@@ -47,11 +47,11 @@ local orders = Schema.observableFromTable("orders", {
   { id = 11, customerId = 1, total = 75 },
 }, "id")
 
--- 2) Build a streaming left join: customers ⟕ orders ON id = customerId.
+-- 2) Build a streaming left join: customers ⟕ orders USING id/customerId.
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 }) -- simple bounded cache per side
     :where(function(row)
       -- keep only customers that have at least one order

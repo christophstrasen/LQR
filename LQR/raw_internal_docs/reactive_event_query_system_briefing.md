@@ -8,7 +8,7 @@ This briefing captures the principles we discussed for an RxLua-backed event que
 ## Goals (please confirm/clarify)
 
 1. **Build upon reactiveX/Lua-ReactiveX** its core principles and API, both internally and in the exposed interface
-2. Introduce minimal **SQL-Like interface sugar functions** e.g. ":InnerJoin" ":onDuration", explicit `on` mapping for keys
+2. Introduce minimal **SQL-Like interface sugar functions** e.g. ":InnerJoin" ":onDuration", explicit `using` mapping for keys
 3. Ship pre-defined **event stream composition functions** that power functions
 4. Introduce the **minimum stateful behavior** required for the expanded functionality
 5. Is **fully testable in a headless environment**

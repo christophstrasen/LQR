@@ -8,7 +8,7 @@ This package visualizes streaming joins by turning normalized events into grid s
 
 ## Core concepts and flow
 1) **Adapter expectations**  
-   The adapter is the bridge from joins to viz. Call `QueryVizAdapter.attach(builder)` on your query builder. Always supply `:on` with explicit schema→field maps so we can compute projection domains (what ids live on the grid). Primary schemas come from `QueryBuilder:primarySchemas()`; anything else is skipped for `input` events.
+   The adapter is the bridge from joins to viz. Call `QueryVizAdapter.attach(builder)` on your query builder. Always supply `:using` with explicit schema→field maps so we can compute projection domains (what ids live on the grid). Primary schemas come from `QueryBuilder:primarySchemas()`; anything else is skipped for `input` events.
 
 2) **Normalized events (what the renderer consumes)**  
    - `source`: “a record arrived.” Includes `schema/id`, the `projectionKey` we’ll place on the grid, whether it’s `projectable` (key resolved), and the original `record`.  

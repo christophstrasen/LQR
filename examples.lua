@@ -57,7 +57,7 @@ local gazellesSubject, gazelles = SchemaHelpers.subjectWithSchema("gazelles", { 
 -- High-level query: inner join gazelles onto lions by location, then group by location.
 local grouped = Query.from(lions, "lions")
 	:innerJoin(gazelles, "gazelles")
-	:on({ -- Intent: All animals in the same location match. But not need to look at lions again when new gazelles come
+	:using({ -- Intent: All animals in the same location match. But not need to look at lions again when new gazelles come
 		lions = { field = "location", oneshot = true },
 		gazelles = { field = "location" },
 	})

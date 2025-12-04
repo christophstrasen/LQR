@@ -29,7 +29,7 @@ We compose stream joins with a fluent DSL:
 ```lua
 local attachment = Query.from(customersObservable, "customers")
     :leftJoin(ordersObservable, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 5 })
 ```
 
@@ -52,7 +52,7 @@ On top of the join structure itself, the high-level API exposes a single `WHERE`
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ time = 4, field = "sourceTime" })
     :where(function(row)
       local c = row.customers
@@ -153,7 +153,7 @@ The aggregate view collapses many events per key into a single synthetic schema 
 local grouped =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ time = 7, field = "sourceTime" })
     :where(function(row)
       return row.customers.segment == "VIP"
@@ -264,7 +264,7 @@ On top of the global join window, each side of the join maintains a small **per-
 You configure this at the high level through `on` by using the table form for each schema, for example:
 
 ```lua
-:on({
+:using({
   customers = { field = "id", bufferSize = 10 },
   orders    = { field = "customerId", bufferSize = 3 },
 })
@@ -327,7 +327,7 @@ Limitations to keep in mind:
 ### Checklist for Designing Reactive Joins
 
 1. **Tag every source**: use `SchemaHelpers.subjectWithSchema` or similar helpers so `RxMeta` is present.
-2. **Always call `:on`**: explicit mappings keep projection/alignment and observability accurate.
+2. **Always call `:using`**: explicit mappings keep projection/alignment and observability accurate.
 3. **Choose a join window**: count-based join windows are simpler; time-based join windows mirror real-world latency. Tune `gcOnInsert`/`gcIntervalSeconds` to balance freshness vs. throughput.
 4. **Handle expirations**: subscribe to `builder:expired()` if unmatched/aged-out records matter to your domain.
 5. **Inspect both streams**: when debugging layered joins, observe both the joined stream and the expiration stream. Match status metadata, projection metadata, and the dedup cache help you correlate how the join pipeline behaves over time.

@@ -49,7 +49,7 @@ Example (customers ⟕ orders):
 local joined =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
 ```
 
 Subscribing to `joined` yields `JoinResult`s where:
@@ -110,7 +110,7 @@ Example:
 local joined =
   Query.from(customers, "customers")
     :innerJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 })
 ```
 
@@ -128,7 +128,7 @@ Count windows are a good fit when:
 
 Note:
 
-- If you add a `:distinct` stage on the same key you use in `:on(...)`, the join will see at most one record per key for that schema during the distinct window. The count‑based join window still applies as an outer safety net on **total** cached entries per side.
+- If you add a `:distinct` stage on the same key you use in `:using(...)`, the join will see at most one record per key for that schema during the distinct window. The count‑based join window still applies as an outer safety net on **total** cached entries per side.
 
 ---
 
@@ -142,7 +142,7 @@ Example (using `sourceTime` as the timestamp field):
 local joined =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({
       time = 5,                     -- seconds
       field = "sourceTime",         -- optional: which field to read event time from (defaults to "sourceTime")
@@ -252,7 +252,7 @@ Every join builder exposes an `expired()` observable:
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ count = 1000 })
 
 query:expired():subscribe(function(expiredRecord)

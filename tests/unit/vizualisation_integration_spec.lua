@@ -18,9 +18,9 @@ describe("vizualisation adapter + runtime", function()
 
 		local builder = Query.from(customers, "customers")
 			:leftJoin(orders, "orders")
-			:on({ customers = { field = "id" }, orders = { field = "customerId" } })
+			:using({ customers = { field = "id" }, orders = { field = "customerId" } })
 			:leftJoin(refunds, "refunds")
-			:on({ orders = { field = "id" }, refunds = { field = "orderId" } })
+			:using({ orders = { field = "id" }, refunds = { field = "orderId" } })
 			:joinWindow({ count = 5 })
 
 		local adapter = QueryVizAdapter.attach(builder, { maxLayers = 5 })

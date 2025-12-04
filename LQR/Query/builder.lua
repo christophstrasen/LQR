@@ -714,7 +714,7 @@ end
 -- Explainer: ensureStep prevents configuring keys/joinWindow before any join is staged.
 local function ensureStep(builder)
 	if #builder._steps == 0 then
-		error("Call innerJoin/leftJoin before on/joinWindow")
+		error("Call innerJoin/leftJoin before using/joinWindow")
 	end
 end
 
@@ -731,13 +731,13 @@ local function hasMappingFor(map, schemas)
 	return false
 end
 
--- Explainer: ensureOnCoverage enforces at least one mapping on each side when using on.
-local function ensureOnCoverage(map, leftSchemas, rightSchemas)
+-- Explainer: ensureUsingCoverage enforces at least one mapping on each side when configuring using().
+local function ensureUsingCoverage(map, leftSchemas, rightSchemas)
 	if leftSchemas and #leftSchemas > 0 and not hasMappingFor(map, leftSchemas) then
-		error("on must map at least one left-side schema")
+		error("using must map at least one left-side schema")
 	end
 	if rightSchemas and #rightSchemas > 0 and not hasMappingFor(map, rightSchemas) then
-		error("on must map at least one right-side schema")
+		error("using must map at least one right-side schema")
 	end
 end
 
@@ -1035,18 +1035,18 @@ end
 ---Configures explicit schema->field mappings for join keys.
 ---@param map table
 ---@return QueryBuilder
-function QueryBuilder:on(map)
-	assert(type(map) == "table", "on expects a table")
-	warnIfBuilt(self, "on")
+function QueryBuilder:using(map)
+	assert(type(map) == "table", "using expects a table")
+	warnIfBuilt(self, "using")
 	ensureStep(self)
 	local hasEntries = next(map) ~= nil
-	assert(hasEntries, "on expects at least one mapping")
+	assert(hasEntries, "using expects at least one mapping")
 	for schemaName, selector in pairs(map) do
-		assert(type(schemaName) == "string" and schemaName ~= "", "on keys must be non-empty schema names")
+		assert(type(schemaName) == "string" and schemaName ~= "", "using keys must be non-empty schema names")
 		local selectorType = type(selector)
 		assert(
 			selectorType == "string" or selectorType == "table",
-			("on[%s] must be a string field name or table"):format(schemaName)
+			("using[%s] must be a string field name or table"):format(schemaName)
 		)
 	end
 	local nextBuilder = self:_clone()
@@ -1069,11 +1069,11 @@ function QueryBuilder:on(map)
 		end
 		for schemaName in pairs(map) do
 			if not known[schemaName] then
-				Log:warn("on[%s]: schema not present in this join; mapping will be ignored", tostring(schemaName))
+				Log:warn("using[%s]: schema not present in this join; mapping will be ignored", tostring(schemaName))
 			end
 		end
 	end
-	ensureOnCoverage(map, self._schemaNames, rightSchemas)
+	ensureUsingCoverage(map, self._schemaNames, rightSchemas)
 	nextBuilder._steps[#nextBuilder._steps].keySpec = { kind = "schemas", map = map }
 	return nextBuilder
 end

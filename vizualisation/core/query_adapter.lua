@@ -493,7 +493,7 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 	local totalLayers = totalSteps + 1 -- include final layer
 	local depthForStep = buildDepthResolver(totalSteps, maxLayers)
 	if not planHasSchemaMapping(plan) then
-		JoinLog:warn("[QueryVizAdapter] Visualization requires Query:on mappings to derive projection domains")
+		JoinLog:warn("[QueryVizAdapter] Visualization requires Query:using mappings to derive projection domains")
 	end
 
 	local primaries = queryBuilder.primarySchemas and queryBuilder:primarySchemas() or (plan.from or {})

@@ -15,7 +15,7 @@ local function buildDemo()
 
 	local grouped = Query.from(customers, "customers")
 		:leftJoin(orders, "orders")
-		:on({ customers = "id", orders = "customerId" })
+		:using({ customers = "id", orders = "customerId" })
 		:groupBy("orders_per_customer", function(row)
 			return row.customers.id
 		end)

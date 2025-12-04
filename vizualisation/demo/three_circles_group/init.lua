@@ -39,12 +39,12 @@ local function build()
 		.from(customers, "customers")
 		--:distinct("customers", { by = "loyaltyTier", window = retentionWindow() })
 		:innerJoin(orders, "orders")
-		:on({
+		:using({
 			customers = { field = "id", oneShot = true },
 			orders = { field = "customerId", oneShot = true },
 		})
 		:innerJoin(shipments, "shipments")
-		:on({
+		:using({
 			orders = { field = "id", oneShot = true },
 			shipments = { field = "orderId", oneShot = true },
 		})

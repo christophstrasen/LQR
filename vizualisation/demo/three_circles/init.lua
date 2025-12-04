@@ -26,12 +26,12 @@ local function build()
 
 	local builder = Query.from(customers, "customers")
 		:innerJoin(orders, "orders")
-		:on({
+		:using({
 			customers = { field = "id" },
 			orders = { field = "customerId" },
 		})
 		:innerJoin(shipments, "shipments")
-		:on({
+		:using({
 			orders = { field = "id" },
 			shipments = { field = "orderId" },
 		})

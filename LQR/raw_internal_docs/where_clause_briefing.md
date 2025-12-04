@@ -49,7 +49,7 @@ function QueryBuilder:where(predicate) -> QueryBuilder
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on{ customers = "id", orders = "customerId" }
+    :using{ customers = "id", orders = "customerId" }
     :joinWindow{ time = 4, field = "sourceTime" }
     :where(function(row)
       -- example shown with the row view flavor
@@ -121,7 +121,7 @@ row = {
 local query =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on{ customers = "id", orders = "customerId" }
+    :using{ customers = "id", orders = "customerId" }
     :where(function(r)
       local c = r.customers
       local o = r.orders  -- {} when no matching order

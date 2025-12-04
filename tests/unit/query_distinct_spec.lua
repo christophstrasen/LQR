@@ -68,7 +68,7 @@ describe("Query.distinct", function()
 
 		Query.from(lions, "lions")
 			:innerJoin(gazelles, "gazelles")
-			:on({
+			:using({
 				lions = { field = "location" },
 				gazelles = { field = "location" },
 			})

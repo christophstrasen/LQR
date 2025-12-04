@@ -6,7 +6,7 @@ streaming semantics and API shape rather than low-level implementation details.
 
 The core idea is:
 
-- We already join and filter **live event streams** using `Query.from(...):joins():on():joinWindow():where(...)`.
+- We already join and filter **live event streams** using `Query.from(...):joins():using():joinWindow():where(...)`.
   - We now want to **aggregate over sliding windows** in a way that feels SQL-like, but remains
   honest about streaming: results are continuous, windows are explicit, and group state lives in
   memory.
@@ -26,7 +26,7 @@ Conceptually, grouping is a **post-join, post-WHERE** operation:
 1. `FROM` / root source(s):
    - `Query.from(source, "schema")`
 2. Join steps:
-   - `:innerJoin(...)` / `:leftJoin(...)` + `:on({ ... })` + per-step `:joinWindow(...)`
+   - `:innerJoin(...)` / `:leftJoin(...)` + `:using({ ... })` + per-step `:joinWindow(...)`
 3. Row-level filtering:
    - `:where(function(row) ...)` over the **row view** (schema-aware, outer-join safe).
 4. **Grouping** (new):
@@ -178,7 +178,7 @@ Conceptually:
 local base =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :where(function(row)
       return row.customers.segment == "VIP"
     end)
@@ -447,7 +447,7 @@ This keeps semantics explainable and testable, especially under sliding windows.
 local grouped =
   Query.from(customers, "customers")
     :leftJoin(orders, "orders")
-    :on({ customers = "id", orders = "customerId" })
+    :using({ customers = "id", orders = "customerId" })
     :joinWindow({ time = 7, field = "sourceTime" }) -- regular join window
     :where(function(row)
       return row.customers.segment == "VIP"

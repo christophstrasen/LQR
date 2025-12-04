@@ -271,7 +271,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **Configuration validation + warnings:** Hardened configuration surfaces with warn-only validators:
   - `groupByObservable`’s aggregate config now validates keys (`row_count`, `count`, `count_distinct`, `sum`, `avg`, `min`, `max`) and emits warnings for unknown keys or wrong types. It also logs when aggregate paths don’t match any numeric data (e.g., `sum`/`avg` of a non-existent field, `count`/`count_distinct` on missing paths).
   - `QueryBuilder:joinWindow` and `:groupWindow` emit warnings on unexpected keys in the window tables, making it easier to catch typos without breaking existing callers.
-  - `QueryBuilder:on` now warns when the mapping references a schema name that isn’t part of the current join, in addition to the existing coverage checks.
+  - `QueryBuilder:using` now warns when the mapping references a schema name that isn’t part of the current join, in addition to the existing coverage checks.
 
 ### Takeaways
 1. **A first-class LQR module improves discoverability:** Having a single `require("LQR")` entrypoint that surfaces `Query`, `Schema`, and a couple of helpers (like `get`) makes it much easier for users to explore the library from REPLs and examples, without hunting for internal module paths.
@@ -310,7 +310,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ## Day 20 – Documentation pass and public face
 
 ### Highlights
-- **New overview + Quickstart README:** Replaced the minimal root `README.md` with a proper overview of LiQoR, a runnable Quickstart example (`require("LQR")`, `Schema.observableFromTable`, `Query.from(...):leftJoin(...):on(...):joinWindow(...):where(...)`), and a short explanation of the `expired()` side channel (why you care about unmatched/expired records and tuning windows).
+- **New overview + Quickstart README:** Replaced the minimal root `README.md` with a proper overview of LiQoR, a runnable Quickstart example (`require("LQR")`, `Schema.observableFromTable`, `Query.from(...):leftJoin(...):using(...):joinWindow(...):where(...)`), and a short explanation of the `expired()` side channel (why you care about unmatched/expired records and tuning windows).
 - **Docs folder split:** Moved the earlier exploratory docs into `LQR/raw_internal_docs/` and reserved a new top-level `docs/` folder for future, cleaned-up user-facing material. Added `docs/README.md` as a small table-of-contents pointing into key internal docs (explainer, data structures, high-level/low-level API briefs) until we have dedicated `docs/concepts` / `docs/guides` material.
 - **Documentation principles captured:** Introduced `LQR/raw_internal_docs/documentation_principles.md` as the internal “how we document LiQoR” guide: layered structure (root README → `docs/` → `raw_internal_docs/`), sticky vocabulary (`record`, `schema`, `JoinResult`, `join window`, `group window`, `expired`), SQL hooks with honest streaming semantics, small set of example domains (customers/orders, lions/gazelles, zombies/rooms), and a checklist for future docs.
 - **Public meta sections:** Extended `README.md` with a “Props & Credits” section (explicitly crediting `4O4/lua-reactivex` and `bjornbytes/RxLua`), an AI disclosure (where/how AI tooling was used, but confirming human review), and a short disclaimer in the slightly-doomed Knox County tone, clarifying AS-IS status and the independent, fan-made nature of the project.
