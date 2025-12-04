@@ -243,13 +243,13 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ## Day 16 – GROUP BY / HAVING and grouped demos
 
 ### Highlights
-- **Low-level grouping core (`groupByObservable`):** Introduced a new low-level operator that consumes a joined+filtered row stream and produces three observables:
+- **Low-level grouping core (`GroupByObservable`):** Introduced a new low-level operator that consumes a joined+filtered row stream and produces three observables:
   - an **aggregate stream** (one synthetic schema per group with `_count` and `_sum/_avg/_min/_max` under nested tables);
   - an **enriched stream** (original row view with `_count`, inline aggregates on each schema, and grouping metadata in `RxMeta`);
   - an **expired stream** (raw evictions/expirations per key for debugging).
   Windows are time-based (`time/field/currentFn`) or count-based (`count`), with `gcOnInsert`/`gcIntervalSeconds`/`gcScheduleFn`/`flushOnComplete` matching join GC semantics. Aggregate rows are tagged with `RxMeta.schema = groupName` (default `_groupBy:<firstSchema>`/`_groupBy`), while enriched rows preserve source schemas and add a synthetic `"_groupBy:<groupName>"` payload for downstream consumption.
 
-- **Data model + tests:** Locked down the aggregate and enriched shapes in `groupByObservable.data_model` and validated them via `group_by_data_model_spec` and `group_by_core_spec`:
+- **Data model + tests:** Locked down the aggregate and enriched shapes in `GroupByObservable.data_model` and validated them via `group_by_data_model_spec` and `group_by_core_spec`:
   - aggregate rows: `_count`, `window`, `RxMeta.{schema,groupKey,groupName,view}`, nested `_sum/_avg/_min/_max`;
   - enriched rows: top-level `_groupKey/_groupName/_count`, per-schema `_sum/_avg/_min/_max`, plus a synthetic `"_groupBy:<groupName>"` subtree mirroring aggregates.
 
@@ -269,7 +269,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **Row-level aggregation refinements:** Renamed the grouping row count from `_count` to `_count_all` and introduced per-schema counts under `_count` (e.g., `_count.customers`, plus per-path maps such as `customers._count.id`). Added `count_distinct` aggregates (mirroring `sum`/`avg`/`min`/`max`) so users can configure distinct counts per path (`count_distinct = { "gazelles.id" }` → `row.gazelles._count_distinct.id`), while the existing `row_count` flag remains the switch that enables `_count_all`/`_count`.
 - **Central dot-path getter:** Added `LQR.get(tbl, "gazelles._count_distinct.id")` as a tiny, generic, dot-path-safe getter for nested tables. The example uses it to keep printing expressions tidy and defensive, and it serves as a future expansion hook for more path-aware helpers.
 - **Configuration validation + warnings:** Hardened configuration surfaces with warn-only validators:
-  - `groupByObservable`’s aggregate config now validates keys (`row_count`, `count`, `count_distinct`, `sum`, `avg`, `min`, `max`) and emits warnings for unknown keys or wrong types. It also logs when aggregate paths don’t match any numeric data (e.g., `sum`/`avg` of a non-existent field, `count`/`count_distinct` on missing paths).
+  - `GroupByObservable`’s aggregate config now validates keys (`row_count`, `count`, `count_distinct`, `sum`, `avg`, `min`, `max`) and emits warnings for unknown keys or wrong types. It also logs when aggregate paths don’t match any numeric data (e.g., `sum`/`avg` of a non-existent field, `count`/`count_distinct` on missing paths).
   - `QueryBuilder:joinWindow` and `:groupWindow` emit warnings on unexpected keys in the window tables, making it easier to catch typos without breaking existing callers.
   - `QueryBuilder:using` now warns when the mapping references a schema name that isn’t part of the current join, in addition to the existing coverage checks.
 
@@ -283,7 +283,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ## Day 18 – DistinctFn aggregates and aliasable outputs
 
 ### Highlights
-- **DistinctFn-enabled aggregates:** Extended `groupByObservable`’s aggregates so `count`, `sum`, `avg`, `min`, and `max` accept entries in the form `{ path = "...", distinctFn = fn(row), alias = "..." }`. `distinctFn` drives a per-entry, per-recompute distinct table so grouped windows can operate over distinct entities (SQL-like `COUNT(DISTINCT ...)` / `AVG(DISTINCT ...)`) rather than raw join rows, while `alias` mirrors the result onto a user-facing path.
+- **DistinctFn-enabled aggregates:** Extended `GroupByObservable`’s aggregates so `count`, `sum`, `avg`, `min`, and `max` accept entries in the form `{ path = "...", distinctFn = fn(row), alias = "..." }`. `distinctFn` drives a per-entry, per-recompute distinct table so grouped windows can operate over distinct entities (SQL-like `COUNT(DISTINCT ...)` / `AVG(DISTINCT ...)`) rather than raw join rows, while `alias` mirrors the result onto a user-facing path.
 - **High-level lions/gazelles refinements:** Updated `examples.lua` to express “gazelles per location” via a distinct `count` entry with `distinctFn` instead of the old `count_distinct` key, and to surface clearer aliases (`distinctGazellesCounting`, `HowHungryTheyAre`) while still keeping the canonical `_count`/`_avg` shapes for downstream joins.
 - **Alias projection in the data model:** Taught the group-by data model to project aggregate aliases into both aggregate and enriched rows (and their synthetic `_groupBy:` schemas), warning when an alias overwrites an existing field. This keeps alias behavior explicit and predictable, and documents the potential clobbering in logs.
 - **Configuration validation + warnings:** Kept aggregate key validation (`row_count`, `count`, `sum`, `avg`, `min`, `max`) but tightened error messages for malformed aggregate entries (non-table entries, missing `path`, non-function `distinctFn`, non-string `alias`). Non-primitive `distinctFn` results are treated as fatal for that entry, with warnings to make it obvious why a configured aggregate didn’t show up.

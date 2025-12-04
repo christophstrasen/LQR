@@ -23,7 +23,7 @@ We keep a clear separation between user‑facing docs and internal design notes:
     - `docs/guides/` — task‑oriented guides (joins, `where`, grouping, distinct, observability).
     - `docs/howto/` — short cookbook recipes.
     - `docs/integrations/` — integration guides (e.g., Starlit / Project Zomboid).
-    - `docs/reference/` — stable API reference for `LQR.Query`, `LQR.Schema`, `JoinObservable`, `groupByObservable`, helpers.
+    - `docs/reference/` — stable API reference for `LQR.Query`, `LQR.Schema`, `JoinObservable`, `GroupByObservable`, helpers.
 
 - **`LQR/raw_internal_docs/` (internal)**
   - Design briefs, logbook, refactor plans, and any “day X” experiment notes.

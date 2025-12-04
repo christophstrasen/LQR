@@ -1,6 +1,6 @@
 local rx = require("reactivex")
 local Log = require("util.log").withTag("group")
-local DataModel = require("groupByObservable.data_model")
+local DataModel = require("GroupByObservable.data_model")
 
 local GroupByCore = {}
 
