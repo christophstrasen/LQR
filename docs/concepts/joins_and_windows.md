@@ -62,6 +62,12 @@ On the row view used by `where`, that becomes:
 - `row.customers` — the customer record;
 - `row.orders` — the order record, or an empty table `{}` when no partner was found.
 
+### Join predicate scope
+
+- Joins are **equality-based only**. `:using` maps schema → field(s) and behaves like SQL `USING(...)`.
+- Arbitrary predicates or range joins are **not supported (nor planned)**. Do that work upstream via filters/mappers or by deriving a joinable key.
+- This mirrors common streaming engines (e.g., Kafka Streams/ksqlDB equi-joins; non-equi in Flink/Spark comes with caveats).
+
 ### When results appear: matched vs unmatched
 
 Not all join results have the same latency:

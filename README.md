@@ -13,7 +13,7 @@ LQR (pronunced like "LiQoR", /ˈlɪk.ər/) sits on top of [lua‑reactivex](http
 - expiration / observability streams;
 - optional visualization adapters for showcasing or inspecting specific join behavior.
 
-It is designed for in‑process, single‑threaded environments like Lua game runtimes, but is usable in any Lua 5.1 host that can run lua‑reactivex.
+It is designed for in‑process, single‑threaded environments like Lua game runtimes, but works in any Lua 5.1 host that can run lua‑reactivex. Its mental model is “embedded stream processing,” borrowing ideas from Flink/Spark without aiming for their distributed guarantees. Like ReactiveX itself, LiQoR stays local: no clustering, checkpointing, or durability—it’s compositional stream processing inside your Lua app.
 
 ---
 
