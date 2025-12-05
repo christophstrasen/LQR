@@ -10,7 +10,7 @@ This guide explains why a streaming query system like LQR is useful when you mos
 
 ## Queries that stay mounted and update incrementally
 
-In SQL you usually “run a query”, get a result, and stop.  
+In SQL you usually “run a query”, get a result, and stop.
 In LQR you “mount a query” and keep it running.
 
 - You define a query once and subscribe to it.
@@ -34,26 +34,23 @@ This is helpful for:
 - alerts that should fire as soon as a pattern appears; and
 - game or app logic that should react to events, not to cron jobs.
 
-If you currently have many event handlers that each update their own bit of state, a mounted query lets you describe that flow once instead of spreading it across callbacks.
-
 ---
 
 ## Per‑key state that manages itself
 
-Many problems are “per player”, “per match”, “per device”, or “per customer”.  
+Many problems are per <entity>, e.g. “per device”, or “per customer”.  
 In LQR each key can behave like its own little state machine.
 
-One concrete example is a per‑match scoreboard:
+In the example of a scoreboard for a sports match:
 
 - You have one stream of player events with `matchId`, `playerId`, and `eventType`.
-- You define a query that groups by `matchId` and counts kills per player.
+- You define a query that groups by `matchId` and counts goals per player.
 - When a new `matchId` appears, LQR creates state for that match and starts tracking its players.
 - While the match runs, events for that `matchId` update only that match’s scoreboard.
 - When the match ends (for example, after a time window), the group for that `matchId` can expire and free its state.
 
-The query describes what should happen for one match.  
-The runtime applies that logic to all matches at once.  
-You do not write thread code, locks, or lifecycle code.
+The query describes what should happen per match.
+The runtime applies that logic to all matches at once.
 
 Compared to imperative code:
 
@@ -72,13 +69,11 @@ This keeps code smaller and easier to reason about, even when:
 
 ## Many views over the same events
 
-We can stretch the match example further.
-
-From the same event streams you might want:
+Staying with the sports match example, from the same event streams you might want:
 
 - per‑match scoreboards (like above);
 - per‑player stats across many matches; and
-- per‑map or per‑region summaries.
+- per‑country or per‑region summaries.
 
 In table‑based code you either:
 
@@ -92,17 +87,17 @@ With LQR you can:
 - another query that groups by `playerId` and tracks long‑term stats; and
 - a third query that groups by `mapId` and tracks map balance.
 
-All three consume the same underlying event streams.  
+All three consume the same underlying event streams.
 Each grouping has its own state, windows, and lifecycles.
 
-Adding one more view later (for example, per weapon) usually just means adding another query that reuses the same base event stream and query, without refactoring existing loops or shared state.
+Adding one more view later (for example, per team) usually just means adding another query that reuses the same base event stream and query, without refactoring existing loops or shared state.
 
 ---
 
-## Joins that help you care about when things happen
+## Time is a first class concept
 
 In SQL you usually join tables that feel “timeless”:  
-rows are either there or not, and the join ignores when they were created.
+rows are either there or not, and the join doesn't need to care when they were created.
 
 In event streams the **when** is often the main question:
 
@@ -136,7 +131,7 @@ In those situations a time‑aware join gives you both:
 
 ## One place for cross‑stream domain logic
 
-In a non‑streaming system, related logic is often scattered:
+Manually combining event- and streaming logic together with static state and polling can easily result in scattered logic that can be difficult to reason about:
 
 - some lives in database queries;
 - some in Lua loops that stitch tables together; and
@@ -158,9 +153,9 @@ For game or app code this often means:
 
 - less shared mutable state in global tables;
 - fewer subtle order‑of‑handler bugs; and
-- clearer separation of “what should happen” from “how we store it”.
+- clearer separation of “what should happen” from “how we store" and "how we pipe it”.
 
-If your code base is full of “when event X fires, update table Y” handlers, moving cross‑stream rules into a query can make the overall story much easier to follow.
+If your code base is full of “when event X fires, update table Y” handlers, particular some who manage their own state, then moving cross‑stream rules into a query can make the overall logic easier to follow.
 
 Additionally, because LQR is built on lua‑reactivex, that query is just another stream: you can use the same simple operators to pre‑process source streams before they enter the query and to post‑process the joined result afterwards.
 
@@ -168,7 +163,7 @@ Additionally, because LQR is built on lua‑reactivex, that query is just anothe
 
 ## Helps avoid overload and spikes
 
-Imperative code often has loops like “while true: read input and process”.  
+Imperative code often has loops like “while true: read input and process”.
 If that loop reads faster than the rest of the system can handle, you get:
 
 - unbounded queues;
@@ -187,14 +182,13 @@ In practice this means you can:
 - reason about load in the same place you describe the query.
 
 Disclaimer: While, in principle, downstream speed can help limit upstream work when sources are written to respect that, today lua‑reactivex and LQR do not have a full “backpressure protocol” where consumers explicitly signal demand.  
-You still have to design the boundaries of your system (network input, game loop, disk readers) so they respect whatever buffering or throttling strategy you choose and maybe use regular lua‑reactivex operators (for example, buffering or sampling) to reduce or reshape traffic before it hits more expensive query stages. Future versions may allow some of these limits to be adjusted dynamically at runtime.
+You still have to design the boundaries of your system (network input, game loop, disk readers) so they respect whatever buffering or throttling strategy you choose. Furthermore it may be smart to use regular lua‑reactivex operators (for example, buffering or sampling) to reduce or reshape traffic before it hits more expensive query stages. Future versions of LQR and lua-reactivex might allow some of these limits to be adjusted dynamically at runtime.
 
 ---
 
 ## Handles late, missing, and out‑of‑order events
 
-In many systems time is an afterthought.  
-Code quietly assumes events:
+As in many systems time is an afterthought, we often find code that code quietly assume events:
 
 - arrive quickly;
 - arrive once; and

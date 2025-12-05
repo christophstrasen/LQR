@@ -98,7 +98,7 @@ Reach for the L*i*Q*o*R when you need to relate and group several event sources 
 - Queries that stay mounted and update incrementally
 - Per‑key state that manages itself
 - Many views over the same events
-- Joins that help you care about when things happen
+- Time is a first class concept
 - One place for cross‑stream domain logic
 - Helps avoid overload and spikes
 - Handles late, missing, and out‑of‑order events
