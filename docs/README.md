@@ -43,6 +43,9 @@ These pages explain the main concepts you will use in most queries:
 
 Task‑oriented guides that walk through common scenarios:
 
+- [advantages](guides/advantages.md)  
+  High‑level advantages of using LQR over plain tables and one‑off SQL queries: mounted queries, per‑key “parallelism”, multiple groupings, time‑based joins, and backpressure.
+
 - [building_a_join_query](guides/building_a_join_query.md)  
   End‑to‑end example: define schema‑tagged sources, join them by key with a window, filter with `where`, subscribe to both joined rows and `expired()`, and see how to combine LQR with standard lua‑reactivex operators (with links to ReactivX docs).
 

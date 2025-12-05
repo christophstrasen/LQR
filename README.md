@@ -93,6 +93,20 @@ See [examples.lua](examples.lua), [tests/unit](tests/unit), and [vizualisation/d
 
 Reach for the L*i*Q*o*R when you need to relate and group several event sources in real time; use plain reactive streams for simpler live work, and if polling already gives timely answers in a simple enough manner, you don’t need to "go reactive" at all.
 
+### What LQR gives you over bare event handlers, loops, and ad‑hoc queries
+
+- Queries that stay mounted and update incrementally
+- Per‑key state that manages itself
+- Many views over the same events
+- Joins that help you care about when things happen
+- One place for cross‑stream domain logic
+- Helps avoid overload and spikes
+- Handles late, missing, and out‑of‑order events
+
+See `docs/guides/advantages.md` for a more detailed walkthrough of these advantages with concrete examples.
+
+### Choosing between polling, plain Rx, and LQR
+
 **In a nutshell:**
 
 1) **Skip reactive programming when:**
