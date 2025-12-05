@@ -103,7 +103,7 @@ Reach for the L*i*Q*o*R when you need to relate and group several event sources 
 - Helps avoid overload and spikes
 - Handles late, missing, and out‑of‑order events
 
-See `docs/guides/advantages.md` for a more detailed walkthrough of these advantages with concrete examples.
+See [advantages](docs/guides/advantages.md) for the details.
 
 ### Choosing between polling, plain Rx, and LQR
 
