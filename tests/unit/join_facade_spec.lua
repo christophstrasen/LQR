@@ -4,10 +4,10 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local Query = require("Query")
-local JoinObservable = require("JoinObservable")
+local Query = require("LQR.Query")
+local JoinObservable = require("LQR.JoinObservable")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local Log = require("util.log")
+local Log = require("LQR.util.log")
 
 ---@diagnostic disable: undefined-global
 describe("Join high-level facade", function()

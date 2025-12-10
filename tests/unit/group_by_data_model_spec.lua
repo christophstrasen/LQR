@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local DataModel = require("GroupByObservable.data_model")
+local DataModel = require("LQR.GroupByObservable.data_model")
 
 ---@diagnostic disable: undefined-global
 describe("GroupBy data model", function()

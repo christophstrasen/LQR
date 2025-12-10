@@ -1,8 +1,8 @@
 local SchemaHelpers = {}
 
-local rx = require('reactivex')
+local rx = require("LQR.reactivex")
 local Observable = rx.Observable or rx
-local Schema = require('JoinObservable.schema')
+local Schema = require("LQR.JoinObservable.schema")
 
 ---Ensures the options table carries at least an idField when no selector exists.
 ---@param opts table|nil

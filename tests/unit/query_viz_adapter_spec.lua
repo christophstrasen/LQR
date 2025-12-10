@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local Query = require("Query")
+local Query = require("LQR.Query")
 local QueryVizAdapter = require("vizualisation.core.query_adapter")
 local SchemaHelpers = require("tests.support.schema_helpers")
 

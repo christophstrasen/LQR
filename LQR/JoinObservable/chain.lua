@@ -1,6 +1,6 @@
-local rx = require("reactivex")
-local Result = require("JoinObservable.result")
-local Log = require("util.log").withTag("join")
+local rx = require("LQR.reactivex")
+local Result = require("LQR.JoinObservable.result")
+local Log = require("LQR.util.log").withTag("join")
 
 local function copyMetaDefaults(targetRecord, fallbackMeta, schemaName)
 	targetRecord.RxMeta = targetRecord.RxMeta or {}

@@ -4,13 +4,13 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local rx = require("reactivex")
-local JoinObservable = require("JoinObservable.init")
+local rx = require("LQR.reactivex")
+local JoinObservable = require("LQR.JoinObservable.init")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local Result = require("JoinObservable.result")
+local Result = require("LQR.JoinObservable.result")
 
-local Schema = require("JoinObservable.schema")
-local Log = require("util.log")
+local Schema = require("LQR.JoinObservable.schema")
+local Log = require("LQR.util.log")
 
 local function collectValues(observable)
 	local results = {}

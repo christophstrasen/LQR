@@ -1,4 +1,4 @@
-local Math = require("util.math")
+local Math = require("LQR.util.math")
 
 local ShapeWeights = {}
 

@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local Schema = require("JoinObservable.schema")
+local Schema = require("LQR.JoinObservable.schema")
 
 ---@diagnostic disable: undefined-global
 describe("Schema helpers", function()
@@ -41,7 +41,7 @@ describe("Schema helpers", function()
 	end)
 
 	it("honors idSelector and sourceTimeField options", function()
-		local rx = require("reactivex")
+		local rx = require("LQR.reactivex")
 		local subject = rx.Subject.create()
 
 		local bucket = {}

@@ -4,9 +4,9 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local Schema = require("JoinObservable.schema")
+local Schema = require("LQR.JoinObservable.schema")
 local SchemaHelpers = require("tests.support.schema_helpers")
-local Result = require("JoinObservable.result")
+local Result = require("LQR.JoinObservable.result")
 
 ---@diagnostic disable: undefined-global
 describe("RxMeta shapes", function()

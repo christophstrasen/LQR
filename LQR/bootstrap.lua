@@ -1,7 +1,7 @@
 local debug = require("debug")
 local package = require("package")
 -- TODO(later): re-enable Zomboid stubs when running inside the game runtime.
--- require('util.zomboid_stubs')
+-- require("LQR.util.zomboid_stubs')
 
 -- Explainer: Collect canonical search paths for project modules and vendored libraries.
 local BASE_PATHS = {
@@ -12,18 +12,18 @@ local BASE_PATHS = {
 }
 
 local LIBRARY_PATHS = {
-	"LQR/external/lua-reactivex/?.lua",
-	"LQR/external/lua-reactivex/?/init.lua",
+	-- Optional: sibling lua-reactivex checkout (e.g., external/lua-reactivex in parent).
+	"../lua-reactivex/?.lua",
+	"../lua-reactivex/?/init.lua",
+	-- Optional: bundled starlit dependency when present.
 	"LQR/external/StarlitLibrary/Contents/mods/StarlitLibrary/42/media/lua/shared/?.lua",
 }
 
-local function normalize(path)
+local function normalize(path, root)
 	if path:sub(1, 1) == "/" then
 		return path
 	end
-
-	local pwd = assert(os.getenv("PWD"), "PWD environment variable is missing")
-	return pwd .. "/" .. path
+	return root .. path
 end
 
 local function ensure_trailing_slash(path)
@@ -45,7 +45,7 @@ local function get_repo_root()
 	end
 
 	local script_dir = source:match("(.*/)") or "./"
-	local normalized = ensure_trailing_slash(normalize(script_dir))
+	local normalized = ensure_trailing_slash(normalize(script_dir, ""))
 	return ensure_trailing_slash(parent_dir(normalized))
 end
 

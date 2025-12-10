@@ -1,5 +1,5 @@
-local DataModel = require("GroupByObservable.data_model")
-local Core = require("GroupByObservable.core")
+local DataModel = require("LQR.GroupByObservable.data_model")
+local Core = require("LQR.GroupByObservable.core")
 
 local GroupByObservable = {
 	dataModel = DataModel,

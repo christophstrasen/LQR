@@ -10,7 +10,7 @@ local DEFAULT_EXPIRE_COLOR = { 0.9, 0.25, 0.25, 1 }
 local NEUTRAL_BORDER_COLOR = { 0.24, 0.24, 0.24, 1 }
 local NEUTRAL_GAP_COLOR = { 0.12, 0.12, 0.12, 1 }
 
-local Log = require("util.log")
+local Log = require("LQR.util.log")
 local CellLayers = require("vizualisation.core.cell_layers")
 local Renderer = {}
 local BACKGROUND_COLOR = { 0.08, 0.08, 0.08, 1 }

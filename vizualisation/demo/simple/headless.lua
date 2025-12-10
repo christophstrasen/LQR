@@ -2,7 +2,7 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 require('LQR.bootstrap')
 
-local Log = require("util.log").withTag("demo")
+local Log = require("LQR.util.log").withTag("demo")
 local Runtime = require("vizualisation.core.runtime")
 local Renderer = require("vizualisation.core.headless_renderer")
 local DebugViz = require("vizualisation.vizLogFormatter")

@@ -4,9 +4,9 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local JoinObservable = require("JoinObservable.init")
-local Schema = require("JoinObservable.schema")
-local rx = require("reactivex")
+local JoinObservable = require("LQR.JoinObservable.init")
+local Schema = require("LQR.JoinObservable.schema")
+local rx = require("LQR.reactivex")
 
 local function summarizePairs(pairs)
 	local summary = {}

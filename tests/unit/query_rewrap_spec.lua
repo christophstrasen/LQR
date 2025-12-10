@@ -4,9 +4,9 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local rx = require("reactivex")
-local Query = require("Query")
-local Result = require("JoinObservable.result")
+local rx = require("LQR.reactivex")
+local Query = require("LQR.Query")
+local Result = require("LQR.JoinObservable.result")
 
 ---@diagnostic disable: undefined-global
 describe("Query rewrap of grouped outputs", function()

@@ -104,7 +104,7 @@ end)
 
 describe("vizualisation projection enrichment", function()
 	it("marks projection metadata on normalized events", function()
-		local Query = require("Query")
+		local Query = require("LQR.Query")
 		local SchemaHelpers = require("tests.support.schema_helpers")
 		local QueryVizAdapter = require("vizualisation.core.query_adapter")
 

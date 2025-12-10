@@ -16,7 +16,7 @@ describe("vizualisation headless renderer", function()
 			expired = { 1, 0, 0, 1 },
 		}
 		local SchemaHelpers = require("tests.support.schema_helpers")
-		local Query = require("Query")
+		local Query = require("LQR.Query")
 		local QueryVizAdapter = require("vizualisation.core.query_adapter")
 
 		-- Build a small query to drive projection enrichment.

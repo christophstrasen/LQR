@@ -1,5 +1,5 @@
 -- Snapshot formatter for high-level visualization: logs cells/borders/metadata with a dedicated tag.
-local Log = require("util.log")
+local Log = require("LQR.util.log")
 local CellLayers = require("vizualisation.core.cell_layers")
 
 local VizLog = Log.withTag("viz-hi")

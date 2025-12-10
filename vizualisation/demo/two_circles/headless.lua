@@ -4,7 +4,7 @@ require('LQR.bootstrap')
 local Runtime = require("vizualisation.core.runtime")
 local Renderer = require("vizualisation.core.headless_renderer")
 local DebugViz = require("vizualisation.vizLogFormatter")
-local Log = require("util.log")
+local Log = require("LQR.util.log")
 local QueryVizAdapter = require("vizualisation.core.query_adapter")
 local TwoCirclesDemo = require("vizualisation.demo.two_circles")
 

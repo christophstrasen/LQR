@@ -1,5 +1,5 @@
 local ShapeWeights = require("vizualisation.zones.shape_weights")
-local Math = require("util.math")
+local Math = require("LQR.util.math")
 
 local Generator = {}
 

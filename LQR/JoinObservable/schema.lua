@@ -6,9 +6,9 @@
 ---@field map fun(self:rx.Observable, mapper:fun(value:any):any):rx.Observable
 ---@field subscribe fun(self:rx.Observable, onNext:fun(value:any), onError:fun(err:any)|nil, onCompleted:fun()|nil):rx.Subscription
 
-local rx = require("reactivex")
+local rx = require("LQR.reactivex")
 local Observable = rx.Observable or rx
-local Log = require("util.log").withTag("join")
+local Log = require("LQR.util.log").withTag("join")
 local Schema = {}
 local invalidVersionNotified = {}
 
