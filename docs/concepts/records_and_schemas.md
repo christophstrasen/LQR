@@ -60,9 +60,12 @@ local rawCustomers = rx.Observable.fromTable({
   { id = 2, name = "Max" },
 }, ipairs, true)
 
--- Attach schema metadata; use the `id` field as identifier.
+-- Attach schema metadata; use the `id` field as identifier and copy payload time into RxMeta.sourceTime.
 local customers =
-  Schema.wrap("customers", rawCustomers, { idField = "id" })
+  Schema.wrap("customers", rawCustomers, {
+    idField = "id",
+    sourceTimeField = "observedAtTimeMS", -- optional; defaults to record.sourceTime
+  })
 ```
 
 After wrapping:
@@ -70,8 +73,20 @@ After wrapping:
 - every emission from `customers` is a record with a `RxMeta` table;
 - `RxMeta.schema` is `"customers"`;
 - `RxMeta.id` is taken from `record.id` (because we passed `idField = "id"`).
+- `RxMeta.sourceTime` is taken from `record.observedAtTimeMS` (because we passed `sourceTimeField`).
 
 If you do not have a natural `id` field, you can supply an `idSelector` function instead of `idField` and generate a **synthetic, but stable** identifier, e.g. a UUID or an auto‑incrementing counter you maintain for that stream.
+
+Similarly, if your payload stores event time under a different name or needs to be derived, you can use `sourceTimeField` or `sourceTimeSelector`:
+
+```lua
+Schema.wrap("events", rawEvents, {
+  idSelector = function(record) return record.uuid end,
+  sourceTimeSelector = function(record) return record.time_ms end,
+})
+```
+
+Only one of `idField`/`idSelector` and one of `sourceTimeField`/`sourceTimeSelector` may be provided; passing both pairs errors.
 
 LQR does not *enforce* global uniqueness of `RxMeta.id`, but treating `id` as “this logical record’s identity” is strongly recommended:
 

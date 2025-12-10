@@ -16,6 +16,8 @@ local function cloneSchemaMeta(meta, overrideSchema)
 		schemaVersion = meta.schemaVersion,
 		sourceTime = meta.sourceTime,
 		joinKey = meta.joinKey,
+		id = meta.id,
+		idField = meta.idField,
 	}
 end
 

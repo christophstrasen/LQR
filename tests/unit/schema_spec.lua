@@ -39,4 +39,27 @@ describe("Schema helpers", function()
 		assert.are.equal("x-1", bucket[1].RxMeta.id)
 		assert.are.equal("uuid", bucket[1].RxMeta.idField)
 	end)
+
+	it("honors idSelector and sourceTimeField options", function()
+		local rx = require("reactivex")
+		local subject = rx.Subject.create()
+
+		local bucket = {}
+		Schema.wrap("events", subject, {
+			idSelector = function(rec)
+				return rec.customId
+			end,
+			sourceTimeField = "observedAt",
+		}):subscribe(function(record)
+			bucket[#bucket + 1] = record
+		end)
+
+		subject:onNext({ customId = 77, observedAt = 12345 })
+
+		assert.are.equal(1, #bucket)
+		local rec = bucket[1]
+		assert.are.equal(77, rec.RxMeta.id)
+		assert.are.equal("custom", rec.RxMeta.idField)
+		assert.are.equal(12345, rec.RxMeta.sourceTime)
+	end)
 end)

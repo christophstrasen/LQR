@@ -105,6 +105,8 @@ function Schema.wrap(schemaName, observable, opts)
 
 	local idField = opts.idField
 	local idSelector = opts.idSelector
+	local sourceTimeField = opts.sourceTimeField
+	local sourceTimeSelector = opts.sourceTimeSelector
 	if idField ~= nil then
 		if type(idField) ~= "string" or idField == "" then
 			error("opts.idField must be a non-empty string if provided")
@@ -118,6 +120,19 @@ function Schema.wrap(schemaName, observable, opts)
 	end
 	local idLabel = idField or opts.idLabel or opts.idFieldName or "custom"
 
+	if sourceTimeField ~= nil then
+		if type(sourceTimeField) ~= "string" or sourceTimeField == "" then
+			error("opts.sourceTimeField must be a non-empty string if provided")
+		end
+	end
+	if sourceTimeSelector ~= nil and type(sourceTimeSelector) ~= "function" then
+		error("opts.sourceTimeSelector must be a function if provided")
+	end
+	if sourceTimeField ~= nil and sourceTimeSelector ~= nil then
+		error("Provide only one of opts.sourceTimeField or opts.sourceTimeSelector")
+	end
+
+-- Resolve RxMeta.id from either a configured selector/field or a best-effort fallback.
 local function deriveId(record)
 	if idField then
 		return record[idField]
@@ -135,6 +150,22 @@ local function deriveId(record)
 		return value
 	end
 	return record.id
+end
+
+-- Populate RxMeta.sourceTime so time windows work even when callers use custom payload field names.
+local function deriveSourceTime(record)
+	if sourceTimeField then
+		return record[sourceTimeField]
+	end
+	if sourceTimeSelector then
+		local ok, value = pcall(sourceTimeSelector, record)
+		if not ok then
+			Log:warn("Schema '%s' sourceTimeSelector failed (%s); ignoring provided selector", schemaName, tostring(value))
+			return nil, true
+		end
+		return value
+	end
+	return record.observedAtTimeMS or record.sourceTime
 end
 
 	local function processRecord(record)
@@ -200,6 +231,23 @@ end
 		else
 			meta.idField = meta.idField or idField or (idSelector and idLabel) or meta.idField or "unknown"
 	end
+
+		if meta.sourceTime == nil then
+			local sourceTimeValue, sourceSelectorErrored = deriveSourceTime(record)
+			if sourceSelectorErrored then
+				-- deriveSourceTime already logged
+			elseif sourceTimeValue ~= nil then
+				if type(sourceTimeValue) == "number" then
+					meta.sourceTime = sourceTimeValue
+				else
+					Log:warn(
+						"Ignoring sourceTime for schema '%s': expected number, got %s",
+						schemaName,
+						type(sourceTimeValue)
+					)
+				end
+			end
+		end
 
 		meta.shape = meta.shape or "record"
 	return record

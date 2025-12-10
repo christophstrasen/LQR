@@ -25,4 +25,25 @@ describe("RxMeta shapes", function()
 		local res = Result.new()
 		assert.are.equal("join_result", res.RxMeta.shape)
 	end)
+
+	it("retains id and sourceTime when schemas are renamed", function()
+		local res = Result.new()
+		res:attach("alpha", {
+			value = 5,
+			RxMeta = {
+				schema = "alpha",
+				id = 9,
+				idField = "id",
+				sourceTime = 42,
+			},
+		})
+
+		local renamed = Result.selectSchemas(res, { alpha = "beta" })
+		local payload = renamed:get("beta")
+		assert.is_table(payload)
+		assert.are.equal(9, payload.RxMeta.id)
+		assert.are.equal("id", payload.RxMeta.idField)
+		assert.are.equal(42, payload.RxMeta.sourceTime)
+		assert.are.equal("beta", payload.RxMeta.schema)
+	end)
 end)
