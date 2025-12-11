@@ -58,13 +58,12 @@ local function build()
 		end)
 		:groupWindow({ time = 25, field = "sourceTime" })
 		:aggregates({
-			count = true,
-			sum = { "customers.orders.total" },
-			avg = { "customers.orders.total" },
+			sum = { "orders.total" },
+			avg = { "orders.total" },
 		})
 		:having(function(g)
 			-- Keep all groups (threshold 1) so the demo always emits aggregates.
-			return g._count >= 1
+			return g._count_all >= 1
 		end)
 
 	local groupedEnriched = builder
@@ -73,12 +72,11 @@ local function build()
 		end)
 		:groupWindow({ time = 25, field = "sourceTime" })
 		:aggregates({
-			count = true,
-			sum = { "customers.orders.total" },
-			avg = { "customers.orders.total" },
+			sum = { "orders.total" },
+			avg = { "orders.total" },
 		})
 		:having(function(row)
-			return row._count >= 1
+			return row._count_all >= 1
 		end)
 
 	-- Console/info logging to observe aggregates without a visual component.
