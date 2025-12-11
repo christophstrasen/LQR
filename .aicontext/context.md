@@ -27,6 +27,7 @@ Internal prefix / namespacing shorthand: **LQR** (use `LQR` in code and module n
 * **Write tests and use them** when we refactor, change or expand our module work (not necessary when we just run experiments).
 * **prefer minimal-first solutions** When designing system extensions, do not put in optional and nice-to-have fluff.
 * **No legacy** do not build shims, wrappers or aliases when we can instead change the callsites directly.
+* Do not change reactivex codebase (we use it as a submodule) unless instructed.
 
 ## 2) Output Requirements
 - **never use diff output** But only copy-paste ready code and instructions

@@ -1,6 +1,6 @@
 -- Headless helper: drive the window_zoom timeline to show auto-zoom up to 100x100,
 -- then the slide-forward behavior once the burst has faded.
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 require('LQR/bootstrap')
 
 local Log = require("LQR/util/log").withTag("demo")

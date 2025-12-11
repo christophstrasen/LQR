@@ -1,5 +1,5 @@
 -- Minimal headless trace for the snapshot demo so we can keep verifying the static setup.
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 require('LQR/bootstrap')
 
 local Log = require("LQR/util/log").withTag("demo")

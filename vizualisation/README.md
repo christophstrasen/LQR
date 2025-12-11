@@ -44,7 +44,7 @@ Each demo exports `loveDefaults`; `demo/common/love_defaults.lua` just merges th
 - `lockWindow`: keep the grid anchored instead of auto-zooming.
 - `backgroundColor`: optional RGBA background for Love runs.
 - `windowSize`: optional Love window size.
-- Other scenario knobs live beside the defaults in each demo `init.lua`.
+- Other scenario knobs live beside the defaults in each demo module file.
 
 ## Demos at a glance
 - `demo/simple/`: eight-event snapshot; quick smoke test. Run headless (`demo/simple/headless.lua`) or Love (`love . simple`).

@@ -26,14 +26,14 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ## Day 2 – JoinObservable Hardening
 
 ### Highlights
-- **Modular core:** Broke the monolithic `JoinObservable/init.lua` into focused helpers (`strategies`, `expiration`, `warnings`) and kept only the observable factory + key-selector/touch helpers in the entry module. This makes reasoning about join behavior, warning plumbing, and expiration logic far easier.
+- **Modular core:** Broke the monolithic `JoinObservable.lua` into focused helpers (`strategies`, `expiration`, `warnings`) and kept only the observable factory + key-selector/touch helpers in the entry module. This makes reasoning about join behavior, warning plumbing, and expiration logic far easier.
 - **Powerful expiration join windows:** Replaced the lone `maxCacheSize` knob with `joinWindow` modes (`count`, `interval`, `time`, `predicate`). Each mode emits structured expiration packets (“evicted”, “expired_interval”, “expired_time”, etc.) and replays unmatched rows according to the strategy, giving users stronger control over correctness join windows. A new LuaEvents experiment demonstrates every mode with timestamped data.
 - **Test depth:** Suite now covers default joins, functional selectors, count/interval/time/predicate retention, nil-key drops, malformed packets, warning suppression, merge ordering + failure, matched-record guarantees, and manual disposal. Everything runs cleanly via `busted tests/unit/join_observable_spec.lua`.
 
 ### Key learnings
 1. **Visibility beats silence:** Dropped packets (nil keys, malformed merge output, predicate errors) must surface via warnings; use the shared logger tag (`join`) and `Log.supressBelow("error", fn)` in tests to mute noise without sacrificing production observability.
 2. **Retention defines correctness:** Framing cache limits as `joinWindow` made it clear only “warm” records yield trustworthy joins. Providing time/predicate policies keeps the API flexible without leaking complexity into the core.
-3. **Composable architecture pays off:** Moving strategies/expiration/warnings into their own modules and offering a custom merge hook gave us the confidence to expand features without bloating `init.lua`, and paved the way for future extensions (per-side policies, metrics).
+3. **Composable architecture pays off:** Moving strategies/expiration/warnings into their own modules and offering a custom merge hook gave us the confidence to expand features without bloating the entry module, and paved the way for future extensions (per-side policies, metrics).
 
 ### Decisions recorded
 - Keep nil-key entries as warnings + drops; expiration events fire when cached records (matched or not) age out.
@@ -264,7 +264,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 ## Day 17 – LQR namespace, examples, and grouping ergonomics
 
 ### Highlights
-- **LQR namespace + entrypoint:** Wrapped the core modules under an `LQR/` tree and added `LQR/init.lua` plus a root shim `LQR.lua`. `require("LQR")` now exposes `Query`, `Schema`, `JoinObservable`, `reactivex`, and a few helpers (`observableFromTable`, `get`), while tests and demos were updated to go through the namespaced paths. The bootstrap logic was tightened to resolve `LQR` and vendored deps relative to the project root instead of relying on CWD.
+- **LQR namespace + entrypoint:** Wrapped the core modules under an `LQR/` tree with a single `LQR.lua` entrypoint. `require("LQR")` now exposes `Query`, `Schema`, `JoinObservable`, `reactivex`, and a few helpers (`observableFromTable`, `get`), while tests and demos were updated to go through the namespaced paths. The bootstrap logic was tightened to resolve `LQR` and vendored deps relative to the project root instead of relying on CWD.
 - **High-level lions/gazelles example:** Rebuilt `examples.lua` into a small, self-contained “animal kingdom” demo: two schemas (`lions`, `gazelles`), an inner join on `location`, a `groupByEnrich("by_location")`, and aggregation over `count_distinct` gazelles plus average lion hunger. The example uses `SchemaHelpers.subjectWithSchema` to simulate live events (subjects + `onNext` calls) and prints human-readable enriched rows, demonstrating how joins + grouping + HAVING-like predicates hang together in a real scenario.
 - **Row-level aggregation refinements:** Renamed the grouping row count from `_count` to `_count_all` and introduced per-schema counts under `_count` (e.g., `_count.customers`, plus per-path maps such as `customers._count.id`). Added `count_distinct` aggregates (mirroring `sum`/`avg`/`min`/`max`) so users can configure distinct counts per path (`count_distinct = { "gazelles.id" }` → `row.gazelles._count_distinct.id`), while the existing `row_count` flag remains the switch that enables `_count_all`/`_count`.
 - **Central dot-path getter:** Added `LQR.get(tbl, "gazelles._count_distinct.id")` as a tiny, generic, dot-path-safe getter for nested tables. The example uses it to keep printing expressions tidy and defensive, and it serves as a future expansion hook for more path-aware helpers.

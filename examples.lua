@@ -3,7 +3,6 @@
 -- Requires: lua-reactivex checkout at ./reactivex (see README for commands).
 package.path = table.concat({
 	"./?.lua",
-	"./?/init.lua",
 	package.path,
 }, ";")
 

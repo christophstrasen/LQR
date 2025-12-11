@@ -24,9 +24,7 @@ end
 -- Ensure the LQR root and viz paths are on package.path regardless of CWD or love invocation.
 package.path = table.concat({
 	join(base_dir, "?.lua"),
-	join(base_dir, "?/init.lua"),
 	join(base_dir, "../?.lua"),
-	join(base_dir, "../?/init.lua"),
 	package.path,
 }, ";")
 
@@ -34,8 +32,8 @@ require("LQR/bootstrap")
 
 local LoveRunner = require("vizualisation/demo/love_runner")
 
-local function addIfHasInit(root, entry, dest)
-	local relPath = string.format("%s/%s/init.lua", root, entry)
+local function addIfHasModule(root, entry, dest)
+	local relPath = string.format("%s/%s.lua", root, entry)
 
 	if love and love.filesystem and love.filesystem.getInfo then
 		local info = love.filesystem.getInfo(relPath, "file")
@@ -45,8 +43,8 @@ local function addIfHasInit(root, entry, dest)
 		end
 	end
 
-	local initPath = string.format("%s/%s/init.lua", root, entry)
-	local fh = io.open(initPath, "r")
+	local modulePath = string.format("%s/%s.lua", root, entry)
+	local fh = io.open(modulePath, "r")
 	if fh then
 		fh:close()
 		dest[#dest + 1] = entry
@@ -73,7 +71,7 @@ local function listDemoFolders()
 		local ok, entries = pcall(love.filesystem.getDirectoryItems, "demo")
 		if ok and entries then
 			for _, entry in ipairs(entries) do
-				addIfHasInit("demo", entry, found)
+				addIfHasModule("demo", entry, found)
 			end
 		end
 	end
@@ -88,7 +86,7 @@ local function listDemoFolders()
 				local path = root .. "/" .. entry
 				local attr = lfs.attributes(path)
 				if attr and attr.mode == "directory" then
-					addIfHasInit(root, entry, found)
+					addIfHasModule(root, entry, found)
 				end
 			end
 		end
@@ -100,7 +98,7 @@ local function listDemoFolders()
 	local handle = io.popen(string.format("ls -1 %s 2>/dev/null", root))
 	if handle then
 		for entry in handle:lines() do
-			addIfHasInit(root, entry, found)
+			addIfHasModule(root, entry, found)
 		end
 		handle:close()
 		if #found > 0 then

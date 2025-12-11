@@ -1,4 +1,4 @@
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 require('LQR/bootstrap')
 
 local Runtime = require("vizualisation/core/runtime")

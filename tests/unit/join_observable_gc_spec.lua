@@ -1,10 +1,10 @@
 local package = require("package")
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
 require('LQR/bootstrap')
 
-local JoinObservable = require("LQR/JoinObservable/init")
+local JoinObservable = require("LQR/JoinObservable")
 local Schema = require("LQR/JoinObservable/schema")
 local rx = require("reactivex")
 

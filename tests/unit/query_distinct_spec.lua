@@ -1,5 +1,5 @@
 local package = require("package")
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
 require("LQR/bootstrap")

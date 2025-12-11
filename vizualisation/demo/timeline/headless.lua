@@ -1,6 +1,6 @@
 -- Headless helper: ingest the lively timeline demo, capture deterministic snapshots,
 -- and log the resulting grid window for quick sanity checks.
-package.path = "./?.lua;./?/init.lua;" .. package.path
+package.path = "./?.lua;" .. package.path
 require('LQR/bootstrap')
 
 local Log = require("LQR/util/log").withTag("demo")

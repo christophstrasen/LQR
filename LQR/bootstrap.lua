@@ -1,20 +1,26 @@
-local debug = require("debug")
-local package = require("package")
+local ok_debug, debug = pcall(require, "debug")
+local ok_package, package = pcall(function()
+	return package
+end)
+-- If the host does not expose debug or package (e.g., PZ runtime), bail out gracefully.
+if not (ok_debug and ok_package) then
+	return {
+		repoRoot = nil,
+		libraryPaths = {},
+	}
+end
 -- TODO(later): re-enable Zomboid stubs when running inside the game runtime.
 -- require("LQR/util/zomboid_stubs")
 
 -- Explainer: Collect canonical search paths for project modules and vendored libraries.
 local BASE_PATHS = {
 	"?.lua",
-	"?/init.lua",
 	"LQR/?.lua",
-	"LQR/?/init.lua",
 }
 
 local LIBRARY_PATHS = {
 	-- Preferred: root-level lua-reactivex checkout (e.g., submodule at ./reactivex).
 	"reactivex/?.lua",
-	"reactivex/?/init.lua",
 }
 
 local function normalize(path, root)
