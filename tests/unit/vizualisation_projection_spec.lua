@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Renderer = require("vizualisation.core.headless_renderer")
-local Runtime = require("vizualisation.core.runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local Runtime = require("vizualisation/core/runtime")
 
 ---@diagnostic disable: undefined-global
 describe("vizualisation projection anchoring", function()
@@ -88,7 +88,7 @@ describe("vizualisation projection anchoring", function()
 			right = { schema = "other", id = 1000 },
 		})
 
-		local snap = require("vizualisation.core.headless_renderer").render(runtime, {
+		local snap = require("vizualisation/core/headless_renderer").render(runtime, {
 			other = { 0.5, 0.5, 0.5, 1 },
 			joined = { 0, 1, 0, 1 },
 			expired = { 1, 0, 0, 1 },
@@ -104,9 +104,9 @@ end)
 
 describe("vizualisation projection enrichment", function()
 	it("marks projection metadata on normalized events", function()
-		local Query = require("LQR.Query")
-		local SchemaHelpers = require("tests.support.schema_helpers")
-		local QueryVizAdapter = require("vizualisation.core.query_adapter")
+		local Query = require("LQR/Query")
+		local SchemaHelpers = require("tests/support/schema_helpers")
+		local QueryVizAdapter = require("vizualisation/core/query_adapter")
 
 		local customers = SchemaHelpers.observableFromTable("customers", { { id = 1 } })
 		local orders = SchemaHelpers.observableFromTable("orders", { { id = 1, customerId = 1 } })

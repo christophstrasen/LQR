@@ -1,13 +1,13 @@
 -- Minimal headless trace for the snapshot demo so we can keep verifying the static setup.
 package.path = "./?.lua;./?/init.lua;" .. package.path
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Log = require("LQR.util.log").withTag("demo")
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
-local DebugViz = require("vizualisation.vizLogFormatter")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local SimpleDemo = require("vizualisation.demo.simple")
+local Log = require("LQR/util/log").withTag("demo")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local DebugViz = require("vizualisation/vizLogFormatter")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local SimpleDemo = require("vizualisation/demo/simple")
 
 local demo = SimpleDemo.build()
 local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })

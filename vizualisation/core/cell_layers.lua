@@ -1,6 +1,6 @@
-local Log = require("LQR.util.log")
-local Color = require("LQR.util.color")
-local Time = require("LQR.util.time")
+local Log = require("LQR/util/log")
+local Color = require("LQR/util/color")
+local Time = require("LQR/util/time")
 
 local CellLayer = {}
 CellLayer.__index = CellLayer

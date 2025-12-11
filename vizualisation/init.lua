@@ -1,1 +1,1 @@
-return require("vizualisation.main")
+return require("vizualisation/main")

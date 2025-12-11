@@ -8,7 +8,7 @@
 
 local rx = require("reactivex")
 local Observable = rx.Observable or rx
-local Log = require("LQR.util.log").withTag("join")
+local Log = require("LQR/util/log").withTag("join")
 local Schema = {}
 local invalidVersionNotified = {}
 

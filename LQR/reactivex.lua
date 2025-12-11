@@ -1,4 +1,4 @@
-require("LQR.bootstrap")
+require("LQR/bootstrap")
 
 local function requireReactiveX(module)
 	local ok, result = pcall(require, module)

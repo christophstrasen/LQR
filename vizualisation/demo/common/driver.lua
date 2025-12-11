@@ -1,7 +1,7 @@
 local Driver = {}
 
-local Scheduler = require("vizualisation.demo.scheduler")
-local Log = require("LQR.util.log").withTag("demo")
+local Scheduler = require("vizualisation/demo/scheduler")
+local Log = require("LQR/util/log").withTag("demo")
 
 ---Create a standard demo driver around Scheduler.
 ---@param args table

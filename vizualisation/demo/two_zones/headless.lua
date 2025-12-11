@@ -1,11 +1,11 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
-local DebugViz = require("vizualisation.vizLogFormatter")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local TwoZonesDemo = require("vizualisation.demo.two_zones")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local DebugViz = require("vizualisation/vizLogFormatter")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local TwoZonesDemo = require("vizualisation/demo/two_zones")
 
 local demo = TwoZonesDemo.build()
 local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })

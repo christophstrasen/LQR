@@ -12,13 +12,13 @@
 ---@field private _wherePredicate fun(row:table):boolean|nil
 ---@field private _finalTap fun(value:any)|nil
 local rx = require("reactivex")
-local JoinObservable = require("LQR.JoinObservable")
-local Result = require("LQR.JoinObservable.result")
-local Log = require("LQR.util.log").withTag("query")
-local GroupByObservable = require("LQR.GroupByObservable")
-local DistinctObservable = require("LQR.Query.distinct_observable")
-local Schema = require("LQR.JoinObservable.schema")
-local TableUtil = require("LQR.util.table")
+local JoinObservable = require("LQR/JoinObservable")
+local Result = require("LQR/JoinObservable/result")
+local Log = require("LQR/util/log").withTag("query")
+local GroupByObservable = require("LQR/GroupByObservable")
+local DistinctObservable = require("LQR/Query/distinct_observable")
+local Schema = require("LQR/JoinObservable/schema")
+local TableUtil = require("LQR/util/table")
 
 local function warnUnknownKeys(tbl, allowed, label)
 	if type(tbl) ~= "table" then

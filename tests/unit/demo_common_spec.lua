@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local ZonesTimeline = require("vizualisation.demo.common.zones_timeline")
-local Driver = require("vizualisation.demo.common.driver")
+local ZonesTimeline = require("vizualisation/demo/common/zones_timeline")
+local Driver = require("vizualisation/demo/common/driver")
 
 ---@diagnostic disable: undefined-global
 describe("demo common helpers", function()

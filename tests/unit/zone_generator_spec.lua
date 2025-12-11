@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local ShapeWeights = require("vizualisation.zones.shape_weights")
-local Generator = require("vizualisation.zones.generator")
+local ShapeWeights = require("vizualisation/zones/shape_weights")
+local Generator = require("vizualisation/zones/generator")
 
 ---@diagnostic disable: undefined-global
 describe("zone generator", function()

@@ -1,9 +1,9 @@
 -- Schema-aware distinct operator with windowed retention (count or time).
 local rx = require("reactivex")
-local Expiration = require("LQR.JoinObservable.expiration")
-local Result = require("LQR.JoinObservable.result")
-local Schema = require("LQR.JoinObservable.schema")
-local Log = require("LQR.util.log").withTag("distinct")
+local Expiration = require("LQR/JoinObservable/expiration")
+local Result = require("LQR/JoinObservable/result")
+local Schema = require("LQR/JoinObservable/schema")
+local Log = require("LQR/util/log").withTag("distinct")
 
 local DEFAULT_WINDOW_COUNT = 1000
 

@@ -1,6 +1,6 @@
 local ZonesTimeline = {}
 
-local Zones = require("vizualisation.zones")
+local Zones = require("vizualisation/zones")
 
 ---Build events and snapshots from zones with a deterministic completion marker.
 ---@param zones table[]

@@ -1,6 +1,6 @@
 -- Snapshot formatter for high-level visualization: logs cells/borders/metadata with a dedicated tag.
-local Log = require("LQR.util.log")
-local CellLayers = require("vizualisation.core.cell_layers")
+local Log = require("LQR/util/log")
+local CellLayers = require("vizualisation/core/cell_layers")
 
 local VizLog = Log.withTag("viz-hi")
 local NEUTRAL_BORDER_COLOR = { 0.24, 0.24, 0.24, 1 }

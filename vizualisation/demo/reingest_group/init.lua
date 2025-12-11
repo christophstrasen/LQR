@@ -2,11 +2,11 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Query = require("LQR.Query")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local Log = require("LQR.util.log").withTag("demo")
+local Query = require("LQR/Query")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local Log = require("LQR/util/log").withTag("demo")
 
 -- Minimal headless demo: build a grouped aggregate, re-ingest it into a second query, and log alerts.
 local function buildDemo()

@@ -1,6 +1,6 @@
-require("LQR.bootstrap")
+require("LQR/bootstrap")
 
-local Builder = require("LQR.Query.builder")
+local Builder = require("LQR/Query/builder")
 
 local Query = {}
 Query.QueryBuilder = Builder.QueryBuilder

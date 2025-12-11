@@ -1,10 +1,10 @@
-local Log = require("LQR.util.log").withTag("demo")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
-local DebugViz = require("vizualisation.vizLogFormatter")
-local Draw = require("vizualisation.core.draw")
-local Color = require("LQR.util.color")
+local Log = require("LQR/util/log").withTag("demo")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local DebugViz = require("vizualisation/vizLogFormatter")
+local Draw = require("vizualisation/core/draw")
+local Color = require("LQR/util/color")
 
 local LoveRunner = {}
 

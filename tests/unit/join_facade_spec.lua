@@ -2,12 +2,12 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Query = require("LQR.Query")
-local JoinObservable = require("LQR.JoinObservable")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local Log = require("LQR.util.log")
+local Query = require("LQR/Query")
+local JoinObservable = require("LQR/JoinObservable")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local Log = require("LQR/util/log")
 
 ---@diagnostic disable: undefined-global
 describe("Join high-level facade", function()

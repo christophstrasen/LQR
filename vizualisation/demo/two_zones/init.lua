@@ -1,10 +1,10 @@
 local TwoZonesDemo = {}
 
-local Query = require("LQR.Query")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local ZonesTimeline = require("vizualisation.demo.common.zones_timeline")
-local Driver = require("vizualisation.demo.common.driver")
-local LoveDefaults = require("vizualisation.demo.common.love_defaults")
+local Query = require("LQR/Query")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local ZonesTimeline = require("vizualisation/demo/common/zones_timeline")
+local Driver = require("vizualisation/demo/common/driver")
+local LoveDefaults = require("vizualisation/demo/common/love_defaults")
 
 local PLAY_DURATION = 12
 

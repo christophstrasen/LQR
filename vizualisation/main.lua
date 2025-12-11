@@ -30,9 +30,9 @@ package.path = table.concat({
 	package.path,
 }, ";")
 
-require("LQR.bootstrap")
+require("LQR/bootstrap")
 
-local LoveRunner = require("vizualisation.demo.love_runner")
+local LoveRunner = require("vizualisation/demo/love_runner")
 
 local function addIfHasInit(root, entry, dest)
 	local relPath = string.format("%s/%s/init.lua", root, entry)

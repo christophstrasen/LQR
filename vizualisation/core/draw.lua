@@ -1,6 +1,6 @@
 -- Drawing helpers for high-level viz snapshots.
 local Draw = {}
-local CellLayers = require("vizualisation.core.cell_layers")
+local CellLayers = require("vizualisation/core/cell_layers")
 
 local SMALL_LAYOUT = {
 	padding = 3,

@@ -2,9 +2,9 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local DataModel = require("LQR.GroupByObservable.data_model")
+local DataModel = require("LQR/GroupByObservable/data_model")
 
 ---@diagnostic disable: undefined-global
 describe("GroupBy data model", function()

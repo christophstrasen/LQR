@@ -1,7 +1,7 @@
-require("LQR.bootstrap")
+require("LQR/bootstrap")
 
-local Core = require("LQR.JoinObservable.core")
-local Chain = require("LQR.JoinObservable.chain")
+local Core = require("LQR/JoinObservable/core")
+local Chain = require("LQR/JoinObservable/chain")
 
 local JoinObservable = {}
 

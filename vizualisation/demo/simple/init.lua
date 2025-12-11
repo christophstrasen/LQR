@@ -1,8 +1,8 @@
 local SimpleDemo = {}
 
-local Query = require("LQR.Query")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local LoveDefaults = require("vizualisation.demo.common.love_defaults")
+local Query = require("LQR/Query")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local LoveDefaults = require("vizualisation/demo/common/love_defaults")
 
 local function buildSubjects()
 	local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })

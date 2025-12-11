@@ -1,10 +1,10 @@
 -- Core join implementation that pairs two schema-tagged streams and emits joined results.
 local rx = require("reactivex")
-local Schema = require("LQR.JoinObservable.schema")
-local Result = require("LQR.JoinObservable.result")
-local Strategies = require("LQR.JoinObservable.strategies")
-local Expiration = require("LQR.JoinObservable.expiration")
-local Log = require("LQR.util.log").withTag("join")
+local Schema = require("LQR/JoinObservable/schema")
+local Result = require("LQR/JoinObservable/result")
+local Strategies = require("LQR/JoinObservable/strategies")
+local Expiration = require("LQR/JoinObservable/expiration")
+local Log = require("LQR/util/log").withTag("join")
 
 local JoinObservableCore = {}
 

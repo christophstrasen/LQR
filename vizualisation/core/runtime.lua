@@ -2,7 +2,7 @@
 -- Think of this as the brains behind the snapshots: it maps ids onto a sliding grid,
 -- tracks when rows were last "seen", and enforces auto-zoom rules so renderers only
 -- worry about pixels.
-local Math = require("LQR.util.math")
+local Math = require("LQR/util/math")
 local Runtime = {}
 Runtime.__index = Runtime
 

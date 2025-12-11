@@ -57,7 +57,7 @@ local gazelleEvents = {
 
 -- Use subjects so we can emit after wiring our subscription.
 -- In a real app, these subjects would be fed by live events (e.g., LuaEvents or game callbacks).
-local SchemaHelpers = require("tests.support.schema_helpers")
+local SchemaHelpers = require("tests/support/schema_helpers")
 local lionsSubject, lions = SchemaHelpers.subjectWithSchema("lions", { idField = "id" })
 local gazellesSubject, gazelles = SchemaHelpers.subjectWithSchema("gazelles", { idField = "id" })
 

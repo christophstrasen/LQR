@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Draw = require("vizualisation.core.draw")
-local CellLayers = require("vizualisation.core.cell_layers")
+local Draw = require("vizualisation/core/draw")
+local CellLayers = require("vizualisation/core/cell_layers")
 
 local EMPTY_CELL_COLOR = { 0.2, 0.2, 0.2, 1 }
 

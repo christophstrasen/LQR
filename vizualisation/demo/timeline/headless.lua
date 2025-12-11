@@ -1,14 +1,14 @@
 -- Headless helper: ingest the lively timeline demo, capture deterministic snapshots,
 -- and log the resulting grid window for quick sanity checks.
 package.path = "./?.lua;./?/init.lua;" .. package.path
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Log = require("LQR.util.log").withTag("demo")
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
-local DebugViz = require("vizualisation.vizLogFormatter")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local TimelineScenario = require("vizualisation.demo.timeline")
+local Log = require("LQR/util/log").withTag("demo")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local DebugViz = require("vizualisation/vizLogFormatter")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local TimelineScenario = require("vizualisation/demo/timeline")
 
 local demo = TimelineScenario.build()
 local adapter = QueryVizAdapter.attach(demo.builder, { logEvents = false })

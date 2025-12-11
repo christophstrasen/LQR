@@ -1,6 +1,6 @@
 local rx = require("reactivex")
-local Log = require("LQR.util.log").withTag("group")
-local DataModel = require("LQR.GroupByObservable.data_model")
+local Log = require("LQR/util/log").withTag("group")
+local DataModel = require("LQR/GroupByObservable/data_model")
 
 local GroupByCore = {}
 

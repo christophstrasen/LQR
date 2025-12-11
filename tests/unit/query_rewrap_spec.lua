@@ -2,11 +2,11 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
 local rx = require("reactivex")
-local Query = require("LQR.Query")
-local Result = require("LQR.JoinObservable.result")
+local Query = require("LQR/Query")
+local Result = require("LQR/JoinObservable/result")
 
 ---@diagnostic disable: undefined-global
 describe("Query rewrap of grouped outputs", function()
@@ -80,7 +80,7 @@ end)
 
 describe("Query rewrap from builder sources", function()
 	it("accepts a grouped builder as source", function()
-		local subject, source = require("tests.support.schema_helpers").subjectWithSchema("schema", { idField = "id" })
+		local subject, source = require("tests/support/schema_helpers").subjectWithSchema("schema", { idField = "id" })
 		local aggregate = Query.from(source)
 		local grouped = aggregate:groupBy("grouped", function(row)
 			return row.schema.id

@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
 
 ---@diagnostic disable: undefined-global
 describe("vizualisation headless renderer TTL factors", function()

@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Query = require("LQR.Query")
-local SchemaHelpers = require("tests.support.schema_helpers")
+local Query = require("LQR/Query")
+local SchemaHelpers = require("tests/support/schema_helpers")
 
 local function collect(observable)
 	local out = {}

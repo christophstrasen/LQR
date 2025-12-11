@@ -1,12 +1,12 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Runtime = require("vizualisation.core.runtime")
-local Renderer = require("vizualisation.core.headless_renderer")
-local DebugViz = require("vizualisation.vizLogFormatter")
-local Log = require("LQR.util.log")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local TwoCirclesDemo = require("vizualisation.demo.two_circles")
+local Runtime = require("vizualisation/core/runtime")
+local Renderer = require("vizualisation/core/headless_renderer")
+local DebugViz = require("vizualisation/vizLogFormatter")
+local Log = require("LQR/util/log")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local TwoCirclesDemo = require("vizualisation/demo/two_circles")
 
 -- Headless demo can be noisy at INFO; drop join-tag logs by default.
 -- Opt out with HEADLESS_JOIN_LOGS=1.

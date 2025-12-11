@@ -1,13 +1,13 @@
 -- LQR entrypoint: loads bootstrap and re-exports public modules.
-local Bootstrap = require("LQR.bootstrap")
+local Bootstrap = require("LQR/bootstrap")
 
-local Schema = require("LQR.JoinObservable.schema")
+local Schema = require("LQR/JoinObservable/schema")
 
 return {
 	Bootstrap = Bootstrap,
-	Query = require("LQR.Query"),
+	Query = require("LQR/Query"),
 	Schema = Schema,
-	JoinObservable = require("LQR.JoinObservable"),
+	JoinObservable = require("LQR/JoinObservable"),
 	rx = require("reactivex"),
 	observableFromTable = Schema.observableFromTable,
 	---Safe dot-path getter for nested tables.

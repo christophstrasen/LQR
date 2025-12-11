@@ -1,12 +1,12 @@
 -- High-level visualization adapter: taps Query builder joins to emit normalized events
 -- (sources, matches, expirations) for dynamic renderers without touching core scheduling.
 local rx = require("reactivex")
-local JoinLog = require("LQR.util.log").withTag("join")
-local VizLog = require("LQR.util.log").withTag("viz-hi")
-local Result = require("LQR.JoinObservable.result")
-local Math = require("LQR.util.math")
-local TableUtil = require("LQR.util.table")
-local Color = require("LQR.util.color")
+local JoinLog = require("LQR/util/log").withTag("join")
+local VizLog = require("LQR/util/log").withTag("viz-hi")
+local Result = require("LQR/JoinObservable/result")
+local Math = require("LQR/util/math")
+local TableUtil = require("LQR/util/table")
+local Color = require("LQR/util/color")
 
 local QueryVizAdapter = {}
 

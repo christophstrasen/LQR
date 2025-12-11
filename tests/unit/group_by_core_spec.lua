@@ -2,10 +2,10 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
 local rx = require("reactivex")
-local Core = require("LQR.GroupByObservable.core")
+local Core = require("LQR/GroupByObservable/core")
 
 ---@diagnostic disable: undefined-global
 describe("GroupByObservable core", function()

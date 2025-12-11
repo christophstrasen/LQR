@@ -2,11 +2,11 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Schema = require("LQR.JoinObservable.schema")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local Result = require("LQR.JoinObservable.result")
+local Schema = require("LQR/JoinObservable/schema")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local Result = require("LQR/JoinObservable/result")
 
 ---@diagnostic disable: undefined-global
 describe("RxMeta shapes", function()

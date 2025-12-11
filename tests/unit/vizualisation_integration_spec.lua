@@ -2,12 +2,12 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Query = require("LQR.Query")
-local SchemaHelpers = require("tests.support.schema_helpers")
-local QueryVizAdapter = require("vizualisation.core.query_adapter")
-local Runtime = require("vizualisation.core.runtime")
+local Query = require("LQR/Query")
+local SchemaHelpers = require("tests/support/schema_helpers")
+local QueryVizAdapter = require("vizualisation/core/query_adapter")
+local Runtime = require("vizualisation/core/runtime")
 
 ---@diagnostic disable: undefined-global
 describe("vizualisation adapter + runtime", function()
@@ -54,7 +54,7 @@ describe("vizualisation adapter + runtime", function()
 		ordersSubject:onCompleted()
 		refundsSubject:onCompleted()
 
-		local snap = require("vizualisation.core.headless_renderer").render(runtime, adapter.palette)
+		local snap = require("vizualisation/core/headless_renderer").render(runtime, adapter.palette)
 		assert.is_true(#(snap.meta.header.joins or {}) >= 2)
 		local dk = snap.meta.header.joins[1].displayKey or ""
 		assert.is_true(dk:find("customers%.id") ~= nil)

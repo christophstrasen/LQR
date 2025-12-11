@@ -2,9 +2,9 @@ local package = require("package")
 package.path = "./?.lua;./?/init.lua;" .. package.path
 package.cpath = "./?.so;" .. package.cpath
 
-require('LQR.bootstrap')
+require('LQR/bootstrap')
 
-local Schema = require("LQR.JoinObservable.schema")
+local Schema = require("LQR/JoinObservable/schema")
 
 ---@diagnostic disable: undefined-global
 describe("Schema helpers", function()

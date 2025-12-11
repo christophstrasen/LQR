@@ -1,7 +1,7 @@
 local debug = require("debug")
 local package = require("package")
 -- TODO(later): re-enable Zomboid stubs when running inside the game runtime.
--- require("LQR.util.zomboid_stubs')
+-- require("LQR/util/zomboid_stubs")
 
 -- Explainer: Collect canonical search paths for project modules and vendored libraries.
 local BASE_PATHS = {

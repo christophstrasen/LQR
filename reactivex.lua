@@ -1,18 +1,18 @@
 -- Flattened entrypoint matching reactivex/init.lua so hosts can require("reactivex") without init.lua lookup.
-local util = require("reactivex.util")
-local Subscription = require("reactivex.subscription")
-local Observer = require("reactivex.observer")
-local Observable = require("reactivex.observable")
-local ImmediateScheduler = require("reactivex.schedulers.immediatescheduler")
-local CooperativeScheduler = require("reactivex.schedulers.cooperativescheduler")
-local TimeoutScheduler = require("reactivex.schedulers.timeoutscheduler")
-local Subject = require("reactivex.subjects.subject")
-local AsyncSubject = require("reactivex.subjects.asyncsubject")
-local BehaviorSubject = require("reactivex.subjects.behaviorsubject")
-local ReplaySubject = require("reactivex.subjects.replaysubject")
+local util = require("reactivex/util")
+local Subscription = require("reactivex/subscription")
+local Observer = require("reactivex/observer")
+local Observable = require("reactivex/observable")
+local ImmediateScheduler = require("reactivex/schedulers/immediatescheduler")
+local CooperativeScheduler = require("reactivex/schedulers/cooperativescheduler")
+local TimeoutScheduler = require("reactivex/schedulers/timeoutscheduler")
+local Subject = require("reactivex/subjects/subject")
+local AsyncSubject = require("reactivex/subjects/asyncsubject")
+local BehaviorSubject = require("reactivex/subjects/behaviorsubject")
+local ReplaySubject = require("reactivex/subjects/replaysubject")
 
-require("reactivex.operators.init")
-require("reactivex.aliases")
+require("reactivex/operators/init")
+require("reactivex/aliases")
 
 local rx = {
 	util = util,
