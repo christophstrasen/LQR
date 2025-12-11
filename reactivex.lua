@@ -13,6 +13,7 @@ local function join(dir, suffix)
 end
 
 local candidates = {
+	join(base_dir, "reactivex/reactivex.lua"),
 	join(base_dir, "reactivex/init.lua"),
 	join(base_dir, "reactivex/reactivex/init.lua"),
 }

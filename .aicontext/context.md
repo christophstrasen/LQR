@@ -27,7 +27,10 @@ Internal prefix / namespacing shorthand: **LQR** (use `LQR` in code and module n
 * **Write tests and use them** when we refactor, change or expand our module work (not necessary when we just run experiments).
 * **prefer minimal-first solutions** When designing system extensions, do not put in optional and nice-to-have fluff.
 * **No legacy** do not build shims, wrappers or aliases when we can instead change the callsites directly.
-* Do not change reactivex codebase (we use it as a submodule) unless instructed.
+* Remember that project zomboid does not use init.lua as a magic way to load a folder
+* Do not use DOT as director separator but SLASH for all lua requires
+* Do not use package.path unless in a conscious compatible way that does not inhibit proper function of requires in the project zomboid runtime
+* Ensure that things work in both project zomboid runtime and in vanilla lua 5.1 on the console
 
 ## 2) Output Requirements
 - **never use diff output** But only copy-paste ready code and instructions
@@ -44,9 +47,7 @@ Internal prefix / namespacing shorthand: **LQR** (use `LQR` in code and module n
 - **CI** we use github actions and pre-commit
 - **Editor/OS:** VS Code with VIM support on NixOS.
 - **Authoritative Repo Layout**
-```
-tbd
-```
+
 
 ## 5) External Sources of Truth (in order)
 
