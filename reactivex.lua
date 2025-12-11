@@ -1,18 +1,43 @@
 -- Flattened entrypoint so hosts can require("reactivex") without init.lua lookup.
--- Prefer normal module resolution; bootstrap injects a searcher for ../lua-reactivex/reactivex/*.
--- Fallback to sibling lua-reactivex when present.
+-- Prefer sibling lua-reactivex checkout when present; otherwise fall back to package.path.
+local base_dir = "./"
+do
+	local info = debug and debug.getinfo and debug.getinfo(1, "S")
+	local source = info and info.source or ""
+	if source:sub(1, 1) == "@" then
+		source = source:sub(2)
+	end
+	local dir = source:match("(.*/)") or "./"
+	base_dir = dir
+end
+
 local module
 do
-	local ok, result = pcall(require, "reactivex/reactivex")
-	if ok then
-		module = result
+	-- Try sibling checkout directly (works even if searchers/path are locked down).
+	local chunk = loadfile(base_dir .. "../lua-reactivex/reactivex.lua")
+		or loadfile(base_dir .. "../lua-reactivex/reactivex/reactivex.lua")
+	if chunk then
+		module = chunk()
 	else
-		local chunk = loadfile("../lua-reactivex/reactivex/reactivex.lua") or loadfile("../lua-reactivex/reactivex.lua")
-		if chunk then
-			module = chunk()
-		else
+		local ok, result = pcall(require, "reactivex/reactivex")
+		if not ok then
 			error(string.format("reactivex: failed to load core module: %s", tostring(result)))
 		end
+		module = result
+	end
+end
+
+-- Preload operators aggregator if available to satisfy require("reactivex/operators") without init.lua recursion.
+do
+	local op_chunk = loadfile("./operators.lua") or loadfile("../lua-reactivex/operators.lua") or loadfile(base_dir .. "../lua-reactivex/operators.lua")
+	if op_chunk then
+		local function loader()
+			package.loaded["reactivex/operators"] = true
+			package.loaded["reactivex.operators"] = true
+			return op_chunk()
+		end
+		package.preload["reactivex/operators"] = loader
+		package.preload["reactivex.operators"] = loader
 	end
 end
 
