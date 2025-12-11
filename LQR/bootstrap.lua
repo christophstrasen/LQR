@@ -37,8 +37,13 @@ local function parent_dir(path)
 end
 
 local function get_repo_root()
-	local source = debug.getinfo(1, "S").source
-	if source:sub(1, 1) == "@" then
+	local info = debug.getinfo(1, "S") or {}
+	local source = info.source or ""
+
+	-- If debug info is missing or not a file, fall back to current directory.
+	if source:sub(1, 1) ~= "@" then
+		source = "./bootstrap.lua"
+	else
 		source = source:sub(2)
 	end
 

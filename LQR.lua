@@ -1,16 +1,27 @@
--- Shim so hosts without folder-based init loading can `require("LQR")`.
--- Falls back to LQR/init.lua and emits a friendly hint on failure.
-local function loadLQR()
-	local ok, result = pcall(require, "LQR.init")
-	if not ok then
-		local msg = string.format(
-			"LQR: failed to load LQR.init (%s). Ensure the LQR/ folder is present and on package.path.",
-			tostring(result)
-		)
-		print(msg)
-		return nil
-	end
-	return result
-end
+-- LQR entrypoint: loads bootstrap and re-exports public modules.
+local Bootstrap = require("LQR.bootstrap")
 
-return loadLQR()
+local Schema = require("LQR.JoinObservable.schema")
+
+return {
+	Bootstrap = Bootstrap,
+	Query = require("LQR.Query"),
+	Schema = Schema,
+	JoinObservable = require("LQR.JoinObservable"),
+	rx = require("reactivex"),
+	observableFromTable = Schema.observableFromTable,
+	---Safe dot-path getter for nested tables.
+	---@param tbl table|nil
+	---@param path string
+	---@return any
+	get = function(tbl, path)
+		local current = tbl
+		for segment in tostring(path):gmatch("[^%.]+") do
+			if type(current) ~= "table" then
+				return nil
+			end
+			current = current[segment]
+		end
+		return current
+	end,
+}
