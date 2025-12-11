@@ -1,35 +1,8 @@
--- Flattened entrypoint matching the vendored submodule so hosts can require("reactivex") without init.lua lookup.
-local info = debug.getinfo(1, "S")
-local source = info and info.source or ""
-if source:sub(1, 1) == "@" then
-	source = source:sub(2)
+-- Flattened entrypoint so hosts can require("reactivex") without init.lua lookup or debug/loadfile.
+local ok, module = pcall(require, "reactivex/reactivex")
+if not ok then
+	error(string.format("reactivex: failed to load core module: %s", tostring(module)))
 end
-local base_dir = source:match("(.*/)") or "./"
-local function join(dir, suffix)
-	if dir:sub(-1) == "/" then
-		return dir .. suffix
-	end
-	return dir .. "/" .. suffix
-end
-
-local candidates = {
-	join(base_dir, "reactivex/reactivex.lua"),
-	join(base_dir, "reactivex/init.lua"),
-	join(base_dir, "reactivex/reactivex/init.lua"),
-}
-
-local chunk, err
-for _, path in ipairs(candidates) do
-	chunk, err = loadfile(path)
-	if chunk then
-		break
-	end
-end
-
-if not chunk then
-	error(err)
-end
-local module = chunk()
 
 -- Provide a scheduler helper that mirrors our CLI expectations without touching
 -- the vendored code. This keeps tests (and consumers) working even if the
