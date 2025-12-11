@@ -21,6 +21,8 @@ local BASE_PATHS = {
 local LIBRARY_PATHS = {
 	-- Preferred: standalone lua-reactivex submodule (sibling to LQR).
 	"../lua-reactivex/?.lua",
+	-- Fallback: bundled submodule inside this repo.
+	"reactivex/?.lua",
 }
 
 local function normalize(path, root)
@@ -118,20 +120,30 @@ local function add_searcher(prefix, base_dir)
 end
 
 safe_extend_package_path()
+-- Prefer sibling checkout; fallback to bundled submodule.
 add_searcher("reactivex", repo_root .. "../lua-reactivex/")
+add_searcher("reactivex", repo_root .. "reactivex/")
 
--- Preload operators aggregator located at ../lua-reactivex/operators.lua to avoid init.lua recursion.
+-- Preload operators aggregator from sibling if present, otherwise bundled copy,
+-- to avoid init.lua recursion when hosts resolve that path first.
 do
-	local op_path = repo_root .. "../lua-reactivex/operators.lua"
-	local chunk = loadfile(op_path)
-	if chunk then
-		local function loader()
-			package.loaded["reactivex/operators"] = true
-			package.loaded["reactivex.operators"] = true
-			return chunk()
+	local candidates = {
+		repo_root .. "../lua-reactivex/operators.lua",
+		repo_root .. "reactivex/operators.lua",
+	}
+
+	for _, op_path in ipairs(candidates) do
+		local chunk = loadfile(op_path)
+		if chunk then
+			local function loader()
+				package.loaded["reactivex/operators"] = true
+				package.loaded["reactivex.operators"] = true
+				return chunk()
+			end
+			package.preload["reactivex/operators"] = loader
+			package.preload["reactivex.operators"] = loader
+			break
 		end
-		package.preload["reactivex/operators"] = loader
-		package.preload["reactivex.operators"] = loader
 	end
 end
 

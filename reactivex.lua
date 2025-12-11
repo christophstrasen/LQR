@@ -16,6 +16,8 @@ do
 	-- Try sibling checkout directly (works even if searchers/path are locked down).
 	local chunk = loadfile(base_dir .. "../lua-reactivex/reactivex.lua")
 		or loadfile(base_dir .. "../lua-reactivex/reactivex/reactivex.lua")
+		-- Fallback to bundled submodule.
+		or loadfile(base_dir .. "reactivex/reactivex.lua")
 	if chunk then
 		module = chunk()
 	else
@@ -29,7 +31,11 @@ end
 
 -- Preload operators aggregator if available to satisfy require("reactivex/operators") without init.lua recursion.
 do
-	local op_chunk = loadfile("./operators.lua") or loadfile("../lua-reactivex/operators.lua") or loadfile(base_dir .. "../lua-reactivex/operators.lua")
+	local op_chunk = loadfile("./operators.lua")
+		or loadfile("../lua-reactivex/operators.lua")
+		or loadfile(base_dir .. "../lua-reactivex/operators.lua")
+		-- Fallback to bundled submodule.
+		or loadfile(base_dir .. "reactivex/operators.lua")
 	if op_chunk then
 		local function loader()
 			package.loaded["reactivex/operators"] = true
