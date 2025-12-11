@@ -75,7 +75,45 @@ local function extend_package_path()
 	package.path = table.concat({ table.concat(extra_paths, ";"), package.path }, ";")
 end
 
-extend_package_path()
+-- Project Zomboid disallows tampering with package.path, so guard the path
+-- extension behind a check for writeability while relying on a searcher
+-- fallback to load vendored dependencies.
+local function safe_extend_package_path()
+	local ok = pcall(function()
+		local original = package.path
+		package.path = original -- test write access
+	end)
+	if ok then
+		extend_package_path()
+	end
+end
+
+local function add_searcher(prefix, base_dir)
+	-- Prefix-aware loader that bypasses package.path by resolving directly
+	-- from the repo root (works in PZ where package.path is locked down).
+	local function loader(module_name)
+		if module_name ~= prefix and not module_name:match("^" .. prefix .. "[%./]") then
+			return nil
+		end
+
+		local suffix = module_name:gsub("^" .. prefix .. "[%./]?", "")
+		local path = base_dir .. (suffix == "" and "init.lua" or (suffix:gsub("%.", "/") .. ".lua"))
+
+		local chunk, err = loadfile(path)
+		if chunk then
+			return chunk
+		end
+
+		return ("\n\tno file '%s' (%s)"):format(path, err or "loadfile failed")
+	end
+
+	if type(package.searchers) == "table" then
+		table.insert(package.searchers, 1, loader)
+	end
+end
+
+safe_extend_package_path()
+add_searcher("reactivex", repo_root .. "reactivex/")
 
 local Bootstrap = {}
 
