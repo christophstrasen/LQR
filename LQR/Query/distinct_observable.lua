@@ -1,5 +1,5 @@
 -- Schema-aware distinct operator with windowed retention (count or time).
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local Expiration = require("LQR.JoinObservable.expiration")
 local Result = require("LQR.JoinObservable.result")
 local Schema = require("LQR.JoinObservable.schema")

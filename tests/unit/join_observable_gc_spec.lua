@@ -6,7 +6,7 @@ require('LQR.bootstrap')
 
 local JoinObservable = require("LQR.JoinObservable.init")
 local Schema = require("LQR.JoinObservable.schema")
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 
 local function summarizePairs(pairs)
 	local summary = {}

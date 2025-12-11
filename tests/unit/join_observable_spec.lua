@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local JoinObservable = require("LQR.JoinObservable.init")
 local SchemaHelpers = require("tests.support.schema_helpers")
 local Result = require("LQR.JoinObservable.result")

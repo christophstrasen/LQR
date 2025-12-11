@@ -12,11 +12,9 @@ local BASE_PATHS = {
 }
 
 local LIBRARY_PATHS = {
-	-- Optional: sibling lua-reactivex checkout (e.g., external/lua-reactivex in parent).
-	"../lua-reactivex/?.lua",
-	"../lua-reactivex/?/init.lua",
-	-- Optional: bundled starlit dependency when present.
-	"LQR/external/StarlitLibrary/Contents/mods/StarlitLibrary/42/media/lua/shared/?.lua",
+	-- Preferred: root-level lua-reactivex checkout (e.g., submodule at ./reactivex).
+	"reactivex/?.lua",
+	"reactivex/?/init.lua",
 }
 
 local function normalize(path, root)

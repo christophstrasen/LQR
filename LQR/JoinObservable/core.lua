@@ -1,5 +1,5 @@
 -- Core join implementation that pairs two schema-tagged streams and emits joined results.
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local Schema = require("LQR.JoinObservable.schema")
 local Result = require("LQR.JoinObservable.result")
 local Strategies = require("LQR.JoinObservable.strategies")

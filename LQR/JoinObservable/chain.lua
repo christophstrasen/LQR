@@ -1,4 +1,4 @@
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local Result = require("LQR.JoinObservable.result")
 local Log = require("LQR.util.log").withTag("join")
 

@@ -1,5 +1,12 @@
 -- LiQoR high-level API example
 -- Run with: `lua examples.lua` from the repo root.
+-- Requires: lua-reactivex checkout at ./reactivex (see README for commands).
+package.path = table.concat({
+	"./?.lua",
+	"./?/init.lua",
+	package.path,
+}, ";")
+
 local LQR = require("LQR")
 local Query = LQR.Query
 local get = LQR.get

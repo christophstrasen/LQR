@@ -4,7 +4,7 @@ package.cpath = "./?.so;" .. package.cpath
 
 require('LQR.bootstrap')
 
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local Core = require("LQR.GroupByObservable.core")
 
 ---@diagnostic disable: undefined-global

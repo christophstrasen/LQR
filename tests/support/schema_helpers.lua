@@ -1,6 +1,6 @@
 local SchemaHelpers = {}
 
-local rx = require("LQR.reactivex")
+local rx = require("reactivex")
 local Observable = rx.Observable or rx
 local Schema = require("LQR.JoinObservable.schema")
 

@@ -8,7 +8,7 @@ return {
 	Query = require("LQR.Query"),
 	Schema = Schema,
 	JoinObservable = require("LQR.JoinObservable"),
-	rx = require("LQR.reactivex"),
+	rx = require("reactivex"),
 	observableFromTable = Schema.observableFromTable,
 	---Safe dot-path getter for nested tables.
 	---@param tbl table|nil

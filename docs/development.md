@@ -21,6 +21,16 @@ pre-commit install
 
 This installs the Git hook that automatically runs `busted tests/unit` before each commit.
 
+## Dependencies
+
+LQR expects lua-reactivex to be available at the repo root in `./reactivex` (our fork at https://github.com/christophstrasen/lua-reactivex). Bring it in once:
+
+```bash
+git clone https://github.com/christophstrasen/lua-reactivex.git reactivex
+# or: git submodule add https://github.com/christophstrasen/lua-reactivex.git reactivex
+#      git submodule update --init --recursive
+```
+
 ## Manual run
 
 You can run the hook manually against all files:

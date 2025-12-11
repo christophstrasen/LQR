@@ -21,6 +21,16 @@ https://github.com/user-attachments/assets/42733f4d-7063-4cf2-9047-0f6ada5b4172
 
 ---
 
+## Dependency: lua-reactivex
+
+LQR does not vendor lua-reactivex. Check out **our fork** into `./reactivex` (sibling to `./LQR`) so `require("reactivex.*")` resolves for examples, tests, and the viz pipeline:
+
+- `git clone https://github.com/christophstrasen/lua-reactivex.git reactivex`  
+  or `git submodule add https://github.com/christophstrasen/lua-reactivex.git reactivex && git submodule update --init --recursive`
+- Legacy fallback: a sibling checkout at `../lua-reactivex` is still discovered by `LQR.bootstrap`, but the root-level `./reactivex` path is the default.
+
+---
+
 ## Quickstart
 
 This example shows how to:
@@ -167,7 +177,7 @@ Quick comparison of what each approach may deliver
 
 LQR builds directly on the work of others in the Lua ReactiveX ecosystem:
 
-- [`4O4/lua-reactivex`](https://github.com/4O4/lua-reactivex) — the concrete ReactiveX implementation this project vendors and extends.
+- [`christophstrasen/lua-reactivex`](https://github.com/christophstrasen/lua-reactivex) — forked from `4O4/lua-reactivex`, expected at `./reactivex` in this repo.
 - [`bjornbytes/RxLua`](https://github.com/bjornbytes/RxLua) — the original Rx implementation
 
 If you are new to ReactiveX in Lua, both repositories and especially [ReactiveX](https://reactivex.io/) are worth a look.

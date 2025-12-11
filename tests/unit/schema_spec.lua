@@ -41,7 +41,7 @@ describe("Schema helpers", function()
 	end)
 
 	it("honors idSelector and sourceTimeField options", function()
-		local rx = require("LQR.reactivex")
+		local rx = require("reactivex")
 		local subject = rx.Subject.create()
 
 		local bucket = {}

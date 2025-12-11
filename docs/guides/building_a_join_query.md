@@ -160,4 +160,4 @@ After building a query, you can still use regular lua‑reactivex operators to w
 LQR is designed to sit on top of lua‑reactivex, not replace it. For the full set of Rx operators and patterns, see:
 
 - the ReactiveX documentation: https://reactivex.io/
-- the lua‑reactivex fork used by this project: https://github.com/christophstrasen/lua-reactivex/tree/master/doc
+- the lua‑reactivex fork used by this project: https://github.com/christophstrasen/lua-reactivex/tree/main/doc
