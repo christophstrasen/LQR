@@ -2,8 +2,8 @@ local ok_debug, debug = pcall(require, "debug")
 local ok_package, package = pcall(function()
 	return package
 end)
--- If the host does not expose debug or package (e.g., PZ runtime), bail out gracefully.
-if not (ok_debug and ok_package) then
+-- If the host does not expose debug/package or getinfo, bail out gracefully (e.g., PZ runtime).
+if not (ok_debug and ok_package) or type(debug) ~= "table" or type(debug.getinfo) ~= "function" then
 	return {
 		repoRoot = nil,
 		libraryPaths = {},
