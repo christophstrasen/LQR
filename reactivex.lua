@@ -1,7 +1,19 @@
--- Flattened entrypoint so hosts can require("reactivex") without init.lua lookup or debug/loadfile.
-local ok, module = pcall(require, "reactivex/reactivex")
-if not ok then
-	error(string.format("reactivex: failed to load core module: %s", tostring(module)))
+-- Flattened entrypoint so hosts can require("reactivex") without init.lua lookup.
+-- Prefer normal module resolution; bootstrap injects a searcher for ../lua-reactivex/reactivex/*.
+-- Fallback to sibling lua-reactivex when present.
+local module
+do
+	local ok, result = pcall(require, "reactivex/reactivex")
+	if ok then
+		module = result
+	else
+		local chunk = loadfile("../lua-reactivex/reactivex/reactivex.lua") or loadfile("../lua-reactivex/reactivex.lua")
+		if chunk then
+			module = chunk()
+		else
+			error(string.format("reactivex: failed to load core module: %s", tostring(result)))
+		end
+	end
 end
 
 -- Provide a scheduler helper that mirrors our CLI expectations without touching

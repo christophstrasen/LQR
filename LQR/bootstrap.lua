@@ -19,8 +19,8 @@ local BASE_PATHS = {
 }
 
 local LIBRARY_PATHS = {
-	-- Preferred: root-level lua-reactivex checkout (e.g., submodule at ./reactivex).
-	"reactivex/?.lua",
+	-- Preferred: standalone lua-reactivex submodule (sibling to LQR).
+	"../lua-reactivex/?.lua",
 }
 
 local function normalize(path, root)
@@ -97,7 +97,12 @@ local function add_searcher(prefix, base_dir)
 		end
 
 		local suffix = module_name:gsub("^" .. prefix .. "[%./]?", "")
-		local path = base_dir .. (suffix == "" and "init.lua" or (suffix:gsub("%.", "/") .. ".lua"))
+		local path
+		if suffix == "" then
+			path = base_dir .. "reactivex/reactivex.lua"
+		else
+			path = base_dir .. "reactivex/" .. (suffix:gsub("%.", "/") .. ".lua")
+		end
 
 		local chunk, err = loadfile(path)
 		if chunk then
@@ -113,7 +118,22 @@ local function add_searcher(prefix, base_dir)
 end
 
 safe_extend_package_path()
-add_searcher("reactivex", repo_root .. "reactivex/")
+add_searcher("reactivex", repo_root .. "../lua-reactivex/")
+
+-- Preload operators aggregator located at ../lua-reactivex/operators.lua to avoid init.lua recursion.
+do
+	local op_path = repo_root .. "../lua-reactivex/operators.lua"
+	local chunk = loadfile(op_path)
+	if chunk then
+		local function loader()
+			package.loaded["reactivex/operators"] = true
+			package.loaded["reactivex.operators"] = true
+			return chunk()
+		end
+		package.preload["reactivex/operators"] = loader
+		package.preload["reactivex.operators"] = loader
+	end
+end
 
 local Bootstrap = {}
 
