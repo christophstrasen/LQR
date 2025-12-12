@@ -45,7 +45,15 @@ local function parent_dir(path)
 end
 
 local function get_repo_root()
-	local info = debug.getinfo(1, "S") or {}
+	-- In some hosts (e.g., stripped PZ runtime) debug.getinfo may exist but throw
+	-- when invoked; guard with pcall to avoid hard crashes.
+	local ok, info = pcall(function()
+		return debug.getinfo(1, "S")
+	end)
+	if not ok or type(info) ~= "table" then
+		return "./"
+	end
+
 	local source = info.source or ""
 
 	-- If debug info is missing or not a file, fall back to current directory.

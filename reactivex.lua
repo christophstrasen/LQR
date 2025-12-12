@@ -18,6 +18,47 @@ do
 		or loadfile(base_dir .. "../lua-reactivex/reactivex/reactivex.lua")
 		-- Fallback to bundled submodule.
 		or loadfile(base_dir .. "reactivex/reactivex.lua")
+
+	-- Install lightweight searchers so nested requires like reactivex/util resolve
+	-- when package.path/searchers are locked down (PZ-style).
+	local function add_searcher(prefix, root_dir)
+		if not package then
+			return
+		end
+		local loaders = package.searchers or package.loaders
+		if type(loaders) ~= "table" then
+			return
+		end
+
+		local loader = function(module_name)
+			if module_name ~= prefix and not module_name:match("^" .. prefix .. "[%./]") then
+				return nil
+			end
+
+			local suffix = module_name:gsub("^" .. prefix .. "[%./]?", "")
+			local path = root_dir .. "reactivex/" .. (suffix == "" and "reactivex.lua" or (suffix:gsub("%.", "/") .. ".lua"))
+
+			local chunk, err = loadfile(path)
+			if chunk then
+				return chunk
+			end
+
+			return ("\n\tno file '%s' (%s)"):format(path, err or "loadfile failed")
+		end
+
+		table.insert(loaders, 1, loader)
+		-- Mirror insertion into both fields when present so downstream uses either.
+		if package.searchers and package.searchers ~= loaders then
+			table.insert(package.searchers, 1, loader)
+		end
+		if package.loaders and package.loaders ~= loaders then
+			table.insert(package.loaders, 1, loader)
+		end
+	end
+
+	add_searcher("reactivex", base_dir .. "reactivex/")
+	add_searcher("reactivex", base_dir .. "../lua-reactivex/")
+
 	if chunk then
 		module = chunk()
 	else
