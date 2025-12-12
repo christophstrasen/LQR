@@ -23,6 +23,13 @@ local LEVEL_NAMES = {
 local DEFAULT_LEVEL = "warn"
 local LOGGER_TAG = "LOGGER"
 
+local function safe_getenv(name)
+	if type(os) == "table" and type(os.getenv) == "function" then
+		return os.getenv(name)
+	end
+	return nil
+end
+
 local function normalizeLevel(name)
 	if not name then
 		return nil
@@ -35,11 +42,11 @@ local function normalizeLevel(name)
 end
 
 local function envLevel()
-	local specified = normalizeLevel(os.getenv("LOG_LEVEL"))
+	local specified = normalizeLevel(safe_getenv("LOG_LEVEL"))
 	if specified then
 		return specified
 	end
-	if os.getenv("DEBUG") == "1" then
+	if safe_getenv("DEBUG") == "1" then
 		return "debug"
 	end
 	return DEFAULT_LEVEL
@@ -90,8 +97,8 @@ local function splitTags(raw)
 	return next(set) and set or nil
 end
 
-tagInclude = splitTags(os.getenv("LOG_TAG_INCLUDE"))
-tagExclude = splitTags(os.getenv("LOG_TAG_EXCLUDE"))
+	tagInclude = splitTags(safe_getenv("LOG_TAG_INCLUDE"))
+	tagExclude = splitTags(safe_getenv("LOG_TAG_EXCLUDE"))
 
 if tagInclude and tagExclude then
 	defaultEmitter("warn", "LOG_TAG_INCLUDE and LOG_TAG_EXCLUDE both set; ignoring tag filters", LOGGER_TAG)
