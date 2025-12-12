@@ -97,6 +97,15 @@ end
 
 -- Explainer: normalizeWindow mirrors joinWindow semantics so GC options behave consistently.
 -- We intentionally keep gcOnInsert defaulting to true and support periodic GC via gcIntervalSeconds/gcScheduleFn.
+local function default_now()
+	if os and type(os.time) == "function" then
+		return os.time
+	end
+	return function()
+		return 0
+	end
+end
+
 local function normalizeWindow(opts)
 	opts = opts or {}
 	if opts.count and opts.count > 0 then
@@ -112,7 +121,7 @@ local function normalizeWindow(opts)
 		mode = "time",
 		time = opts.time or 0,
 		field = opts.field or "sourceTime",
-		currentFn = opts.currentFn or os.time,
+		currentFn = opts.currentFn or default_now(),
 		gcOnInsert = opts.gcOnInsert ~= false,
 		gcIntervalSeconds = opts.gcIntervalSeconds,
 		gcScheduleFn = opts.gcScheduleFn,

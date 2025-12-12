@@ -5,6 +5,15 @@ local Expiration = {}
 
 local DEFAULT_MAX_CACHE_SIZE = 5
 
+local function default_now()
+	if os and type(os.time) == "function" then
+		return os.time
+	end
+	return function()
+		return 0
+	end
+end
+
 local function normalizeSingle(options, config)
 	config = config or {}
 	local mode = (config.mode or options.mode or "count"):lower()
@@ -14,7 +23,7 @@ local function normalizeSingle(options, config)
 		config = {
 			field = config.field or options.field or "time",
 			offset = ttl,
-			currentFn = config.currentFn or options.currentFn or os.time,
+			currentFn = config.currentFn or options.currentFn or default_now(),
 			reason = config.reason or options.reason or "expired_time",
 		}
 		mode = "interval"
@@ -36,7 +45,7 @@ local function normalizeSingle(options, config)
 		assert(field, "joinWindow.field is required for interval mode")
 		local offset = config.offset or options.offset
 		assert(type(offset) == "number" and offset >= 0, "joinWindow.offset must be a non-negative number")
-		local currentFn = config.currentFn or options.currentFn or os.time
+		local currentFn = config.currentFn or options.currentFn or default_now()
 		assert(type(currentFn) == "function", "joinWindow.currentFn must be a function")
 		return {
 			mode = "interval",
@@ -48,7 +57,7 @@ local function normalizeSingle(options, config)
 	elseif mode == "predicate" then
 		local predicate = config.predicate or config.evaluator
 		assert(type(predicate) == "function", "joinWindow.predicate must be a function")
-		local currentFn = config.currentFn or options.currentFn or os.time
+		local currentFn = config.currentFn or options.currentFn or default_now()
 		assert(type(currentFn) == "function", "joinWindow.currentFn must be a function")
 		return {
 			mode = "predicate",

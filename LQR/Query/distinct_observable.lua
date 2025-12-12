@@ -5,6 +5,15 @@ local Result = require("LQR/JoinObservable/result")
 local Schema = require("LQR/JoinObservable/schema")
 local Log = require("LQR/util/log").withTag("distinct")
 
+local function default_now()
+	if os and type(os.time) == "function" then
+		return os.time
+	end
+	return function()
+		return 0
+	end
+end
+
 local DEFAULT_WINDOW_COUNT = 1000
 
 local DistinctObservable = {}
@@ -111,7 +120,7 @@ local function normalizeWindow(window, scheduler)
 			mode = "interval",
 			field = window.field or "sourceTime",
 			offset = window.time or window.offset or 0,
-			currentFn = window.currentFn or os.time,
+			currentFn = window.currentFn or default_now(),
 		}
 	end
 

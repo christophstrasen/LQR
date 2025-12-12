@@ -232,6 +232,15 @@ local function ensureId(meta, record, opts)
 	end
 end
 
+local function default_now()
+	if os and type(os.time) == "function" then
+		return os.time
+	end
+	return function()
+		return 0
+	end
+end
+
 local function maybeResetTime(record, opts)
 	if not opts or not opts.resetTime then
 		return
@@ -240,7 +249,7 @@ local function maybeResetTime(record, opts)
 		return
 	end
 	local field = opts.timeField or "sourceTime"
-	local currentFn = opts.currentFn or os.time
+	local currentFn = opts.currentFn or default_now()
 	record[field] = currentFn()
 end
 
@@ -547,7 +556,7 @@ local function normalizeJoinWindow(step, defaultJoinWindow, scheduler)
 			mode = "interval",
 			field = joinWindow.field or "sourceTime",
 			offset = joinWindow.time or joinWindow.offset or 0,
-			currentFn = joinWindow.currentFn or os.time,
+			currentFn = joinWindow.currentFn or default_now(),
 		},
 		gcOnInsert = joinWindow.gcOnInsert,
 		gcIntervalSeconds = joinWindow.gcIntervalSeconds,

@@ -42,14 +42,17 @@ end
 local function probe(label, setup)
 	local old_debug = _G.debug
 	local old_package = package
+	local old_os = os
 
 	local ok, err = pcall(function()
 		setup()
 		run_modules()
 	end)
 
+	-- Restore globals so later probes behave normally.
 	_G.debug = old_debug
 	package = old_package
+	os = old_os
 
 	if ok then
 		io.stdout:write(("[pass] %s\n"):format(label))
@@ -87,6 +90,20 @@ all_ok = probe("package-nil", function()
 	package = nil
 end) and all_ok
 
+-- Probe 4: os missing (simulate runtimes without os.*).
+all_ok = probe("os-nil", function()
+	_G.debug = nil
+	package = nil
+	os = nil
+end) and all_ok
+
+local function safe_exit(code)
+	if os and os.exit then
+		os.exit(code)
+	end
+	return code
+end
+
 if not all_ok then
-	os.exit(1)
+	safe_exit(1)
 end
