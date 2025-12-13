@@ -404,3 +404,184 @@ Recommended fields (v1):
 Scheduler metrics mirror the same style via `scheduler:metrics_get()` / `scheduler:metrics_reset()`, with per-buffer breakdowns under `buffers[name] = ...`.
 
 Note: `metrics_reset()` does not affect ingestion/drain behavior (buffer contents, ordering, lane queues, round-robin pointers). It only resets counters/peaks/averages that are surfaced for observability.
+
+---
+
+## 13. Likely API surface (v1)
+
+This section lists the concrete endpoints (functions/methods), configuration knobs, and core internal data structures we expect to implement.
+
+### 13.1 Module entrypoint
+
+```lua
+local Ingest = require("LQR/ingest")
+```
+
+Exports:
+
+- `Ingest.buffer(opts) -> buffer`
+- `Ingest.scheduler(opts) -> scheduler`
+
+### 13.2 `Ingest.buffer(opts)` (constructor)
+
+Required knobs:
+
+- `name: string` — identifier for debugging/metrics.
+- `mode: "dedupSet" | "latestByKey" | "queue"`
+- `capacity: integer` — required; see “capacity rule” in §5.
+- `key: fun(item:any): (string|number|nil)` — nil is treated as caller bug: drop + warn + `onDrop`.
+
+Optional knobs:
+
+- `ordering: "none" | "fifo"` — applies only to `dedupSet`/`latestByKey`; ignored for `queue` (warn on every drain if set).
+- `lane: fun(item:any): (string|nil)` — defaults to `"default"` when omitted or returns nil.
+- `lanePriority: fun(laneName:string): integer` — optional; defaults to `1` for unknown lanes. Priorities start at `1`; higher means “more important”.
+
+Hooks (all optional):
+
+- `onDrainStart: fun(info)` — `{ nowMillis, maxItems, maxMillis }`
+- `onDrainEnd: fun(info)` — `{ processed, pendingAfter, dropped, replaced, spentMillis }`
+- `onDrop: fun(info)` — `{ reason, item, key, lane }`
+- `onReplace: fun(info)` — `{ old, new, key, lane }`
+
+### 13.3 `buffer` methods
+
+Endpoints:
+
+- `buffer:ingest(item:any) -> nil`
+  - Updates per-key `lastSeen` via `ingestSeq`.
+  - Applies compaction/overflow rules; may drop/evict and warn.
+- `buffer:drain(opts) -> stats`
+  - `opts.maxItems: integer` (required)
+  - `opts.maxMillis: number?` (optional; only active if `nowMillis` works and is monotonic)
+  - `opts.nowMillis: fun(): number?` (optional)
+  - `opts.handle: fun(item:any): nil` (required)
+  - Returns minimal stats: `{ processed, pending, dropped, replaced, spentMillis? }`
+    - `pending` is `pendingAfter`
+    - `dropped/replaced` are deltas since previous drain (and include ingest-side events since then)
+- `buffer:metrics_get() -> table`
+- `buffer:metrics_reset() -> nil`
+
+Recommended (optional) endpoint:
+
+- `buffer:clear() -> nil` — explicit flush/clear of buffered items (separate from `metrics_reset()`).
+
+### 13.4 `Ingest.scheduler(opts)` (optional helper)
+
+Constructor knobs:
+
+- `name: string`
+- `maxItemsPerTick: integer` — global item budget applied by `drainTick`.
+
+Endpoints:
+
+- `scheduler:addBuffer(buffer, opts) -> nil`
+  - `opts.priority: integer` (>= 1; higher = drained earlier)
+  - Scheduler priority decides between buffers; lane priority decides within a buffer.
+- `scheduler:drainTick(handleFn?) -> stats`
+  - Calls `buffer:drain(...)` for member buffers in scheduler-priority order under the global budget, passing `handleFn` down (or using a configured handler if we add that later).
+- `scheduler:metrics_get() -> table`
+- `scheduler:metrics_reset() -> nil`
+
+### 13.5 Core internal data structures (likely)
+
+Common:
+
+- `ingestSeq: integer` — monotonic counter, increments on every `ingest`.
+- Lane registry:
+  - `laneName -> laneState`
+  - `laneState.priority: integer`
+  - `laneState.rrCursor` (only for deterministic RR tie-breaking among equal lowest-priority lanes)
+
+Per-mode storage (per lane when lanes are enabled):
+
+- `dedupSet`:
+  - `laneState.pendingByKey[key] = item` (or `true` + separate payload store)
+  - Optional FIFO support (`ordering="fifo"`): `laneState.fifo = { head, tail, keys[...] }` and `laneState.inFifo[key]=true`.
+- `latestByKey`:
+  - `laneState.pendingByKey[key] = item` (payload replaced on ingest for same key)
+  - Optional FIFO support: same as above (FIFO position fixed on first enqueue).
+- `queue`:
+  - `laneState.queue = { head, tail, items[...] }` (FIFO)
+  - Overflow: pick losing lane by priority/RR, then drop from that lane’s head.
+
+Metrics state (cheap):
+
+- Monotonic totals: `ingestedTotal`, `enqueuedTotal`, `dedupedTotal`, `replacedTotal`, `droppedTotal`, `drainedTotal`, `drainCallsTotal`.
+- Per-lane mirrors of key counters and current `pending`.
+- “Last drain” snapshot table.
+- Optional averages accumulators (running mean + optional EMA).
+
+### 13.6 Canonical reason codes (proposal)
+
+If we standardize reason strings for `onDrop`/`droppedByReason`, these are likely candidates:
+
+- `badKey` — `key(item)` returned nil.
+- `dropOldest` — queue overflow drop from FIFO head.
+- `evictLRU` — capacity eviction (LRU-ish by `ingestSeq`) within losing lane.
+- `overflow` — generic overflow (reserved; prefer the specific reasons above).
+
+---
+
+## 14. Proposed module / file layout (v1)
+
+This proposal follows the existing LQR pattern (`Query.lua` + `Query/` folder): a small facade module plus focused implementation files.
+
+### 14.1 Public entrypoints
+
+- `external/LQR/LQR/ingest.lua`
+  - Public facade: exports `buffer(opts)` and `scheduler(opts)`.
+  - Defines the public docs/contract surface and keeps `require("LQR/ingest")` stable.
+
+### 14.2 Buffer implementation
+
+- `external/LQR/LQR/ingest/buffer.lua`
+  - Implements `Ingest.buffer(opts)` and all `buffer:*` methods.
+  - Owns the mode switch (`dedupSet` / `latestByKey` / `queue`) and delegates to mode-specific helpers where useful.
+
+- `external/LQR/LQR/ingest/modes/dedup_set.lua`
+- `external/LQR/LQR/ingest/modes/latest_by_key.lua`
+- `external/LQR/LQR/ingest/modes/queue.lua`
+  - Mode-specific ingest/drain primitives and internal storage shapes.
+  - Each mode implements: `ingest(state, item)` and `drain(state, opts)` (names illustrative).
+
+### 14.3 Lanes, priorities, and overflow selection
+
+- `external/LQR/LQR/ingest/lanes.lua`
+  - Lane normalization (`nil` → `"default"`), `lanePriority` lookup, and deterministic round-robin selection among equal-priority lanes.
+  - Encapsulates: “lowest-priority lane loses” overflow rule.
+
+### 14.4 Ordering helpers
+
+- `external/LQR/LQR/ingest/ordering_fifo.lua`
+  - Implements `ordering="fifo"` for non-queue modes (FIFO by first enqueue time, per lane).
+  - Keeps ordering bookkeeping isolated from mode logic.
+
+### 14.5 Metrics + hooks
+
+- `external/LQR/LQR/ingest/metrics.lua`
+  - Maintains counters/peaks/averages and `lastDrain`, plus per-lane rollups.
+  - Implements `metrics_get()` and `metrics_reset()` without touching buffer contents.
+
+- `external/LQR/LQR/ingest/hooks.lua` (optional)
+  - Normalizes and invokes hooks (`onDrainStart`, `onDrainEnd`, `onDrop`, `onReplace`) consistently.
+
+### 14.6 Reason codes
+
+- `external/LQR/LQR/ingest/reasons.lua`
+  - Central list of canonical reason strings used by `onDrop` and `droppedByReason`.
+
+### 14.7 Scheduler helper
+
+- `external/LQR/LQR/ingest/scheduler.lua`
+  - Implements `Ingest.scheduler(opts)` and `scheduler:*` methods.
+  - Owns buffer-level priority ordering and global budget distribution.
+
+### 14.8 Tests and docs
+
+- `external/LQR/tests/unit/ingest_buffer_spec.lua`
+  - Core invariants: capacity/overflow rules, lane selection + RR tie-breaking, FIFO ordering semantics, deltas vs totals, metrics reset non-interference.
+- `external/LQR/tests/unit/ingest_scheduler_spec.lua`
+  - Buffer ordering by scheduler priority, budget distribution, metrics aggregation.
+- `external/LQR/LQR/raw_internal_docs/IngressBuffer.md`
+  - This design + contract document (kept close to implementation).
