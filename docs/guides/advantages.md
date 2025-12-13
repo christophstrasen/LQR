@@ -184,6 +184,13 @@ In practice this means you can:
 Disclaimer: While, in principle, downstream speed can help limit upstream work when sources are written to respect that, today lua‑reactivex and LQR do not have a full “backpressure protocol” where consumers explicitly signal demand.  
 You still have to design the boundaries of your system (network input, game loop, disk readers) so they respect whatever buffering or throttling strategy you choose. Furthermore it may be smart to use regular lua‑reactivex operators (for example, buffering or sampling) to reduce or reshape traffic before it hits more expensive query stages. Future versions of LQR and lua-reactivex might allow some of these limits to be adjusted dynamically at runtime.
 
+If you are in a tick-driven host (games/sims/UI loops) and you can’t afford to process bursts inside event handlers, use `LQR/ingest` at the source boundary:
+
+- `buffer:ingest(...)` in the event handler (cheap)
+- `buffer:drain({ maxItems = N, ... })` on your tick (budgeted)
+
+See `docs/concepts/ingest_buffering.md` for details and examples.
+
 ---
 
 ## Handles late, missing, and out‑of‑order events

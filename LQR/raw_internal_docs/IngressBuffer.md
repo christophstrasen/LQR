@@ -106,7 +106,7 @@ Rule: `capacity` counts different things by mode:
 
 - Buffer keeps exactly one item per key, replacing older payloads.
 - Ideal for “current state” signals where only the latest value matters per key (e.g. status/health/mode updates), especially when updates can arrive in bursts.
-- Capacity behavior (v1): when at capacity and a new key arrives, evict from the lowest-priority lane; within that lane, evict the key with the oldest `lastSeen` (LRU-ish).
+- Capacity behavior (v1): when at capacity and a new key arrives, evict from the lowest-priority lane (RR on ties); within that lane, evict the key with the oldest `lastSeen` (LRU-ish).
   - `lastSeen` should be tracked via a monotonic `ingestSeq` counter (not wall-clock), so this policy works even when no reliable clock exists.
 
 ### 5.3 `queue` (bounded FIFO)
@@ -274,8 +274,8 @@ local buffer = Ingest.buffer({
     return nil
   end,
   -- Lane priorities (v1):
-  -- Higher number = higher priority. Priorities start at 1 ("default" should be 1).
-  -- Unknown lanes default to priority 1.
+  -- Higher number = higher priority. Priorities start at 1 ("default" is 1).
+  -- lanePriority is optional; unknown lanes default to priority 1.
   lanePriority = function(laneName)
     if laneName == "combat.urgent" then
       return 3
@@ -312,10 +312,10 @@ buffer:metrics_reset()
 
 ```lua
 local sched = Ingest.scheduler({
-  name = "facts.squares",
-  maxItemsPerTick = 200,
-  -- v1: priorities only (weights/reservations are future)
-  -- Note: scheduler priority decides between buffers; lane priority decides within a buffer.
+	name = "facts.squares",
+	maxItemsPerTick = 200,
+	-- v1: priorities only (weights/reservations are future)
+	-- Note: scheduler priority decides between buffers; lane priority decides within a buffer.
 })
 
 sched:addBuffer(buffer, { priority = 10 })
@@ -364,6 +364,7 @@ sched:metrics_reset()
   - `dropped`/`replaced` are deltas since the previous drain; totals are in `:metrics_get()`.
   - Per-lane stats are available via pull-based `:metrics_get()` snapshots, not necessarily attached to every drain return.
 - **Scheduler (v1):** lanes have `priority`; scheduler has a single global `maxItemsPerTick` budget shared across lanes (no per-lane caps in v1).
+  - Scheduler priority is per buffer; lane priority is per buffered item. Equal buffer priority is tie-broken deterministically by insertion order.
 - **Hooks (v1):** support `onDrainStart`, `onDrainEnd`, `onDrop`, `onReplace`.
 - **Time budgets:** optional; enabled only when the host supplies a clock (`nowMillis`).
   - If `maxMillis` is misconfigured (`<= 0`) or `nowMillis()` is not a number, drain 0 items for that tick and warn.
@@ -404,6 +405,35 @@ Recommended fields (v1):
 Scheduler metrics mirror the same style via `scheduler:metrics_get()` / `scheduler:metrics_reset()`, with per-buffer breakdowns under `buffers[name] = ...`.
 
 Note: `metrics_reset()` does not affect ingestion/drain behavior (buffer contents, ordering, lane queues, round-robin pointers). It only resets counters/peaks/averages that are surfaced for observability.
+
+### Load averages (optional, v1)
+
+To make “are we falling behind?” visible at a glance, the buffer also maintains Linux-style “load averages” for backlog pressure and throughput:
+
+- `load1`, `load5`, `load15`: EWMA of `pendingAfter` over ~1s/5s/15s windows.
+- `throughput1`, `throughput5`, `throughput15`: EWMA of drained items per second over the same windows.
+- `ingestRate1`, `ingestRate5`, `ingestRate15`: EWMA of ingested items per second over the same windows.
+
+These are updated once per `drain(...)` call. If a `nowMillis` function is supplied to `drain`, it is used to measure `dt`; otherwise the implementation falls back to a monotonic clock (`os.clock`) for deltas.
+
+### Budget advice (v1)
+
+To make it easy for hosts to “nudge” budgets without re-deriving rates, buffers also expose:
+
+- `buffer:advice_get({ targetClearSeconds?, drainIntervalSeconds?, epsilon? }) -> table`
+
+The returned table includes:
+
+- `trend`: `"rising" | "falling" | "steady"` (coarse backlog trend)
+- `ingestRate`: (15s EWMA items/sec)
+- `throughput`: (15s EWMA items/sec)
+- `load`: (15s EWMA pendingAfter)
+- `recommendedThroughput`: items/sec target (arrival rate + backlog catch-up term)
+- `recommendedThroughput` behavior:
+  - if `targetClearSeconds` is omitted/0: `recommendedThroughput = ingestRate15` (steady state)
+  - if set: `recommendedThroughput = ingestRate15 + (load15 / targetClearSeconds)` (catch-up term)
+- `recommendedMaxItems`: items to pass to the next `drain({ maxItems = ... })` call (requires a known drain interval)
+- `drainIntervalSeconds`: the measured (or provided) drain interval used for the recommendation
 
 ---
 
@@ -461,6 +491,10 @@ Endpoints:
     - `dropped/replaced` are deltas since previous drain (and include ingest-side events since then)
 - `buffer:metrics_get() -> table`
 - `buffer:metrics_reset() -> nil`
+- `buffer:clear() -> nil` — empties buffered items (all lanes), resets pending/peakPending and per-lane pending snapshots, but leaves historical totals/averages intact.
+- `buffer:advice_get(opts) -> table` — returns a coarse trend and a recommended next `maxItems` based on recent ingest/drain rates.
+- `buffer:advice_applyMaxItems(current, opts?) -> newMaxItems, advice` — convenience helper to smooth/clamp a budget using `advice_get`.
+- `buffer:advice_applyMaxMillis(current, opts?) -> newMaxMillis, advice` — same, but converts recommendations to time budgets; only works when timing data (`nowMillis` + observed `spentMillis`) is available; warns and no-ops otherwise.
 
 Recommended (optional) endpoint:
 
@@ -585,3 +619,20 @@ This proposal follows the existing LQR pattern (`Query.lua` + `Query/` folder): 
   - Buffer ordering by scheduler priority, budget distribution, metrics aggregation.
 - `external/LQR/LQR/raw_internal_docs/IngressBuffer.md`
   - This design + contract document (kept close to implementation).
+
+---
+
+## 15. Delta from earlier drafts (what changed)
+
+- Capacity is **global across lanes**; overflow victim is chosen by lowest lane priority (deterministic round-robin on ties), not “fill a per-lane quota”.
+- `queue` overflow is now explicit: always `dropOldest` within the losing lane.
+- `ordering="fifo"` is defined as FIFO by **first enqueue time per lane** for `dedupSet/latestByKey`; ignored (warn) for `queue`.
+- Lane priority defaults to `1` (`default` lane = 1); higher number = higher priority. Lane migration is explicit when a pending key’s lane changes.
+- Eviction for set/map modes is LRU-ish by monotonic `ingestSeq` (`lastSeen` updates on every ingest attempt, even duplicates).
+- Drain stats are *deltas* since the previous drain (`processed, pendingAfter, dropped, replaced, spentMillis?`); totals live in `metrics_get()`.
+- `metrics_get()` / `metrics_reset()` are defined; reset affects only counters/peaks/averages, not buffered items.
+- Time budget: if `nowMillis` is missing/bad/non-monotonic or `maxMillis <= 0`, drain processes 0 items and warns.
+- `key(item) == nil` is treated as a caller bug: drop + warn + `onDrop(reason="badKey")`.
+- Scheduler is scoped: strict buffer priority + shared `maxItemsPerTick`; no per-lane caps in v1.
+- Hooks are all supported (`onDrainStart`, `onDrainEnd`, `onDrop`, `onReplace`); `replacedTotal` counts replacements but does not increment `enqueuedTotal`.
+- Reason codes are standardized (`badKey`, `dropOldest`, `evictLRU`, `overflow`).

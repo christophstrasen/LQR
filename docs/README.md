@@ -28,6 +28,9 @@ These pages explain the main concepts you will use in most queries:
 - [where_and_row_view](concepts/where_and_row_view.md)  
   Row‑level filtering with `where`, using the row view (`row.<schema>` tables) for inner and outer joins, and how `where` relates to join windows and `expired()`.
 
+- [ingest_buffering](concepts/ingest_buffering.md)  
+  Host-friendly “Ingest → Buffer → Drain” admission control for bursty sources and tick budgets (pre-schema).
+
 - [gc_and_scheduling](concepts/gc_and_scheduling.md)  
   How GC runs (on insert vs periodic), scheduler requirements (`gcScheduleFn`), and how retention affects unmatched emissions and time windows during traffic lulls.
 
@@ -90,6 +93,9 @@ These documents are **not** required to use LQR, but are useful if you want to u
 
 - [logging.md](../LQR/raw_internal_docs/logging.md)  
   Logging conventions and log‑level helpers.
+
+- [IngressBuffer.md](../LQR/raw_internal_docs/IngressBuffer.md)  
+  Internal design briefing for the `LQR/ingest` module (buffer modes, lanes, budgets, metrics, and scheduler helper).
 
 ---
 

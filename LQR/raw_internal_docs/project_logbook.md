@@ -336,3 +336,20 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 2. **Duplication and multiplicity are first-class concepts:** Users get a clear story for why joins can emit more rows than “1:1 IDs” suggest, and which knobs (`oneShot`, `distinct`, windows) they can use to shape that behavior.
 3. **Windows are framed as layered tools, not one big switch:** Join, group, and distinct windows each have a focused role, and the docs now emphasize how they compose rather than re-explaining them in isolation in each place.
 4. **Docs and implementation are in tighter sync:** The distinct operator’s behavior (first-seen, count/time windows, expired origins/reasons) and join multiplicity semantics are now described in the same language the code and tests use, reducing the risk of future drift.
+
+## Day 22 – Ingress buffering: Ingest → Buffer → Drain (end-to-end)
+
+### Highlights
+- **New `LQR/ingest` module:** Introduced a host-friendly ingress boundary for bursty, tick-driven runtimes: ingest cheaply at event time, buffer explicitly, then drain under a per-tick budget.
+- **Buffer modes with clear overflow semantics:** Implemented `dedupSet`, `latestByKey`, and `queue` modes with a single global `capacity` across lanes, deterministic overflow selection, and mode-specific eviction (`evictLRU` / `dropOldest`).
+- **Lanes + priority as a single bias dimension:** Added lane classification (`lane(item)`) and `lanePriority(laneName)` so domains can prioritize “urgent” events without encoding domain policy into LQR. v1 is strict priority with deterministic tie-breaking.
+- **Observability matured beyond counters:** Extended buffer metrics with Linux-inspired load averages (`load1/5/15`, `throughput1/5/15`), plus ingest-rate tracking (`ingestRate1/5/15`) so we can reason about whether we are keeping up, falling behind, or recovering.
+- **Actionable advice, not just numbers:** Added `buffer:advice_get()` to compute a coarse trend (`rising`/`falling`/`steady`) and a recommended next `maxItems` for the drain call. Added convenience helpers `advice_applyMaxItems` and `advice_applyMaxMillis` (the latter warns when timing data is too thin).
+- **Strong test coverage, including true end-to-end:** Added unit tests for overflow/ordering/hooks/time budgets and multiple end-to-end specs that simulate ticks, multiple sources, scheduler draining, and even feeding drained items into an actual LQR `Query` pipeline.
+- **User-facing docs landed:** Added a dedicated concept page for ingress buffering under `docs/concepts/ingest_buffering.md` and linked it into the docs table of contents and the root README so the feature is discoverable.
+
+### Takeaways
+1. **Backpressure is a boundary concern in tick-driven hosts:** LQR joins/windows are great at expressing correlation semantics, but overload control needs a simple “admission + pacing” layer at the source boundary.
+2. **“Load average” is the right mental model for backlog pressure:** A trio of smoothed values is more useful than raw per-tick counters; it makes “rising vs falling” obvious without requiring graphs.
+3. **Advice needs defaults that don’t surprise:** Defaulting to steady-state (“keep up”) is safer than silently enabling backlog catch-up; catch-up needs an explicit horizon (`targetClearSeconds`) so hosts can choose aggressiveness.
+4. **Helpers matter as much as primitives:** If we want this to be used in real mods, we should ship the small ergonomic functions (`advice_apply*`) so users don’t re-invent smoothing/clamping logic incorrectly.
