@@ -193,7 +193,7 @@ local function computeAggregates(entries, aggregateConfig)
 		end
 		local ok, keyOrErr = pcall(entry.distinctFn, row)
 		if not ok then
-			Log:warn("groupBy distinctFn for '%s' errored: %s", tostring(entry.path), tostring(keyOrErr))
+			Log:warn("groupBy distinctFn for '%s' errored - %s", tostring(entry.path), tostring(keyOrErr))
 			return false, true
 		end
 		if keyOrErr == nil then
@@ -478,7 +478,7 @@ function GroupByCore.createGroupByObservable(source, options)
 	subscription = source:subscribe(function(row)
 		local ok, keyOrErr = pcall(keySelector, row)
 		if not ok then
-			Log:warn("groupBy keySelector errored: %s", tostring(keyOrErr))
+			Log:warn("groupBy keySelector errored - %s", tostring(keyOrErr))
 			return
 		end
 		local key = keyOrErr

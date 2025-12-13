@@ -4,15 +4,15 @@ local function requireReactiveX(module)
 	local ok, result = pcall(require, module)
 	if not ok then
 		error(
-			string.format(
-				"lua-reactivex dependency missing: %s. Check out https://github.com/christophstrasen/lua-reactivex/tree/main/reactivex into ./reactivex before running LQR. For Project Zomboid users ensure you load all required mod dependencies. Original error: %s",
-				module,
-				result
+				string.format(
+					"lua-reactivex dependency missing - %s. Check out https://github.com/christophstrasen/lua-reactivex/tree/main/reactivex into ./reactivex before running LQR. For Project Zomboid users ensure you load all required mod dependencies. Original error - %s",
+					module,
+					result
+				)
 			)
-		)
+		end
+		return result
 	end
-	return result
-end
 
 -- Explainer: Root entrypoint that mirrors 4O4/lua-reactivex but force-loads operators and
 -- collects helpers so other modules can `require("reactivex")` without wiring schedulers.

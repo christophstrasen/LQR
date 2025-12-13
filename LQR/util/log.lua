@@ -52,16 +52,33 @@ local function envLevel()
 	return DEFAULT_LEVEL
 end
 
+local function sanitizeMessage(message)
+	local msg = tostring(message or "")
+	-- Avoid colons that can be mangled by PZ log rendering; surface them clearly.
+	return msg:gsub(":", "DOUBLECOLON")
+end
+
+local function emitLine(line)
+	local sanitized = sanitizeMessage(line)
+	if io and io.stderr and io.stderr.write then
+		io.stderr:write(sanitized .. "\n")
+	else
+		-- Fall back to print in restricted runtimes (e.g. PZ Kahlua).
+		print(sanitized)
+	end
+end
+
 local defaultEmitter = function(levelName, message, tag)
-	local msg = tostring(message)
+	local msg = sanitizeMessage(message)
 	-- Emit a one-off trace if we ever log a nil/\"nil\" message for a specific tag to help locate sources.
 	if tag == "viz-hi" and msg == "nil" and debug and debug.traceback then
-		io.stderr:write(string.format("[WARN][LOGGER] nil log message for tag=%s\n%s\n", tostring(tag), debug.traceback("", 3)))
+		emitLine(string.format("[WARN][LOGGER] nil log message for tag=%s", tostring(tag)))
+		emitLine(debug.traceback("", 3))
 	end
 	if tag and tag ~= "" then
-		io.stderr:write(string.format("[%s][%s] %s\n", string.upper(levelName), tag, msg))
+		emitLine(string.format("[%s][%s] %s", string.upper(levelName), tag, msg))
 	else
-		io.stderr:write(string.format("[%s] %s\n", string.upper(levelName), msg))
+		emitLine(string.format("[%s] %s", string.upper(levelName), msg))
 	end
 end
 
@@ -122,7 +139,7 @@ end
 function Log.setLevel(levelName)
 	local normalized = normalizeLevel(levelName)
 	if not normalized then
-		return nil, string.format("invalid log level: %s", tostring(levelName))
+	return nil, string.format("invalid log level - %s", tostring(levelName))
 	end
 	currentLevel = normalized
 	return true
@@ -252,7 +269,7 @@ end
 function Log.supressBelow(levelName, fn)
 	local normalized = normalizeLevel(levelName)
 	if not normalized then
-		error(string.format("invalid log level: %s", tostring(levelName)))
+		error(string.format("invalid log level - %s", tostring(levelName)))
 	end
 	assert(type(fn) == "function", "supressBelow expects a function")
 	local previous = currentLevel

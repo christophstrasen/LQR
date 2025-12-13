@@ -30,24 +30,24 @@ local function warnUnknownKeys(tbl, allowed, label)
 			unknown[#unknown + 1] = tostring(key)
 		end
 	end
-	if #unknown > 0 then
-		Log:warn("%s ignored unknown key(s): %s", label, table.concat(unknown, ", "))
-		return true
+		if #unknown > 0 then
+			Log:warn("%s ignored unknown key(s) - %s", label, table.concat(unknown, ", "))
+			return true
+		end
+		return false
 	end
-	return false
-end
 
 local function validateCountWindow(window, label)
 	if not window then
 		return
 	end
 	local count = window.count or window.maxItems
-	if count ~= nil and (type(count) ~= "number" or count <= 0) then
-		Log:warn("%s: count/maxItems should be a positive number; defaulting to %d", label, DEFAULT_WINDOW_COUNT)
-		window.count = DEFAULT_WINDOW_COUNT
-		window.maxItems = nil
+		if count ~= nil and (type(count) ~= "number" or count <= 0) then
+			Log:warn("%s - count/maxItems should be a positive number; defaulting to %d", label, DEFAULT_WINDOW_COUNT)
+			window.count = DEFAULT_WINDOW_COUNT
+			window.maxItems = nil
+		end
 	end
-end
 
 local function validateTimeWindow(window, label)
 	if not window then
@@ -58,17 +58,17 @@ local function validateTimeWindow(window, label)
 		return
 	end
 	if window.field ~= nil and type(window.field) ~= "string" then
-		Log:warn("%s: field should be a string; defaulting to 'sourceTime'", label)
+		Log:warn("%s - field should be a string; defaulting to 'sourceTime'", label)
 		window.field = "sourceTime"
 	end
 	local offset = window.time or window.offset
 	if offset ~= nil and (type(offset) ~= "number" or offset < 0) then
-		Log:warn("%s: time/offset should be a non-negative number; defaulting to 0", label)
+		Log:warn("%s - time/offset should be a non-negative number; defaulting to 0", label)
 		window.time = 0
 		window.offset = nil
 	end
 	if window.currentFn ~= nil and type(window.currentFn) ~= "function" then
-		Log:warn("%s: currentFn should be a function; ignoring provided value", label)
+		Log:warn("%s - currentFn should be a function; ignoring provided value", label)
 		window.currentFn = nil
 	end
 end
@@ -79,7 +79,7 @@ local function validateWindowMode(window, label)
 	end
 	local mode = window.mode
 	if mode ~= "count" and mode ~= "time" and mode ~= "interval" and mode ~= "predicate" then
-		Log:warn("%s: unsupported mode '%s'; defaulting to count/time auto-detection", label, tostring(mode))
+		Log:warn("%s - unsupported mode '%s'; defaulting to count/time auto-detection", label, tostring(mode))
 		window.mode = nil
 	end
 end
@@ -485,9 +485,9 @@ local function normalizeKeySelector(step)
 		local perKeyBufferSize
 		if type(value) == "table" then
 			field = value.field or value.selector and value.field
-			if value.bufferSize ~= nil and value.perKeyBufferSize ~= nil then
-				Log:warn("on[%s]: both bufferSize and perKeyBufferSize provided; bufferSize wins", tostring(schema))
-			end
+				if value.bufferSize ~= nil and value.perKeyBufferSize ~= nil then
+					Log:warn("on[%s] - both bufferSize and perKeyBufferSize provided; bufferSize wins", tostring(schema))
+				end
 			perKeyBufferSize = value.bufferSize or value.perKeyBufferSize
 			local oneShot = value.oneShot
 			if oneShot == true then
@@ -502,10 +502,10 @@ local function normalizeKeySelector(step)
 		normalized[schema] = field
 		if perKeyBufferSize then
 			assert(type(perKeyBufferSize) == "number", "perKeyBufferSize must be a positive number")
-			if perKeyBufferSize < 1 then
-				Log:warn("on[%s]: bufferSize < 1; clamping to 1", tostring(schema))
-				perKeyBufferSize = 1
-			end
+				if perKeyBufferSize < 1 then
+					Log:warn("on[%s] - bufferSize < 1; clamping to 1", tostring(schema))
+					perKeyBufferSize = 1
+				end
 			bufferSizes[schema] = perKeyBufferSize
 		end
 	end
@@ -1077,11 +1077,11 @@ function QueryBuilder:using(map)
 			end
 		end
 		for schemaName in pairs(map) do
-			if not known[schemaName] then
-				Log:warn("using[%s]: schema not present in this join; mapping will be ignored", tostring(schemaName))
+				if not known[schemaName] then
+					Log:warn("using[%s] - schema not present in this join; mapping will be ignored", tostring(schemaName))
+				end
 			end
 		end
-	end
 	ensureUsingCoverage(map, self._schemaNames, rightSchemas)
 	nextBuilder._steps[#nextBuilder._steps].keySpec = { kind = "schemas", map = map }
 	return nextBuilder
@@ -1261,7 +1261,7 @@ function QueryBuilder:_build()
 			end
 			local ok, keep = pcall(predicate, row)
 			if not ok then
-				Log:warn("Query.where predicate errored: %s", tostring(keep))
+				Log:warn("Query.where predicate errored - %s", tostring(keep))
 				return false
 			end
 			local keepBool = keep and true or false
@@ -1335,7 +1335,7 @@ function QueryBuilder:_build()
 				enrichedStream = enrichedStream:filter(function(row)
 					local ok, keep = pcall(predicate, row)
 					if not ok then
-						Log:warn("Query.having (enriched) predicate errored: %s", tostring(keep))
+						Log:warn("Query.having (enriched) predicate errored - %s", tostring(keep))
 						return false
 					end
 					return keep and true or false
@@ -1344,7 +1344,7 @@ function QueryBuilder:_build()
 				aggregateStream = aggregateStream:filter(function(row)
 					local ok, keep = pcall(predicate, row)
 					if not ok then
-						Log:warn("Query.having (aggregate) predicate errored: %s", tostring(keep))
+						Log:warn("Query.having (aggregate) predicate errored - %s", tostring(keep))
 						return false
 					end
 					return keep and true or false

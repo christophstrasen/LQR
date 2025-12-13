@@ -134,7 +134,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 						local meta = entry and entry.RxMeta
 						local value = meta and meta.sourceTime or (entry and entry[field])
 						if type(value) ~= "number" then
-							Log:warn("Cannot evaluate interval expiration for %s entry: field '%s' missing or not numeric", side, field)
+							Log:warn("Cannot evaluate interval expiration for %s entry - field '%s' missing or not numeric", side, field)
 						elseif now - value > offset then
 							local record = table.remove(buffer.entries, i)
 							publishExpirationFn(side, key, record, reason)
@@ -171,7 +171,7 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 						local keep = true
 						local ok, result = pcall(predicate, record.entry, side, ctx)
 						if not ok then
-							Log:warn("joinWindow predicate errored for %s entry: %s", side, tostring(result))
+							Log:warn("joinWindow predicate errored for %s entry - %s", side, tostring(result))
 						else
 							keep = not not result
 						end

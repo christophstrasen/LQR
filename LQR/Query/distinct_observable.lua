@@ -73,33 +73,33 @@ local function normalizeWindow(window, scheduler)
 	local alreadyValidated = window.__validated == true
 	if not alreadyValidated then
 		warnUnknownKeys(window, VALID_DISTINCT_WINDOW_KEYS, "distinct.window")
-		if window.mode and window.mode ~= "count" and window.mode ~= "time" and window.mode ~= "interval" then
-			Log:warn("distinct.window: unsupported mode '%s'; defaulting to count/time auto-detection", tostring(window.mode))
-			window.mode = nil
-		end
-		local count = window.count or window.maxItems
-		if count ~= nil and (type(count) ~= "number" or count <= 0) then
-			Log:warn("distinct.window: count/maxItems should be a positive number; defaulting to %d", DEFAULT_WINDOW_COUNT)
-			window.count = DEFAULT_WINDOW_COUNT
-			window.maxItems = nil
-		end
-		local wantsTime = window.mode == "time" or window.mode == "interval" or window.time ~= nil or window.offset ~= nil
-		if wantsTime then
-			if window.field ~= nil and type(window.field) ~= "string" then
-				Log:warn("distinct.window: field should be a string; defaulting to 'sourceTime'")
-				window.field = "sourceTime"
+			if window.mode and window.mode ~= "count" and window.mode ~= "time" and window.mode ~= "interval" then
+				Log:warn("distinct.window - unsupported mode '%s'; defaulting to count/time auto-detection", tostring(window.mode))
+				window.mode = nil
 			end
-			local offset = window.time or window.offset
-			if offset ~= nil and (type(offset) ~= "number" or offset < 0) then
-				Log:warn("distinct.window: time/offset should be a non-negative number; defaulting to 0")
-				window.time = 0
-				window.offset = nil
+			local count = window.count or window.maxItems
+			if count ~= nil and (type(count) ~= "number" or count <= 0) then
+				Log:warn("distinct.window - count/maxItems should be a positive number; defaulting to %d", DEFAULT_WINDOW_COUNT)
+				window.count = DEFAULT_WINDOW_COUNT
+				window.maxItems = nil
 			end
-			if window.currentFn ~= nil and type(window.currentFn) ~= "function" then
-				Log:warn("distinct.window: currentFn should be a function; ignoring provided value")
-				window.currentFn = nil
+			local wantsTime = window.mode == "time" or window.mode == "interval" or window.time ~= nil or window.offset ~= nil
+			if wantsTime then
+				if window.field ~= nil and type(window.field) ~= "string" then
+					Log:warn("distinct.window - field should be a string; defaulting to 'sourceTime'")
+					window.field = "sourceTime"
+				end
+				local offset = window.time or window.offset
+				if offset ~= nil and (type(offset) ~= "number" or offset < 0) then
+					Log:warn("distinct.window - time/offset should be a non-negative number; defaulting to 0")
+					window.time = 0
+					window.offset = nil
+				end
+				if window.currentFn ~= nil and type(window.currentFn) ~= "function" then
+					Log:warn("distinct.window - currentFn should be a function; ignoring provided value")
+					window.currentFn = nil
+				end
 			end
-		end
 		window.__validated = true
 	end
 
@@ -277,7 +277,7 @@ function DistinctObservable.createDistinctObservable(source, opts)
 		local function handleRecord(record, emitValue)
 			local ok, key = pcall(keySelector, record)
 			if not ok then
-				Log:warn("[distinct] dropping %s entry; key selector errored: %s", tostring(schemaName), tostring(key))
+				Log:warn("[distinct] dropping %s entry; key selector errored - %s", tostring(schemaName), tostring(key))
 				return
 			end
 			if key == nil then

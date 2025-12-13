@@ -39,7 +39,7 @@ local function normalizeSchemaVersion(schemaName, schemaVersion)
 		if not invalidVersionNotified[schemaName] then
 			invalidVersionNotified[schemaName] = true
 			Log:warn(
-				"Ignoring invalid schemaVersion for schema '%s': expected positive integer, got %s",
+				"Ignoring invalid schemaVersion for schema '%s' - expected positive integer, got %s",
 				schemaName,
 				tostring(schemaVersion)
 			)
@@ -241,7 +241,7 @@ end
 					meta.sourceTime = sourceTimeValue
 				else
 					Log:warn(
-						"Ignoring sourceTime for schema '%s': expected number, got %s",
+						"Ignoring sourceTime for schema '%s' - expected number, got %s",
 						schemaName,
 						type(sourceTimeValue)
 					)
