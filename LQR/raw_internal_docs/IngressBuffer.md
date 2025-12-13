@@ -69,6 +69,7 @@ This gives us a single place to enforce performance constraints while keeping ev
   - deterministic drain behavior under budget;
   - lightweight metrics; and
   - predictable semantics (ordering, replacement rules, drop/replacement accounting).
+- Provide simple operational guidance (`advice_get`, optional `advice_apply*`) so hosts can adjust budgets without re-deriving rate math.
 - Provide integration hooks that allow a host (or library) to call `drain(...)` on a cadence.
 - Provide observability surfaces (describe/metrics) without forcing logging.
 

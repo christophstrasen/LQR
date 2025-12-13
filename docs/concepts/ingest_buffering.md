@@ -33,6 +33,25 @@ That’s it. The buffer becomes the boundary where you decide:
 
 ---
 
+## What you still need to decide (domain/user)
+
+`LQR/ingest` gives you the *mechanics* (bounded buffering + budgeted draining), but it cannot know your domain semantics.
+In practice you still need to choose a few things:
+
+- **What is the key?** The `key(item)` function defines what “the same work” means (id/coords/etc.).
+- **Which mode matches your intent?**
+  - `dedupSet`: “process each key at least once when it shows up”
+  - `latestByKey`: “only the newest state per key matters”
+  - `queue`: “history/order matters”
+- **What is safe to drop or compact?** In overload, the buffer will evict/drop; decide what that means for correctness.
+- **Which work is more important?** If some work is “urgent”, classify it into a higher-priority lane.
+- **What does drain-time work do?** Keep `handle(item)` bounded; it often “materializes” a key into a full record and emits it downstream.
+- **How do you want to budget?**
+  - fixed budgets (simple)
+  - adaptive budgets via `advice_get` / `advice_applyMaxItems` (safer under bursts)
+
+---
+
 ## Basic usage
 
 This example simulates two “sources” feeding one buffer, and a host tick draining it:
