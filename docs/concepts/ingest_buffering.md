@@ -105,6 +105,8 @@ end
 
 See an executable end-to-end test in `tests/unit/ingest_end_to_end_spec.lua`.
 
+If you have multiple buffers and want one shared tick budget, use `Ingest.scheduler({ maxItemsPerTick = ... })` (buffers of the same priority are drained round-robin; `quantum` controls how many items each buffer gets per turn).
+
 ---
 
 ## Modes: how buffering behaves

@@ -6,6 +6,7 @@ Scheduler.__index = Scheduler
 --- @class LQRIngestSchedulerOpts
 --- @field name string
 --- @field maxItemsPerTick integer
+--- @field quantum integer|nil @Optional: max items per buffer turn (RR). Defaults to 1.
 
 --- @class LQRIngestScheduler
 --- @field addBuffer fun(self:LQRIngestScheduler, buffer:any, opts:table)
@@ -17,6 +18,9 @@ local function validateOpts(opts)
 	assert(type(opts) == "table", "opts table required")
 	assert(type(opts.name) == "string" and opts.name ~= "", "name is required")
 	assert(type(opts.maxItemsPerTick) == "number" and opts.maxItemsPerTick >= 0, "maxItemsPerTick must be >= 0")
+	if opts.quantum ~= nil then
+		assert(type(opts.quantum) == "number" and opts.quantum >= 1, "quantum must be >= 1 when provided")
+	end
 end
 
 local function newBufferEntry(buffer, priority, index)
@@ -59,19 +63,62 @@ function Scheduler:drainTick(handleFn)
 	local remaining = self.maxItemsPerTick
 	local aggProcessed, aggDropped, aggReplaced, aggPending = 0, 0, 0, 0
 
-	for _, entry in ipairs(self._buffers) do
-		if remaining <= 0 then
-			break
+	-- Explainer: Scheduler fairness.
+	-- In v1 we keep it simple:
+	-- - Different priorities are drained in descending priority order.
+	-- - Buffers of the same priority are drained round-robin with a small quantum,
+	--   so one hot buffer can't starve its peers forever.
+	local quantum = self.quantum or 1
+
+	-- Iterate priority groups (buffers are already sorted by priority desc, then insertion index).
+	local idx = 1
+	while idx <= #self._buffers and remaining > 0 do
+		local pri = self._buffers[idx].priority or 1
+		local groupStart = idx
+		local groupEnd = idx
+		while groupEnd <= #self._buffers and (self._buffers[groupEnd].priority or 1) == pri do
+			groupEnd = groupEnd + 1
 		end
-		local stats = entry.buffer:drain({
-			maxItems = remaining,
-			handle = handleFn,
-		}) or {}
-		aggProcessed = aggProcessed + (stats.processed or 0)
-		aggDropped = aggDropped + (stats.dropped or 0)
-		aggReplaced = aggReplaced + (stats.replaced or 0)
-		aggPending = aggPending + (stats.pending or 0)
-		remaining = remaining - (stats.processed or 0)
+		groupEnd = groupEnd - 1
+
+		-- Drain this group in RR slices until we run out of budget or nobody makes progress.
+		local n = groupEnd - groupStart + 1
+		local cursor = self._rrCursorByPriority[pri] or 1
+		if cursor < 1 or cursor > n then
+			cursor = 1
+		end
+
+		while remaining > 0 do
+			local progressed = false
+			for _ = 1, n do
+				if remaining <= 0 then
+					break
+				end
+				local entry = self._buffers[groupStart + (cursor - 1)]
+				cursor = (cursor % n) + 1
+
+				local stats = entry.buffer:drain({
+					maxItems = math.min(quantum, remaining),
+					handle = handleFn,
+				}) or {}
+
+				aggProcessed = aggProcessed + (stats.processed or 0)
+				aggDropped = aggDropped + (stats.dropped or 0)
+				aggReplaced = aggReplaced + (stats.replaced or 0)
+				aggPending = aggPending + (stats.pending or 0)
+				remaining = remaining - (stats.processed or 0)
+
+				if (stats.processed or 0) > 0 then
+					progressed = true
+				end
+			end
+			if not progressed then
+				break
+			end
+		end
+
+		self._rrCursorByPriority[pri] = cursor
+		idx = groupEnd + 1
 	end
 
 	self.totals.drainCallsTotal = self.totals.drainCallsTotal + 1
@@ -138,7 +185,9 @@ function Scheduler.new(opts)
 	local self = setmetatable({}, Scheduler)
 	self.name = opts.name
 	self.maxItemsPerTick = opts.maxItemsPerTick
+	self.quantum = opts.quantum or 1
 	self._buffers = {}
+	self._rrCursorByPriority = {}
 	self.totals = {
 		drainCallsTotal = 0,
 		drainedTotal = 0,

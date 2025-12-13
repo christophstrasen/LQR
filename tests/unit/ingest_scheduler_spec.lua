@@ -44,6 +44,50 @@ describe("ingest scheduler", function()
 		assert.is.equal(1, snap.pending)
 	end)
 
+	it("round-robins among buffers with the same priority", function()
+		local bufA = Ingest.buffer({
+			name = "A",
+			mode = "latestByKey",
+			capacity = 10,
+			ordering = "fifo",
+			key = function(item)
+				return item.key
+			end,
+		})
+		local bufB = Ingest.buffer({
+			name = "B",
+			mode = "latestByKey",
+			capacity = 10,
+			ordering = "fifo",
+			key = function(item)
+				return item.key
+			end,
+		})
+
+		-- Both buffers have work; same priority means they should share the tick budget fairly.
+		bufA:ingest({ key = "a1" })
+		bufA:ingest({ key = "a2" })
+		bufB:ingest({ key = "b1" })
+		bufB:ingest({ key = "b2" })
+
+		local sched = Ingest.scheduler({
+			name = "sched_rr",
+			maxItemsPerTick = 3,
+			quantum = 1, -- strict RR: one item per buffer turn
+		})
+		sched:addBuffer(bufA, { priority = 2 })
+		sched:addBuffer(bufB, { priority = 2 })
+
+		local seen = {}
+		local stats = sched:drainTick(function(item)
+			table.insert(seen, item.key)
+		end)
+
+		assert.is.equal(3, stats.processed)
+		-- Deterministic RR starts with the first-added buffer (A).
+		assert.are.same({ "a1", "b1", "a2" }, seen)
+	end)
+
 	it("aggregates metrics and resets them", function()
 		local bufA = Ingest.buffer({
 			name = "A",
