@@ -389,18 +389,43 @@ local function buildSelectionMap(selection)
 	if not selection then
 		return nil
 	end
+	if type(selection) ~= "table" then
+		Log:warn("selectSchemas ignored invalid selection of type %s", type(selection))
+		return nil
+	end
+
 	local mapping = {}
-	for _, schema in ipairs(selection) do
-		if type(schema) == "string" and schema ~= "" then
-			mapping[schema] = schema
+	local has = false
+
+	-- Array part (prefer ipairs if available)
+	if type(ipairs) == "function" then
+		for _, schema in ipairs(selection) do
+			if type(schema) == "string" and schema ~= "" then
+				mapping[schema] = schema
+				has = true
+			end
+		end
+	else
+		for i = 1, #selection do
+			local schema = selection[i]
+			if type(schema) == "string" and schema ~= "" then
+				mapping[schema] = schema
+				has = true
+			end
 		end
 	end
-	for key, value in pairs(selection) do
-		if type(key) ~= "number" and type(value) == "string" and value ~= "" then
-			mapping[key] = value
+
+	-- Hash part (only if pairs is available)
+	if type(pairs) == "function" then
+		for key, value in pairs(selection) do
+			if type(key) ~= "number" and type(value) == "string" and value ~= "" then
+				mapping[key] = value
+				has = true
+			end
 		end
 	end
-	return next(mapping) and mapping or nil
+
+	return has and mapping or nil
 end
 
 -- Explainer: flattenRecords turns records or JoinResults into per-schema records, tagging lineage.
@@ -681,7 +706,7 @@ local function summarizeRowIds(row, schemaNames)
 		if type(entry) == "table" then
 			id = entry.id or (entry.RxMeta and entry.RxMeta.id) or (entry.RxMeta and entry.RxMeta.joinKey)
 		end
-		summary[#summary + 1] = string.format("%s:%s", tostring(schemaName), tostring(id))
+		summary[#summary + 1] = string.format("%s-%s", tostring(schemaName), tostring(id))
 		if #summary >= 3 then
 			break
 		end

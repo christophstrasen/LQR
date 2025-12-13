@@ -53,7 +53,7 @@ end
 local function snapshotSignature(snapshot, cells)
 	local window = snapshot.window or {}
 	local parts = {
-		string.format("%s:%s:%s:%s", tostring(window.startId), tostring(window.endId), tostring(window.columns), tostring(window.rows)),
+		string.format("%s-%s-%s-%s", tostring(window.startId), tostring(window.endId), tostring(window.columns), tostring(window.rows)),
 	}
 	for _, entry in ipairs(cells) do
 		local cell = entry.cell or {}
@@ -61,14 +61,14 @@ local function snapshotSignature(snapshot, cells)
 			local meta = cell.innerMeta or {}
 			local innerRegion = cell.composite:getInner()
 			local _, layers = innerRegion and innerRegion:getColor()
-			parts[#parts + 1] = table.concat({
-				"I",
-				entry.col,
-				entry.row,
-				tostring(meta.schema),
-				tostring(meta.recordId),
-				string.format("%.2f", layers or 0),
-			}, ":")
+				parts[#parts + 1] = table.concat({
+					"I",
+					entry.col,
+					entry.row,
+					tostring(meta.schema),
+					tostring(meta.recordId),
+					string.format("%.2f", layers or 0),
+				}, "-")
 		end
 		local layers = {}
 		for layer in pairs(cell.borderMeta or {}) do
@@ -77,15 +77,15 @@ local function snapshotSignature(snapshot, cells)
 		table.sort(layers)
 		for _, layer in ipairs(layers) do
 			local border = cell.borderMeta[layer]
-			parts[#parts + 1] = table.concat({
-				"B",
-				entry.col,
-				entry.row,
-				layer,
-				border and border.kind or "match",
-				border and tostring(border.nativeSchema) or "",
-				border and tostring(border.nativeId) or "",
-			}, ":")
+				parts[#parts + 1] = table.concat({
+					"B",
+					entry.col,
+					entry.row,
+					layer,
+					border and border.kind or "match",
+					border and tostring(border.nativeSchema) or "",
+					border and tostring(border.nativeId) or "",
+				}, "-")
 		end
 	end
 	return table.concat(parts, "|")
@@ -95,12 +95,12 @@ local function windowSignature(window)
 	if not window then
 		return ""
 	end
-	return string.format("%s:%s:%s:%s", tostring(window.startId), tostring(window.endId), tostring(window.columns), tostring(window.rows))
+	return string.format("%s-%s-%s-%s", tostring(window.startId), tostring(window.endId), tostring(window.columns), tostring(window.rows))
 end
 
 local function cellKey(window, entry, id)
 	return string.format(
-		"%s:%s:%s:%s",
+		"%s-%s-%s-%s",
 		tostring(window and window.startId),
 		tostring(entry.col),
 		tostring(entry.row),
