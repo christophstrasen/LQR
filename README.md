@@ -99,39 +99,6 @@ See [examples.lua](examples.lua), [tests/unit](tests/unit), and [vizualisation/d
 
 ---
 
-## Bursty sources and tick budgets (IngressBuffer)
-
-In tick-driven runtimes (games/sims), upstream event sources can arrive in bursts (hundreds/thousands per frame).
-If you immediately push every event through joins/grouping, you can create frame spikes.
-
-`LQR/ingest` provides a host-friendly “Ingest → Buffer → Drain” boundary:
-
-```lua
-local Ingest = require("LQR/ingest")
-
-local buffer = Ingest.buffer({
-  name = "engine.events",
-  mode = "dedupSet",
-  capacity = 5000,
-  key = function(item) return item.id end,
-})
-
--- event handler:
-buffer:ingest({ id = 123 })
-
--- tick:
-buffer:drain({
-  maxItems = 200,
-  handle = function(item)
-    -- materialize + emit into schema/query streams here
-  end,
-})
-```
-
-Read more: `docs/concepts/ingest_buffering.md`.
-
----
-
 ## When would you want to use LQR or reactive programming?
 
 Reach for the L*i*Q*o*R when you need to relate and group several event sources in real time; use plain reactive streams for simpler live work, and if polling already gives timely answers in a simple enough manner, you don’t need to "go reactive" at all.
@@ -197,6 +164,40 @@ Quick comparison of what each approach may deliver
 > LQR bring Cross-stream correlation, staleness, and grouped caps.
 
 ---
+
+## Bursty sources and tick budgets (IngressBuffer)
+
+In tick-driven runtimes (games/sims), upstream event sources can arrive in bursts (hundreds/thousands per frame).
+If you immediately push every event through joins/grouping, you can create frame spikes.
+
+`LQR/ingest` provides a host-friendly "flow regulator" that implements a “Ingest → Buffer → Drain” boundary:
+
+```lua
+local Ingest = require("LQR/ingest")
+
+local buffer = Ingest.buffer({
+  name = "engine.events",
+  mode = "dedupSet",
+  capacity = 5000,
+  key = function(item) return item.id end,
+})
+
+-- event handler:
+buffer:ingest({ id = 123 })
+
+-- tick:
+buffer:drain({
+  maxItems = 200,
+  handle = function(item)
+    -- materialize + emit into schema/query streams here
+  end,
+})
+```
+
+Check our [docs/concepts/ingest_buffering.md](docs/concepts/ingest_buffering.md) for more details including the handy `buffer:advice` methods.
+
+---
+
 
 ## Documentation
 
