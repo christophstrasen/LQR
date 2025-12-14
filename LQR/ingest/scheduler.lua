@@ -174,6 +174,10 @@ end
 function Scheduler:metrics_get()
 	local buffers = {}
 	local pendingSum, droppedSum, replacedSum, drainedSum = 0, 0, 0, 0
+	local capacitySum = 0
+	local load15Max = 0
+	local throughput15Sum = 0
+	local ingestRate15Sum = 0
 	for _, entry in ipairs(self._buffers) do
 		local snap
 		if entry.buffer.metrics_getLight then
@@ -186,6 +190,12 @@ function Scheduler:metrics_get()
 		droppedSum = droppedSum + (snap.totals and snap.totals.droppedTotal or 0)
 		replacedSum = replacedSum + (snap.totals and snap.totals.replacedTotal or 0)
 		drainedSum = drainedSum + (snap.totals and snap.totals.drainedTotal or 0)
+		capacitySum = capacitySum + (snap.capacity or 0)
+		if snap.load15 and snap.load15 > load15Max then
+			load15Max = snap.load15
+		end
+		throughput15Sum = throughput15Sum + (snap.throughput15 or 0)
+		ingestRate15Sum = ingestRate15Sum + (snap.ingestRate15 or 0)
 	end
 
 	return {
@@ -197,6 +207,10 @@ function Scheduler:metrics_get()
 		drainCallsTotal = self.totals.drainCallsTotal,
 		lastDrain = self.lastStats,
 		buffers = buffers,
+		capacity = capacitySum > 0 and capacitySum or nil,
+		load15 = load15Max,
+		throughput15 = throughput15Sum,
+		ingestRate15 = ingestRate15Sum,
 	}
 end
 

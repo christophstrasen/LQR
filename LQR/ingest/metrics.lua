@@ -85,6 +85,7 @@ function Metrics.reset(state)
 	state.msPerItemEma = nil
 	state.lastLoadAtMs = nil
 	state.lastDtSeconds = nil
+	state.capacity = state.capacity -- preserve if set externally
 end
 
 function Metrics.bumpPending(state, delta, lane)
@@ -135,6 +136,7 @@ function Metrics.snapshot(state, _lanes, spanOverride)
 	end
 	local snap = {
 		name = state.name,
+		capacity = state.capacity,
 		pending = state.pending,
 		peakPending = state.peakPending,
 		ingestSeqSpan = span,
@@ -164,6 +166,7 @@ end
 function Metrics.snapshotLight(state)
 	return {
 		name = state.name,
+		capacity = state.capacity,
 		pending = state.pending,
 		peakPending = state.peakPending,
 		totals = deepCopy(state.totals),

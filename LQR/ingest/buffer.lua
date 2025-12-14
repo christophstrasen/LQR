@@ -985,6 +985,7 @@ function Buffer.new(opts)
 		onReplace = opts.onReplace,
 	}
 	self.metrics = Metrics.new(self.name)
+	self.metrics.capacity = self.capacity
 	self.lanes = {}
 	self.laneOrder = {}
 	self.laneIndex = {}
