@@ -21,16 +21,6 @@ https://github.com/user-attachments/assets/42733f4d-7063-4cf2-9047-0f6ada5b4172
 
 ---
 
-## Dependency: lua-reactivex
-
-LQR does not vendor lua-reactivex. Check out **our fork** into `./reactivex` (sibling to `./LQR`) so `require("reactivex.*")` resolves for examples, tests, and the viz pipeline:
-
-- `git clone https://github.com/christophstrasen/lua-reactivex.git reactivex`  
-  or `git submodule add https://github.com/christophstrasen/lua-reactivex.git reactivex && git submodule update --init --recursive`
-- Legacy fallback: a sibling checkout at `../lua-reactivex` is still discovered by `LQR.bootstrap`, but the root-level `./reactivex` path is the default.
-
----
-
 ## Quickstart
 
 This example shows how to:
@@ -162,6 +152,24 @@ Quick comparison of what each approach may deliver
 > LQR joins streams by account/device and provides grouped aggregates for rate controls.
 - **IoT/telemetry:** Join telemetry from sensor D with its latest config/firmware event; if no telemetry arrives for 60s, emit a stale alert; group per site to cap concurrent stale devices.
 > LQR bring Cross-stream correlation, staleness, and grouped caps.
+
+---
+
+### A word on dependencies: lua-reactivex
+
+LQR depends on `lua-reactivex`, but keeps it as an external checkout. Place **our fork** where LQR can load it as `./reactivex/` next to `./LQR/`): 
+
+```sh
+# Option A (recommended): clone into ./reactivex
+git clone https://github.com/christophstrasen/lua-reactivex.git reactivex
+
+# Option B: add as a submodule at ./reactivex
+git submodule add https://github.com/christophstrasen/lua-reactivex.git reactivex
+git submodule update --init --recursive
+
+```
+
+Once present, `require("reactivex/...")` resolves for examples, tests, and the visualization pipeline.
 
 ---
 
