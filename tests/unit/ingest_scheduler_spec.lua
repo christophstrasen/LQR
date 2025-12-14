@@ -115,4 +115,46 @@ describe("ingest scheduler", function()
 		assert.is.equal(0, metrics2.drainedTotal)
 		assert.is.equal(0, metrics2.buffers["A"].totals.drainedTotal)
 	end)
-end)
+
+	it("respects a maxMillisPerTick budget when nowMillis is provided", function()
+		-- Fake buffer that consumes time when draining.
+		local fake = {
+			name = "fake",
+			drainCalls = 0,
+			drain = function(self, opts)
+				self.drainCalls = self.drainCalls + 1
+				return {
+					processed = opts.maxItems or 0,
+					spentMillis = 10, -- pretend this drain cost the full 10ms budget
+					pending = 0,
+					dropped = 0,
+					replaced = 0,
+				}
+			end,
+			metrics_get = function()
+				return { pending = 0, totals = { droppedTotal = 0, replacedTotal = 0, drainedTotal = 0 } }
+			end,
+			metrics_reset = function() end,
+		}
+
+		local sched = Ingest.scheduler({
+			name = "sched_ms",
+			maxItemsPerTick = 10,
+			maxMillisPerTick = 10,
+			quantum = 5,
+		})
+		sched:addBuffer(fake, { priority = 1 })
+
+		local now = 0
+		local function nowMillis()
+			now = now + 5
+			return now
+		end
+
+			local stats = sched:drainTick(function() end, { nowMillis = nowMillis })
+			-- First drain consumes the entire 10ms budget; second would exceed, so only one drain should run.
+			assert.is.equal(1, fake.drainCalls)
+			assert.is.equal(5, stats.processed) -- maxItems bounded by quantum=5 for the single call
+			assert.is.equal(10, stats.spentMillis)
+		end)
+	end)

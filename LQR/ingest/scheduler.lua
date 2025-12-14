@@ -7,6 +7,7 @@ Scheduler.__index = Scheduler
 --- @field name string
 --- @field maxItemsPerTick integer
 --- @field quantum integer|nil @Optional: max items per buffer turn (RR). Defaults to 1.
+--- @field maxMillisPerTick integer|nil @Optional: wall-clock budget per tick (requires nowMillis)
 
 --- @class LQRIngestScheduler
 --- @field addBuffer fun(self:LQRIngestScheduler, buffer:any, opts:table)
@@ -80,6 +81,8 @@ function Scheduler:drainTick(handleFn, opts)
 	handleFn, opts = resolveDrainArgs(handleFn, opts)
 	local nowMillis = opts and opts.nowMillis
 	local remaining = self.maxItemsPerTick
+	local remainingMs = (opts and opts.maxMillisPerTick) or self.maxMillisPerTick
+	local totalSpentMs = 0
 	local aggProcessed, aggDropped, aggReplaced, aggPending = 0, 0, 0, 0
 
 	-- Explainer: Scheduler fairness.
@@ -116,20 +119,33 @@ function Scheduler:drainTick(handleFn, opts)
 				local entry = self._buffers[groupStart + (cursor - 1)]
 				cursor = (cursor % n) + 1
 
-				local stats = entry.buffer:drain({
+				local drainOpts = {
 					maxItems = math.min(quantum, remaining),
 					handle = handleFn,
 					nowMillis = nowMillis,
-				}) or {}
+				}
+				if remainingMs and remainingMs > 0 then
+					drainOpts.maxMillis = remainingMs
+				end
+
+				local stats = entry.buffer:drain(drainOpts) or {}
 
 				aggProcessed = aggProcessed + (stats.processed or 0)
 				aggDropped = aggDropped + (stats.dropped or 0)
 				aggReplaced = aggReplaced + (stats.replaced or 0)
 				aggPending = aggPending + (stats.pending or 0)
 				remaining = remaining - (stats.processed or 0)
+				if remainingMs and stats.spentMillis and type(stats.spentMillis) == "number" then
+					remainingMs = remainingMs - stats.spentMillis
+					totalSpentMs = totalSpentMs + stats.spentMillis
+				end
 
 				if (stats.processed or 0) > 0 then
 					progressed = true
+				end
+				if remainingMs and remainingMs <= 0 then
+					progressed = false
+					break
 				end
 			end
 			if not progressed then
@@ -148,6 +164,7 @@ function Scheduler:drainTick(handleFn, opts)
 		dropped = aggDropped,
 		replaced = aggReplaced,
 		pending = aggPending,
+		spentMillis = totalSpentMs,
 	}
 
 	return self.lastStats
@@ -194,6 +211,7 @@ function Scheduler:metrics_reset()
 		dropped = 0,
 		replaced = 0,
 		pending = 0,
+		spentMillis = 0,
 	}
 	for _, entry in ipairs(self._buffers) do
 		if entry.buffer.metrics_reset then
@@ -211,6 +229,7 @@ function Scheduler.new(opts)
 	self.name = opts.name
 	self.maxItemsPerTick = opts.maxItemsPerTick
 	self.quantum = opts.quantum or 1
+	self.maxMillisPerTick = opts.maxMillisPerTick
 	self._buffers = {}
 	self._rrCursorByPriority = {}
 	self.totals = {
@@ -222,6 +241,7 @@ function Scheduler.new(opts)
 		dropped = 0,
 		replaced = 0,
 		pending = 0,
+		spentMillis = 0,
 	}
 	return self
 end
