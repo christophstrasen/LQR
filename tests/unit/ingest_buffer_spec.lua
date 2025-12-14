@@ -182,6 +182,36 @@ describe("ingest buffer (latestByKey)", function()
 		assert.is_nil(buf.lanes.default.pending["b"])
 		assert.is_nil(buf.lanes.default.pending["c"])
 	end)
+
+	it("exposes light vs full metrics (seq span only in full)", function()
+		local buf = Ingest.buffer({
+			name = "metrics",
+			mode = "latestByKey",
+			capacity = 10,
+			key = function(item)
+				return item.key
+			end,
+		})
+
+		-- Two pending keys. Refreshing "a" makes it the newest, while "b" becomes the oldest.
+		buf:ingest({ key = "a" }) -- seq1
+		buf:ingest({ key = "b" }) -- seq2
+		buf:ingest({ key = "a" }) -- seq3 (replacement)
+
+		-- Light metrics are safe in hot paths and avoid extra work like computing seq spans.
+		local light = buf:metrics_getLight()
+		assert.is.equal(2, light.pending)
+		assert.is_nil(light.oldestSeq)
+		assert.is_nil(light.newestSeq)
+		assert.is_nil(light.ingestSeqSpan)
+
+		-- Full metrics include exact oldest/newest and the ingestSeq span of the current backlog.
+		local full = buf:metrics_getFull()
+		assert.is.equal(2, full.pending)
+		assert.is.equal(2, full.oldestSeq) -- "b"
+		assert.is.equal(3, full.newestSeq) -- "a"
+		assert.is.equal(1, full.ingestSeqSpan)
+	end)
 end)
 
 describe("ingest buffer (dedupSet)", function()

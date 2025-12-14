@@ -26,6 +26,10 @@ local function new(name)
 		pending = 0,
 		peakPending = 0,
 		lastDrain = {},
+		-- Span of ingestSeq for items currently pending (exact when computed by the buffer).
+		oldestSeq = nil,
+		newestSeq = nil,
+		ingestSeqSpan = 0,
 		avgPending = 0,
 		avgSeqSpan = 0,
 		avgCount = 0,
@@ -60,6 +64,9 @@ function Metrics.reset(state)
 	state.pending = state.pending
 	state.peakPending = state.pending
 	state.lastDrain = {}
+	state.oldestSeq = nil
+	state.newestSeq = nil
+	state.ingestSeqSpan = 0
 	state.avgPending = 0
 	state.avgSeqSpan = 0
 	state.avgCount = 0
@@ -119,28 +126,13 @@ function Metrics.updateLastDrain(state, snapshot)
 	state.lastDrain = snapshot
 end
 
-local function recomputeSeqSpan(state, lanes)
-	local oldest, newest
-	for _, laneState in pairs(lanes) do
-		for _, seq in pairs(laneState.lastSeen or {}) do
-			if type(seq) == "number" then
-				if not oldest or seq < oldest then
-					oldest = seq
-				end
-				if not newest or seq > newest then
-					newest = seq
-				end
-			end
-		end
+function Metrics.snapshot(state, _lanes, spanOverride)
+	local oldestSeq = spanOverride and spanOverride.oldestSeq or state.oldestSeq
+	local newestSeq = spanOverride and spanOverride.newestSeq or state.newestSeq
+	local span = spanOverride and spanOverride.ingestSeqSpan
+	if span == nil then
+		span = state.ingestSeqSpan or 0
 	end
-	if not oldest or not newest then
-		return nil, nil, 0
-	end
-	return oldest, newest, newest - oldest
-end
-
-function Metrics.snapshot(state, lanes)
-	local oldestSeq, newestSeq, span = recomputeSeqSpan(state, lanes or {})
 	local snap = {
 		name = state.name,
 		pending = state.pending,
@@ -167,6 +159,27 @@ function Metrics.snapshot(state, lanes)
 		lastDtSeconds = state.lastDtSeconds,
 	}
 	return snap
+end
+
+function Metrics.snapshotLight(state)
+	return {
+		name = state.name,
+		pending = state.pending,
+		peakPending = state.peakPending,
+		totals = deepCopy(state.totals),
+		lastDrain = deepCopy(state.lastDrain),
+		load1 = state.load1,
+		load5 = state.load5,
+		load15 = state.load15,
+		throughput1 = state.throughput1,
+		throughput5 = state.throughput5,
+		throughput15 = state.throughput15,
+		ingestRate1 = state.ingestRate1,
+		ingestRate5 = state.ingestRate5,
+		ingestRate15 = state.ingestRate15,
+		msPerItemEma = state.msPerItemEma,
+		lastDtSeconds = state.lastDtSeconds,
+	}
 end
 
 function Metrics.accumulateAverages(state, seqSpan)

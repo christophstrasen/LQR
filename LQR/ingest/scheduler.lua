@@ -158,7 +158,12 @@ function Scheduler:metrics_get()
 	local buffers = {}
 	local pendingSum, droppedSum, replacedSum, drainedSum = 0, 0, 0, 0
 	for _, entry in ipairs(self._buffers) do
-		local snap = entry.buffer:metrics_get()
+		local snap
+		if entry.buffer.metrics_getLight then
+			snap = entry.buffer:metrics_getLight()
+		else
+			snap = entry.buffer:metrics_get()
+		end
 		buffers[entry.buffer.name or tostring(entry)] = snap
 		pendingSum = pendingSum + (snap.pending or 0)
 		droppedSum = droppedSum + (snap.totals and snap.totals.droppedTotal or 0)

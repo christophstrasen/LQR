@@ -37,6 +37,8 @@ end
 --- @field ingest fun(self:LQRIngestBuffer, item:any)
 --- @field drain fun(self:LQRIngestBuffer, opts:table):table
 --- @field metrics_get fun(self:LQRIngestBuffer):table
+--- @field metrics_getLight fun(self:LQRIngestBuffer):table
+--- @field metrics_getFull fun(self:LQRIngestBuffer):table
 --- @field metrics_reset fun(self:LQRIngestBuffer)
 --- @field clear fun(self:LQRIngestBuffer)
 --- @field advice_get fun(self:LQRIngestBuffer, opts:table):table
@@ -60,6 +62,9 @@ local function newLaneState(priority, ordering)
 		-- Min-heap of { seq, key } for eviction without scanning lastSeen.
 		-- Uses lazy deletion: stale nodes are skipped when popped.
 		lruHeap = {},
+		-- Max-heap (implemented as min-heap over -seq) for exact newest-seq tracking without scans.
+		-- Uses lazy deletion: stale nodes are skipped when popped.
+		maxHeap = {},
 		-- FIFO bookkeeping
 		fifo = {},
 		fifoHead = 1,
@@ -173,9 +178,11 @@ end
 
 local function laneRebuildHeap(lane)
 	lane.lruHeap = {}
+	lane.maxHeap = {}
 	for key, seq in pairs(lane.lastSeen or {}) do
 		if type(seq) == "number" then
 			heapPush(lane.lruHeap, { seq = seq, key = key })
+			heapPush(lane.maxHeap, { seq = -seq, key = key })
 		end
 	end
 end
@@ -183,6 +190,14 @@ end
 local function laneMaybeRebuildHeap(lane)
 	local pending = lane.pendingCount or 0
 	local heapSize = lane.lruHeap and #lane.lruHeap or 0
+	if pending > 0 and heapSize > (pending * 4 + 64) then
+		laneRebuildHeap(lane)
+	end
+end
+
+local function laneMaybeRebuildMaxHeap(lane)
+	local pending = lane.pendingCount or 0
+	local heapSize = lane.maxHeap and #lane.maxHeap or 0
 	if pending > 0 and heapSize > (pending * 4 + 64) then
 		laneRebuildHeap(lane)
 	end
@@ -200,6 +215,98 @@ local function lanePopOldestKey(lane)
 		end
 	end
 	return nil
+end
+
+local function lanePeekOldestSeq(lane)
+	if not lane or (lane.pendingCount or 0) == 0 then
+		return nil
+	end
+	laneMaybeRebuildHeap(lane)
+	while lane.lruHeap and #lane.lruHeap > 0 do
+		local node = lane.lruHeap[1]
+		if node and node.key ~= nil then
+			local currentSeq = lane.lastSeen[node.key]
+			if currentSeq ~= nil and currentSeq == node.seq and lane.pending[node.key] ~= nil then
+				return node.seq
+			end
+		end
+		heapPop(lane.lruHeap)
+	end
+	return nil
+end
+
+local function lanePeekNewestSeq(lane)
+	if not lane or (lane.pendingCount or 0) == 0 then
+		return nil
+	end
+	laneMaybeRebuildMaxHeap(lane)
+	while lane.maxHeap and #lane.maxHeap > 0 do
+		local node = lane.maxHeap[1]
+		if node and node.key ~= nil then
+			local seq = -node.seq
+			local currentSeq = lane.lastSeen[node.key]
+			if currentSeq ~= nil and currentSeq == seq and lane.pending[node.key] ~= nil then
+				return seq
+			end
+		end
+		heapPop(lane.maxHeap)
+	end
+	return nil
+end
+
+local function computeSeqSpan(self)
+	local minSeq, maxSeq
+	for _, laneName in ipairs(self.laneOrder) do
+		local lane = self.lanes[laneName]
+		if lane and (lane.pendingCount or 0) > 0 then
+			if self.mode == "queue" then
+				-- Queue mode stores seq per entry; keys can repeat so lastSeen is not reliable.
+				local head = lane.queueHead
+				while head <= lane.queueTail do
+					local entry = lane.queue[head]
+					if entry then
+						local s = entry.seq
+						if type(s) == "number" then
+							if not minSeq or s < minSeq then
+								minSeq = s
+							end
+						end
+						break
+					end
+					head = head + 1
+				end
+				local tail = lane.queueTail
+				while tail >= lane.queueHead do
+					local entry = lane.queue[tail]
+					if entry then
+						local s = entry.seq
+						if type(s) == "number" then
+							if not maxSeq or s > maxSeq then
+								maxSeq = s
+							end
+						end
+						break
+					end
+					tail = tail - 1
+				end
+			else
+				local oldest = lanePeekOldestSeq(lane)
+				if type(oldest) == "number" then
+					if not minSeq or oldest < minSeq then
+						minSeq = oldest
+					end
+				end
+				local newest = lanePeekNewestSeq(lane)
+				if type(newest) == "number" then
+					if not maxSeq or newest > maxSeq then
+						maxSeq = newest
+					end
+				end
+			end
+		end
+	end
+	local span = (minSeq and maxSeq) and (maxSeq - minSeq) or 0
+	return minSeq, maxSeq, span
 end
 
 local function validateOpts(opts)
@@ -401,6 +508,7 @@ local function migrateKey(self, key, fromLane, toLaneName)
 	laneTo.lastSeen[key] = seen
 	if type(seen) == "number" then
 		heapPush(laneTo.lruHeap, { seq = seen, key = key })
+		heapPush(laneTo.maxHeap, { seq = -seen, key = key })
 	end
 	laneTo.pendingCount = laneTo.pendingCount + 1
 	Metrics.bumpPending(self.metrics, 1, toLaneName)
@@ -462,11 +570,13 @@ function Buffer:ingest(item)
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
 			heapPush(lane.lruHeap, { seq = seq, key = key })
+			heapPush(lane.maxHeap, { seq = -seq, key = key })
 			handleReplacement(self, laneName, key, existing, item)
 		else
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
 			heapPush(lane.lruHeap, { seq = seq, key = key })
+			heapPush(lane.maxHeap, { seq = -seq, key = key })
 			lane.pendingCount = lane.pendingCount + 1
 			if self.ordering == "fifo" and not lane.inFifo[key] then
 				pushFifo(lane, key)
@@ -478,11 +588,13 @@ function Buffer:ingest(item)
 			-- Dedup: ignore duplicate pending; update lastSeen for eviction fairness.
 			lane.lastSeen[key] = seq
 			heapPush(lane.lruHeap, { seq = seq, key = key })
+			heapPush(lane.maxHeap, { seq = -seq, key = key })
 			Metrics.bumpTotal(self.metrics, "dedupedTotal", 1)
 		else
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
 			heapPush(lane.lruHeap, { seq = seq, key = key })
+			heapPush(lane.maxHeap, { seq = -seq, key = key })
 			lane.pendingCount = lane.pendingCount + 1
 			if self.ordering == "fifo" and not lane.inFifo[key] then
 				pushFifo(lane, key)
@@ -616,22 +728,10 @@ function Buffer:drain(opts)
 
 	self.metrics.totals.drainCallsTotal = self.metrics.totals.drainCallsTotal + 1
 
-	local oldestSeq, newestSeq, span = (function()
-		local minSeq, maxSeq
-		for _, laneState in pairs(self.lanes) do
-			for _, seq in pairs(laneState.lastSeen) do
-				if type(seq) == "number" then
-					if not minSeq or seq < minSeq then
-						minSeq = seq
-					end
-					if not maxSeq or seq > maxSeq then
-						maxSeq = seq
-					end
-				end
-			end
-		end
-		return minSeq, maxSeq, (minSeq and maxSeq) and (maxSeq - minSeq) or 0
-	end)()
+	local oldestSeq, newestSeq, span = computeSeqSpan(self)
+	self.metrics.oldestSeq = oldestSeq
+	self.metrics.newestSeq = newestSeq
+	self.metrics.ingestSeqSpan = span
 
 	Metrics.accumulateAverages(self.metrics, span)
 	-- Load-style averages (EWMA over pending + throughput). Uses nowMillis when provided; falls back to os.clock.
@@ -671,7 +771,27 @@ end
 --- Snapshot metrics (totals + per-lane).
 --- @return table
 function Buffer:metrics_get()
-	return Metrics.snapshot(self.metrics, self.lanes)
+	return self:metrics_getFull()
+end
+
+--- Snapshot cheap metrics intended for hot paths (no per-key scans).
+--- @return table
+function Buffer:metrics_getLight()
+	return Metrics.snapshotLight(self.metrics)
+end
+
+--- Snapshot full metrics; avoids per-key scans by using heaps for seq span.
+--- @return table
+function Buffer:metrics_getFull()
+	local oldestSeq, newestSeq, span = computeSeqSpan(self)
+	self.metrics.oldestSeq = oldestSeq
+	self.metrics.newestSeq = newestSeq
+	self.metrics.ingestSeqSpan = span
+	return Metrics.snapshot(self.metrics, self.lanes, {
+		oldestSeq = oldestSeq,
+		newestSeq = newestSeq,
+		ingestSeqSpan = span,
+	})
 end
 
 --- Reset metrics/peaks without touching buffered items.
@@ -693,6 +813,10 @@ function Buffer:metrics_reset()
 	end
 	self.metrics.pending = total
 	self.metrics.peakPending = total
+	local oldestSeq, newestSeq, span = computeSeqSpan(self)
+	self.metrics.oldestSeq = oldestSeq
+	self.metrics.newestSeq = newestSeq
+	self.metrics.ingestSeqSpan = span
 end
 
 --- Remove all buffered items; keep historical totals/averages intact.
@@ -704,6 +828,7 @@ function Buffer:clear()
 		laneState.lastSeen = {}
 		laneState.pendingCount = 0
 		laneState.lruHeap = {}
+		laneState.maxHeap = {}
 		laneState.fifo = {}
 		laneState.fifoHead = 1
 		laneState.inFifo = {}
@@ -722,6 +847,9 @@ function Buffer:clear()
 	self.keyLane = {}
 	self.metrics.pending = 0
 	self.metrics.peakPending = 0
+	self.metrics.oldestSeq = nil
+	self.metrics.newestSeq = nil
+	self.metrics.ingestSeqSpan = 0
 	self.metrics.lastDrain = self.metrics.lastDrain or {}
 	self.rrEvictCursor = 1
 	self.dropDelta = 0
@@ -734,12 +862,13 @@ end
 --- @return table
 function Buffer:advice_get(opts)
 	opts = opts or {}
-	local snap = self:metrics_get()
-	local load1 = snap.load1 or 0
-	local load15 = snap.load15 or 0
-	local throughput15 = snap.throughput15 or 0
-	local ingestRate15 = snap.ingestRate15 or 0
-	local dt = snap.lastDtSeconds or opts.drainIntervalSeconds
+	-- Advice is intended to be cheap: read from the internal metrics state (O(1)).
+	local state = self.metrics
+	local load1 = state.load1 or 0
+	local load15 = state.load15 or 0
+	local throughput15 = state.throughput15 or 0
+	local ingestRate15 = state.ingestRate15 or 0
+	local dt = state.lastDtSeconds or opts.drainIntervalSeconds
 	local epsilon = opts.epsilon or 0.1
 
 	local trend = "steady"
@@ -768,7 +897,7 @@ function Buffer:advice_get(opts)
 		load = load15,
 		recommendedThroughput = recommendedThroughput,
 		recommendedMaxItems = recommendedMaxItems,
-		msPerItem = snap.msPerItemEma,
+		msPerItem = state.msPerItemEma,
 		drainIntervalSeconds = dt,
 	}
 end
