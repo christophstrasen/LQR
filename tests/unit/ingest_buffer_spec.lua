@@ -60,6 +60,32 @@ describe("ingest buffer (latestByKey)", function()
 		assert.is.equal(0, stats.processed)
 	end)
 
+	it("evicts true LRU even when a key is refreshed many times (heap lazy deletion)", function()
+		local buf = Ingest.buffer({
+			name = "lru-heap",
+			mode = "latestByKey",
+			capacity = 2,
+			key = function(item)
+				return item.key
+			end,
+		})
+
+		buf:ingest({ key = "a" }) -- seq1
+		buf:ingest({ key = "b" }) -- seq2
+		-- Refresh 'a' many times; heap accumulates stale nodes for 'a'.
+		for _ = 1, 20 do
+			buf:ingest({ key = "a" })
+		end
+		-- Adding 'c' should evict 'b' (oldest remaining).
+		buf:ingest({ key = "c" })
+
+		assert.is_nil(buf.lanes.default.pending["b"])
+		assert.is.truthy(buf.lanes.default.pending["a"])
+		assert.is.truthy(buf.lanes.default.pending["c"])
+		local snap = buf:metrics_get()
+		assert.is.equal(1, snap.totals.droppedTotal)
+	end)
+
 	it("drains FIFO per lane when ordering=fifo", function()
 		local buf = Ingest.buffer({
 			name = "fifo",

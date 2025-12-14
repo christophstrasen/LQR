@@ -38,6 +38,7 @@ local VALID_DISTINCT_WINDOW_KEYS = {
 	field = true,
 	currentFn = true,
 	gcOnInsert = true,
+	gcBatchSize = true,
 	gcIntervalSeconds = true,
 	gcScheduleFn = true,
 }
@@ -99,12 +100,17 @@ local function normalizeWindow(window, scheduler)
 					Log:warn("distinct.window - currentFn should be a function; ignoring provided value")
 					window.currentFn = nil
 				end
+				if window.gcBatchSize ~= nil and (type(window.gcBatchSize) ~= "number" or window.gcBatchSize < 1) then
+					Log:warn("distinct.window - gcBatchSize should be a positive integer; defaulting to 1")
+					window.gcBatchSize = 1
+				end
 			end
 		window.__validated = true
 	end
 
 	local normalized = {
 		gcOnInsert = window.gcOnInsert,
+		gcBatchSize = window.gcBatchSize,
 		gcIntervalSeconds = window.gcIntervalSeconds,
 		gcScheduleFn = window.gcScheduleFn,
 	}
@@ -155,6 +161,9 @@ local function normalizeWindow(window, scheduler)
 
 	if normalized.gcOnInsert == nil then
 		normalized.gcOnInsert = true
+	end
+	if normalized.gcBatchSize == nil then
+		normalized.gcBatchSize = 1
 	end
 
 	return normalized
@@ -264,9 +273,92 @@ function DistinctObservable.createDistinctObservable(source, opts)
 
 	local observable = rx.Observable.create(function(observer)
 		local cache, order = {}, {}
+		local orderHead = 1
+		local batchCounter = 0
+
+		local function compactOrderIfNeeded()
+			-- Avoid unbounded growth when we keep popping from the head.
+			-- This compacts occasionally and keeps amortized cost low.
+			if orderHead <= 128 then
+				return
+			end
+			if orderHead <= (#order / 2) then
+				return
+			end
+			local newOrder = {}
+			for i = orderHead, #order do
+				local entry = order[i]
+				if entry then
+					newOrder[#newOrder + 1] = entry
+				end
+			end
+			order = newOrder
+			orderHead = 1
+		end
+
+		local function enforceIntervalRetention(reason)
+			local joinWindow = windowConfig.joinWindow
+			local currentFn = joinWindow.currentFn
+			local field = joinWindow.field
+			local offset = joinWindow.offset or 0
+
+			local now = currentFn()
+			if type(now) ~= "number" then
+				Log:warn("[distinct] currentFn returned non-number; skipping interval GC")
+				return
+			end
+
+			while orderHead <= #order do
+				local headEntry = order[orderHead]
+				if not headEntry then
+					orderHead = orderHead + 1
+				else
+					local key = headEntry.key
+					local record = headEntry.record
+					local buffer = key and cache[key]
+					local stored = buffer and buffer.entries and buffer.entries[1] or nil
+					if stored ~= record then
+						-- Stale order entry (already evicted/cleared).
+						order[orderHead] = nil
+						orderHead = orderHead + 1
+					else
+						local entry = record and record.entry
+						local meta = entry and entry.RxMeta
+						local value = meta and meta.sourceTime or (entry and entry[field])
+
+						if type(value) ~= "number" then
+							-- NOTE: Unlike JoinObservable interval GC (which only warns), distinct would stall forever
+							-- if the head entry can't be evaluated. For bounded memory and forward progress we evict it.
+							Log:warn(
+								"[distinct] Cannot evaluate interval expiration for %s entry - field '%s' missing or not numeric; evicting",
+								tostring(schemaName),
+								tostring(field)
+							)
+							cache[key] = nil
+							order[orderHead] = nil
+							orderHead = orderHead + 1
+							publishExpiration(key, record, expirationConfig.left.reason or "expired_interval")
+						elseif (now - value) > offset then
+							cache[key] = nil
+							order[orderHead] = nil
+							orderHead = orderHead + 1
+							publishExpiration(key, record, expirationConfig.left.reason or "expired_interval")
+						else
+							break
+						end
+					end
+				end
+			end
+
+			compactOrderIfNeeded()
+		end
 
 		local function runGc(reason)
-			enforceRetention(cache, order, "distinct")
+			if windowConfig.joinWindow.mode == "interval" then
+				enforceIntervalRetention(reason)
+			else
+				enforceRetention(cache, order, "distinct")
+			end
 			if reason == "completed" or reason == "disposed" then
 				flushCache(cache, order, reason)
 			end
@@ -286,7 +378,16 @@ function DistinctObservable.createDistinctObservable(source, opts)
 			end
 
 			if windowConfig.gcOnInsert then
-				runGc("insert")
+				-- Optional batching for interval GC to reduce overhead under high ingest rates.
+				-- Default is 1 (run on every insert), preserving current behavior.
+				if windowConfig.joinWindow.mode == "interval" and (windowConfig.gcBatchSize or 1) > 1 then
+					batchCounter = batchCounter + 1
+					if (batchCounter % (windowConfig.gcBatchSize or 1)) == 0 then
+						runGc("insert")
+					end
+				else
+					runGc("insert")
+				end
 			end
 
 			local buffer = cache[key]

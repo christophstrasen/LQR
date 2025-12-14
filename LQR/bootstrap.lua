@@ -9,6 +9,12 @@ if not (ok_debug and ok_package) or type(debug) ~= "table" or type(debug.getinfo
 		libraryPaths = {},
 	}
 end
+
+-- Busted runs LQR in a headless environment; avoid noisy warnings for intentional edge cases in tests.
+-- This flag is also honored by WorldObserver when running headless smoke tests.
+if type(_G.describe) == "function" then
+	_G.LQR_HEADLESS = true
+end
 -- TODO(later): re-enable Zomboid stubs when running inside the game runtime.
 -- require("LQR/util/zomboid_stubs")
 

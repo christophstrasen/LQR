@@ -5,6 +5,18 @@ local Reasons = require("LQR/ingest/reasons")
 local Buffer = {}
 Buffer.__index = Buffer
 
+local function isHeadless()
+	-- Heuristic: treat busted runs as headless to keep tests noise-free.
+	if _G.LQR_HEADLESS == true then
+		return true
+	end
+	-- In PZ, Events exists. In vanilla/headless runtimes (including busted) it usually does not.
+	if type(_G.Events) ~= "table" then
+		return true
+	end
+	return false
+end
+
 --- @class LQRIngestBufferOpts
 --- @field name string
 --- @field mode "dedupSet"|"latestByKey"|"queue"
@@ -45,6 +57,9 @@ local function newLaneState(priority, ordering)
 		pending = {},
 		lastSeen = {},
 		pendingCount = 0,
+		-- Min-heap of { seq, key } for eviction without scanning lastSeen.
+		-- Uses lazy deletion: stale nodes are skipped when popped.
+		lruHeap = {},
 		-- FIFO bookkeeping
 		fifo = {},
 		fifoHead = 1,
@@ -99,6 +114,92 @@ local function findOldestKeyBySeq(lane)
 		end
 	end
 	return oldestKey
+end
+
+local function heapSwap(heap, i, j)
+	heap[i], heap[j] = heap[j], heap[i]
+end
+
+local function heapLess(a, b)
+	return a.seq < b.seq
+end
+
+local function heapPush(heap, node)
+	heap[#heap + 1] = node
+	local idx = #heap
+	while idx > 1 do
+		local parent = math.floor(idx / 2)
+		if heapLess(heap[idx], heap[parent]) then
+			heapSwap(heap, idx, parent)
+			idx = parent
+		else
+			break
+		end
+	end
+end
+
+local function heapPop(heap)
+	local n = #heap
+	if n == 0 then
+		return nil
+	end
+	local root = heap[1]
+	local last = heap[n]
+	heap[n] = nil
+	n = n - 1
+	if n > 0 then
+		heap[1] = last
+		local idx = 1
+		while true do
+			local left = idx * 2
+			local right = left + 1
+			if left > n then
+				break
+			end
+			local smallest = left
+			if right <= n and heapLess(heap[right], heap[left]) then
+				smallest = right
+			end
+			if heapLess(heap[smallest], heap[idx]) then
+				heapSwap(heap, idx, smallest)
+				idx = smallest
+			else
+				break
+			end
+		end
+	end
+	return root
+end
+
+local function laneRebuildHeap(lane)
+	lane.lruHeap = {}
+	for key, seq in pairs(lane.lastSeen or {}) do
+		if type(seq) == "number" then
+			heapPush(lane.lruHeap, { seq = seq, key = key })
+		end
+	end
+end
+
+local function laneMaybeRebuildHeap(lane)
+	local pending = lane.pendingCount or 0
+	local heapSize = lane.lruHeap and #lane.lruHeap or 0
+	if pending > 0 and heapSize > (pending * 4 + 64) then
+		laneRebuildHeap(lane)
+	end
+end
+
+local function lanePopOldestKey(lane)
+	laneMaybeRebuildHeap(lane)
+	while lane.lruHeap and #lane.lruHeap > 0 do
+		local node = heapPop(lane.lruHeap)
+		if node and node.key ~= nil then
+			local currentSeq = lane.lastSeen[node.key]
+			if currentSeq ~= nil and currentSeq == node.seq and lane.pending[node.key] ~= nil then
+				return node.key
+			end
+		end
+	end
+	return nil
 end
 
 local function validateOpts(opts)
@@ -198,7 +299,7 @@ local function evictOne(self)
 		self.dropDelta = self.dropDelta + 1
 		return true
 	end
-	local victimKey = findOldestKeyBySeq(lane)
+	local victimKey = lanePopOldestKey(lane)
 	if not victimKey then
 		return false
 	end
@@ -233,7 +334,11 @@ local function handleBadKey(self)
 	if self.hooks.onDrop then
 		pcall(self.hooks.onDrop, { reason = Reasons.badKey })
 	end
-	Log:warn("Dropped item with nil key (badKey)")
+	if isHeadless() then
+		Log:debug("Dropped item with nil key (badKey)")
+	else
+		Log:warn("Dropped item with nil key (badKey)")
+	end
 end
 
 local function dequeueFromLane(self, laneName)
@@ -294,6 +399,9 @@ local function migrateKey(self, key, fromLane, toLaneName)
 	laneTo.priority = normalizePriority(self.lanePriorityFn(toLaneName) or 1, toLaneName)
 	laneTo.pending[key] = item
 	laneTo.lastSeen[key] = seen
+	if type(seen) == "number" then
+		heapPush(laneTo.lruHeap, { seq = seen, key = key })
+	end
 	laneTo.pendingCount = laneTo.pendingCount + 1
 	Metrics.bumpPending(self.metrics, 1, toLaneName)
 	if self.ordering == "fifo" and not laneTo.inFifo[key] then
@@ -353,10 +461,12 @@ function Buffer:ingest(item)
 		if existing ~= nil then
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
+			heapPush(lane.lruHeap, { seq = seq, key = key })
 			handleReplacement(self, laneName, key, existing, item)
 		else
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
+			heapPush(lane.lruHeap, { seq = seq, key = key })
 			lane.pendingCount = lane.pendingCount + 1
 			if self.ordering == "fifo" and not lane.inFifo[key] then
 				pushFifo(lane, key)
@@ -367,10 +477,12 @@ function Buffer:ingest(item)
 		if lane.pending[key] ~= nil then
 			-- Dedup: ignore duplicate pending; update lastSeen for eviction fairness.
 			lane.lastSeen[key] = seq
+			heapPush(lane.lruHeap, { seq = seq, key = key })
 			Metrics.bumpTotal(self.metrics, "dedupedTotal", 1)
 		else
 			lane.pending[key] = item
 			lane.lastSeen[key] = seq
+			heapPush(lane.lruHeap, { seq = seq, key = key })
 			lane.pendingCount = lane.pendingCount + 1
 			if self.ordering == "fifo" and not lane.inFifo[key] then
 				pushFifo(lane, key)
@@ -591,6 +703,7 @@ function Buffer:clear()
 		laneState.pending = {}
 		laneState.lastSeen = {}
 		laneState.pendingCount = 0
+		laneState.lruHeap = {}
 		laneState.fifo = {}
 		laneState.fifoHead = 1
 		laneState.inFifo = {}
@@ -696,7 +809,12 @@ function Buffer:advice_applyMaxMillis(current, opts)
 	local advice = self:advice_get(opts)
 	local msPerItem = advice.msPerItem
 	if not msPerItem or msPerItem <= 0 or not advice.recommendedMaxItems then
-		Log:warn("advice_applyMaxMillis: insufficient timing data to recommend maxMillis")
+		-- Avoid noisy warnings in headless/busted runs where timing data may be intentionally absent.
+		if isHeadless() then
+			Log:debug("advice_applyMaxMillis insufficient timing data to recommend maxMillis")
+		else
+			Log:warn("advice_applyMaxMillis insufficient timing data to recommend maxMillis")
+		end
 		return current or 0, advice
 	end
 	local recommendedMaxMillis = advice.recommendedMaxItems * msPerItem

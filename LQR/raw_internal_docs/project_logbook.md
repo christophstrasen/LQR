@@ -353,3 +353,17 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 2. **“Load average” is the right mental model for backlog pressure:** A trio of smoothed values is more useful than raw per-tick counters; it makes “rising vs falling” obvious without requiring graphs.
 3. **Advice needs defaults that don’t surprise:** Defaulting to steady-state (“keep up”) is safer than silently enabling backlog catch-up; catch-up needs an explicit horizon (`targetClearSeconds`) so hosts can choose aggressiveness.
 4. **Helpers matter as much as primitives:** If we want this to be used in real mods, we should ship the small ergonomic functions (`advice_apply*`) so users don’t re-invent smoothing/clamping logic incorrectly.
+
+## Day 23 – Runtime performance hardening (distinct + ingest) and headless ergonomics
+
+### Highlights
+- **Distinct interval GC made order-based:** Reworked `Query.distinct` time windows to expire keys using insertion order rather than scanning the entire cache on each insert. This makes per-record overhead proportional to “how many keys actually expire now”, not “how many keys exist in the window”.
+- **Optional batched GC for interval windows:** Added `distinct.window.gcBatchSize` (default `1`) so hosts can trade “expiry immediacy” for lower overhead under high ingest rates while keeping existing behavior unchanged by default.
+- **Ingress eviction upgraded to heap-based LRU:** Replaced scan-to-evict for `latestByKey`/`dedupSet` with a per-lane min-heap keyed by `ingestSeq` (lazy deletion + occasional rebuild), keeping eviction semantics intact while avoiding catastrophic O(n) scans during overload.
+- **Better clock plumbing for ingest metrics:** Extended the ingest scheduler to pass an optional `nowMillis` function through to buffers so load/throughput metrics can work in restricted runtimes where `os.clock` may be missing.
+- **Headless signal-noise improvements:** Suppressed “expected” warnings (badKey drops, advice_applyMaxMillis with insufficient timing) in headless/non-engine contexts without relying on consumer-specific flags, and removed stray `:` in warning text to avoid log sanitizers producing confusing `DOUBLECOLON` artifacts.
+
+### Takeaways
+1. **Windowed operators must be sublinear per record:** In bursty, tick-driven hosts, “scan the whole cache per insert” works in small tests but collapses in the real world where the distinct set can spike by thousands of keys inside a short interval.
+2. **Eviction paths are part of the hot path:** Overflow behavior happens exactly when the system is under load, so eviction must stay fast and predictable; otherwise overload control becomes the overload.
+3. **Library boundaries matter:** LQR should stay consumer-agnostic; headless/test behavior should be controlled by LQR-owned flags and host configuration, not by reaching into downstream projects.

@@ -1198,7 +1198,7 @@ function QueryBuilder:_build()
 	if self._built then
 		return self._built
 	end
-	Log:info("Query.build activated; further chaining on this builder will create new queries")
+	Log:debug("Query.build activated; further chaining on this builder will create new queries")
 
 	-- Explainer: build executes the declarative plan into concrete observables and merges expired side channels.
 	local expiredStreams = {}
@@ -1290,7 +1290,7 @@ function QueryBuilder:_build()
 				return false
 			end
 			local keepBool = keep and true or false
-			Log:info("[where] keep=%s ids=%s", tostring(keepBool), summarizeRowIds(row, rowSchemas))
+			Log:debug("[where] keep=%s ids=%s", tostring(keepBool), summarizeRowIds(row, rowSchemas))
 			return keepBool
 		end)
 	end

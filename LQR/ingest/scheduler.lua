@@ -10,7 +10,7 @@ Scheduler.__index = Scheduler
 
 --- @class LQRIngestScheduler
 --- @field addBuffer fun(self:LQRIngestScheduler, buffer:any, opts:table)
---- @field drainTick fun(self:LQRIngestScheduler, handleFn:function):table
+--- @field drainTick fun(self:LQRIngestScheduler, handleFn:function, opts:table|nil):table
 --- @field metrics_get fun(self:LQRIngestScheduler):table
 --- @field metrics_reset fun(self:LQRIngestScheduler)
 
@@ -21,6 +21,22 @@ local function validateOpts(opts)
 	if opts.quantum ~= nil then
 		assert(type(opts.quantum) == "number" and opts.quantum >= 1, "quantum must be >= 1 when provided")
 	end
+end
+
+local function resolveDrainArgs(arg1, arg2)
+	-- Backwards compatible:
+	-- - drainTick(handleFn)
+	-- - drainTick(handleFn, { nowMillis = fn })
+	-- - drainTick({ handle = handleFn, nowMillis = fn })
+	if type(arg1) == "function" then
+		return arg1, type(arg2) == "table" and arg2 or {}
+	end
+	if type(arg1) == "table" then
+		local opts = arg1
+		assert(type(opts.handle) == "function", "drainTick requires opts.handle function")
+		return opts.handle, opts
+	end
+	error("drainTick requires handle function or opts table")
 end
 
 local function newBufferEntry(buffer, priority, index)
@@ -58,8 +74,11 @@ end
 
 --- Drain buffers in priority order under the global budget.
 --- @param handleFn function
+--- @param opts table|nil
 --- @return table
-function Scheduler:drainTick(handleFn)
+function Scheduler:drainTick(handleFn, opts)
+	handleFn, opts = resolveDrainArgs(handleFn, opts)
+	local nowMillis = opts and opts.nowMillis
 	local remaining = self.maxItemsPerTick
 	local aggProcessed, aggDropped, aggReplaced, aggPending = 0, 0, 0, 0
 
@@ -100,6 +119,7 @@ function Scheduler:drainTick(handleFn)
 				local stats = entry.buffer:drain({
 					maxItems = math.min(quantum, remaining),
 					handle = handleFn,
+					nowMillis = nowMillis,
 				}) or {}
 
 				aggProcessed = aggProcessed + (stats.processed or 0)

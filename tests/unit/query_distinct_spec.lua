@@ -61,6 +61,35 @@ describe("Query.distinct", function()
 		assert.are.equal(2, #seen)
 	end)
 
+	it("supports batched interval GC via distinct.window.gcBatchSize", function()
+		local now = 0
+		local lionsSubject, lions = SchemaHelpers.subjectWithSchema("lions", { idField = "id" })
+		local seen = {}
+
+		Query.from(lions, "lions")
+			:distinct("lions", {
+				by = "id",
+				window = {
+					mode = "time",
+					field = "sourceTime",
+					offset = 5,
+					currentFn = function()
+						return now
+					end,
+					gcBatchSize = 2, -- run interval GC every 2 inserts
+				},
+			})
+			:subscribe(function(row)
+				seen[#seen + 1] = row:get("lions")
+			end)
+
+		lionsSubject:onNext({ id = 1, sourceTime = 0 }) -- insert #1: no GC run
+		now = 10
+		lionsSubject:onNext({ id = 1, sourceTime = 10 }) -- insert #2: GC runs, key expires, record re-admitted
+
+		assert.are.equal(2, #seen)
+	end)
+
 	it("handles join results when distinct is placed after a join", function()
 		local lionsSubject, lions = SchemaHelpers.subjectWithSchema("lions", { idField = "id" })
 		local gazellesSubject, gazelles = SchemaHelpers.subjectWithSchema("gazelles", { idField = "id" })
