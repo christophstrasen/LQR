@@ -230,8 +230,9 @@ function DistinctObservable.createDistinctObservable(source, opts)
 			cache[key] = nil
 		end
 		if order then
-			for i = #order, 1, -1 do
-				order[i] = nil
+			-- Avoid relying on Lua's `#` for tables with holes.
+			for index in pairs(order) do
+				order[index] = nil
 			end
 		end
 	end
@@ -271,48 +272,56 @@ function DistinctObservable.createDistinctObservable(source, opts)
 		end
 	end
 
-	local observable = rx.Observable.create(function(observer)
-		local cache, order = {}, {}
-		local orderHead = 1
-		local batchCounter = 0
+		local observable = rx.Observable.create(function(observer)
+			local cache, order = {}, {}
+			local orderHead = 1
+			local orderTail = 0
+			local batchCounter = 0
+			local warnedClockBehind = false
+			local debugEvents = 0
+			local maxDebugEvents = 25
 
-		local function compactOrderIfNeeded()
-			-- Avoid unbounded growth when we keep popping from the head.
-			-- This compacts occasionally and keeps amortized cost low.
-			if orderHead <= 128 then
-				return
-			end
-			if orderHead <= (#order / 2) then
-				return
-			end
-			local newOrder = {}
-			for i = orderHead, #order do
-				local entry = order[i]
-				if entry then
-					newOrder[#newOrder + 1] = entry
+			local function compactOrderIfNeeded()
+				-- Avoid unbounded growth when we keep popping from the head.
+				-- This compacts occasionally and keeps amortized cost low.
+				if orderHead <= 128 then
+					return
 				end
+				if orderHead <= (orderTail / 2) then
+					return
+				end
+				local newOrder = {}
+				for i = orderHead, orderTail do
+					local entry = order[i]
+					if entry then
+						newOrder[#newOrder + 1] = entry
+					end
+				end
+				order = newOrder
+				orderHead = 1
+				orderTail = #order
 			end
-			order = newOrder
-			orderHead = 1
-		end
 
-		local function enforceIntervalRetention(reason)
-			local joinWindow = windowConfig.joinWindow
-			local currentFn = joinWindow.currentFn
+			local function enforceIntervalRetention(reason)
+				local joinWindow = windowConfig.joinWindow
+				local currentFn = joinWindow.currentFn
 			local field = joinWindow.field
 			local offset = joinWindow.offset or 0
 
 			local now = currentFn()
-			if type(now) ~= "number" then
-				Log:warn("[distinct] currentFn returned non-number; skipping interval GC")
-				return
-			end
+				if type(now) ~= "number" then
+					Log:warn("[distinct] currentFn returned non-number; skipping interval GC")
+					return
+				end
 
-			while orderHead <= #order do
-				local headEntry = order[orderHead]
-				if not headEntry then
-					orderHead = orderHead + 1
-				else
+				-- NOTE: We intentionally avoid relying on Lua's `#` length operator here because `order` is
+				-- a queue where we nil out head indices. Some runtimes (e.g. PZ Kahlua) compute `#` by
+				-- scanning from index 1 and would return 0 once order[1] is nil, stalling retention forever.
+				while orderHead <= orderTail do
+					local headEntry = order[orderHead]
+					if not headEntry then
+						orderHead = orderHead + 1
+					else
 					local key = headEntry.key
 					local record = headEntry.record
 					local buffer = key and cache[key]
@@ -343,6 +352,22 @@ function DistinctObservable.createDistinctObservable(source, opts)
 							order[orderHead] = nil
 							orderHead = orderHead + 1
 							publishExpiration(key, record, expirationConfig.left.reason or "expired_interval")
+						elseif now < value then
+							-- Guard: if the configured clock is behind the entry timestamp, the distinct cache would stall
+							-- (nothing ever expires because the head entry is "in the future"). Evict to keep forward progress.
+							if not warnedClockBehind then
+								warnedClockBehind = true
+								Log:warn(
+									"[distinct] currentFn is behind entry sourceTime for schema=%s (now=%s, sourceTime=%s); evicting to avoid stall",
+									tostring(schemaName),
+									tostring(now),
+									tostring(value)
+								)
+							end
+							cache[key] = nil
+							order[orderHead] = nil
+							orderHead = orderHead + 1
+							publishExpiration(key, record, "expired_clock_skew")
 						else
 							break
 						end
@@ -350,19 +375,21 @@ function DistinctObservable.createDistinctObservable(source, opts)
 				end
 			end
 
-			compactOrderIfNeeded()
-		end
+				compactOrderIfNeeded()
+			end
 
-		local function runGc(reason)
-			if windowConfig.joinWindow.mode == "interval" then
-				enforceIntervalRetention(reason)
-			else
-				enforceRetention(cache, order, "distinct")
+			local function runGc(reason)
+				if windowConfig.joinWindow.mode == "interval" then
+					enforceIntervalRetention(reason)
+				else
+					enforceRetention(cache, order, "distinct")
+				end
+				if reason == "completed" or reason == "disposed" then
+					flushCache(cache, order, reason)
+					orderHead = 1
+					orderTail = 0
+				end
 			end
-			if reason == "completed" or reason == "disposed" then
-				flushCache(cache, order, reason)
-			end
-		end
 
 		local cancelGc = startPeriodicGc(runGc)
 
@@ -375,6 +402,25 @@ function DistinctObservable.createDistinctObservable(source, opts)
 			if key == nil then
 				Log:warn("[distinct] dropping %s entry because key resolved to nil", tostring(schemaName))
 				return
+			end
+
+			local meta = type(record) == "table" and record.RxMeta or nil
+			local sourceTime = meta and meta.sourceTime or nil
+			local joinWindow = windowConfig.joinWindow
+			local now = nil
+			if joinWindow and joinWindow.mode == "interval" and type(joinWindow.currentFn) == "function" then
+				now = joinWindow.currentFn()
+			end
+			if debugEvents < maxDebugEvents then
+				debugEvents = debugEvents + 1
+				Log:debug(
+					"[distinct] in schema=%s key=%s now=%s sourceTime=%s offset=%s",
+					tostring(schemaName),
+					tostring(key),
+					tostring(now),
+					tostring(sourceTime),
+					tostring(joinWindow and joinWindow.offset)
+				)
 			end
 
 			if windowConfig.gcOnInsert then
@@ -393,6 +439,10 @@ function DistinctObservable.createDistinctObservable(source, opts)
 			local buffer = cache[key]
 			if buffer and buffer.entries and #buffer.entries > 0 then
 				-- Suppress duplicate; keep original entry so retention is based on first arrival.
+				if debugEvents < maxDebugEvents then
+					debugEvents = debugEvents + 1
+					Log:debug("[distinct] suppress schema=%s key=%s", tostring(schemaName), tostring(key))
+				end
 				publishExpiration(key, { entry = record, schemaName = schemaName }, "distinct_schema")
 				return
 			end
@@ -402,10 +452,11 @@ function DistinctObservable.createDistinctObservable(source, opts)
 				key = key,
 				schemaName = schemaName,
 			}
-			cache[key] = { entries = { stored } }
-			order[#order + 1] = { key = key, record = stored }
-			observer:onNext(emitValue or stored.entry)
-		end
+				cache[key] = { entries = { stored } }
+				orderTail = orderTail + 1
+				order[orderTail] = { key = key, record = stored }
+				observer:onNext(emitValue or stored.entry)
+			end
 
 		local function handleEntry(entry)
 			if isJoinResult(entry) then

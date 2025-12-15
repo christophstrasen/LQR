@@ -1290,10 +1290,10 @@ function QueryBuilder:_build()
 				return false
 			end
 			local keepBool = keep and true or false
-			Log:debug("[where] keep=%s ids=%s", tostring(keepBool), summarizeRowIds(row, rowSchemas))
-			return keepBool
-		end)
-	end
+				Log:trace("[where] keep=%s ids=%s", tostring(keepBool), summarizeRowIds(row, rowSchemas))
+				return keepBool
+			end)
+		end
 
 	if self._selection then
 		current = current:map(function(value)
