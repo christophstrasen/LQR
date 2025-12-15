@@ -4,6 +4,7 @@ local Schema = require("LQR/JoinObservable/schema")
 local Result = require("LQR/JoinObservable/result")
 local Strategies = require("LQR/JoinObservable/strategies")
 local Expiration = require("LQR/JoinObservable/expiration")
+local OrderQueue = require("LQR/util/order_queue")
 local Log = require("LQR/util/log").withTag("join")
 
 local JoinObservableCore = {}
@@ -365,11 +366,11 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		expiredSubject[method](expiredSubject, ...)
 	end
 
-	local observable = rx.Observable.create(function(observer)
-		local leftCache, rightCache = {}, {}
-		local leftOrder = expirationConfig.left.mode == "count" and {} or nil
-		local rightOrder = expirationConfig.right.mode == "count" and {} or nil
-		local defaultPerKeyBufferSize = options.perKeyBufferSize or 10
+		local observable = rx.Observable.create(function(observer)
+			local leftCache, rightCache = {}, {}
+			local leftOrder = expirationConfig.left.mode == "count" and OrderQueue.new() or nil
+			local rightOrder = expirationConfig.right.mode == "count" and OrderQueue.new() or nil
+			local defaultPerKeyBufferSize = options.perKeyBufferSize or 10
 		local perKeyBufferConfigured = {
 			left = options.perKeyBufferSizeLeft ~= nil,
 			right = options.perKeyBufferSizeRight ~= nil,
@@ -400,14 +401,18 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			return buffer
 		end
 
-		local function removeFromOrder(order, targetRecord)
-			if not order then
-				return
-			end
-			for i = #order, 1, -1 do
-				if order[i].record == targetRecord then
-					table.remove(order, i)
+			local function removeFromOrder(order, targetRecord)
+				if not order then
 					return
+				end
+				if OrderQueue.isOrderQueue(order) then
+					OrderQueue.removeRecord(order, targetRecord)
+					return
+				end
+				for i = #order, 1, -1 do
+					if order[i].record == targetRecord then
+						table.remove(order, i)
+						return
 				end
 			end
 		end
@@ -445,8 +450,16 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				cache[key] = nil
 			end
 			if order then
-				for i = #order, 1, -1 do
-					order[i] = nil
+				if OrderQueue.isOrderQueue(order) then
+					OrderQueue.clear(order)
+				else
+					local keys = {}
+					for k in pairs(order) do
+						keys[#keys + 1] = k
+					end
+					for i = 1, #keys do
+						order[keys[i]] = nil
+					end
 				end
 			end
 		end
@@ -559,12 +572,16 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 					end
 				end
 			end
-			table.insert(buffer.entries, record)
-			if order then
-				order[#order + 1] = { key = key, record = record }
+				table.insert(buffer.entries, record)
+				if order then
+					if OrderQueue.isOrderQueue(order) then
+						OrderQueue.push(order, key, record)
+					else
+						order[#order + 1] = { key = key, record = record }
+					end
+				end
+				return record
 			end
-			return record
-		end
 
 		local gcSubscription
 		local function cancelGc()

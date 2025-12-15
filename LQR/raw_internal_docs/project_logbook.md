@@ -372,3 +372,17 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 2. **Eviction paths are part of the hot path:** Overflow behavior happens exactly when the system is under load, so eviction must stay fast and predictable; otherwise overload control becomes the overload.
 3. **Library boundaries matter:** LQR should stay consumer-agnostic; headless/test behavior should be controlled by LQR-owned flags and host configuration, not by reaching into downstream projects.
 4. **Observability should not perturb the system:** A “light metrics” default makes it easy for hosts to log/use backpressure signals every tick without accidentally triggering heavyweight work.
+
+## Day 24 – Kahlua-safe counting + queue semantics
+
+### Highlights
+- **Reduced log noise without losing detail:** Moved per-row `Query.where` decision logging to TRACE so debug runs stay readable unless explicitly enabled.
+- **Fixed a real-world distinct stall in PZ/Kahlua:** Removed reliance on `#table` for queue-like order tracking in `distinct` interval windows (where head entries are nilled out), which can cause `#order` to read as `0` and stall expiration forever.
+- **Made ingest hot paths self-counting:** Replaced FIFO draining’s `#lane.fifo` usage with explicit `fifoTail`, and added a scheduler-side `self._bufferCount` so tick loops don’t repeatedly call `#self._buffers`.
+- **Introduced `OrderQueue` for robust FIFO eviction:** Added `LQR/util/order_queue.lua` and used it for count-mode join retention (order tracking + removal by record) and count-mode expiration enforcement, avoiding `#order` assumptions under sparse tables.
+- **Tests lock in the invariants:** Added `order_queue_spec.lua` and a “sparse fifo list” ingest buffer test that would fail if the implementation depended on `#` for progress.
+
+### Takeaways
+1. **`#table` is not a portable size primitive:** Even when it’s fast in standard Lua for dense arrays, it is undefined for tables with holes and can behave differently in embedded runtimes like Kahlua.
+2. **Queues need explicit metadata:** If you ever nil out indices, track `head`/`tail`/`count` (and compact occasionally) instead of relying on the runtime to infer length.
+3. **Debug output is part of the performance surface:** The difference between DEBUG and TRACE matters; otherwise logging can dominate CPU and hide the system’s real behavior.

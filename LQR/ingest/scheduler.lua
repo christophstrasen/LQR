@@ -68,7 +68,8 @@ function Scheduler:addBuffer(buffer, opts)
 		Log:warn("buffer priority invalid; defaulting to 1")
 		priority = 1
 	end
-	self._buffers[#self._buffers + 1] = newBufferEntry(buffer, priority, #self._buffers + 1)
+	self._bufferCount = (self._bufferCount or 0) + 1
+	self._buffers[self._bufferCount] = newBufferEntry(buffer, priority, self._bufferCount)
 	sortBuffers(self._buffers)
 	Log:info("Scheduler '%s' added buffer '%s' (priority=%d)", self.name, buffer.name or "anon", priority)
 end
@@ -93,12 +94,14 @@ function Scheduler:drainTick(handleFn, opts)
 	local quantum = self.quantum or 1
 
 	-- Iterate priority groups (buffers are already sorted by priority desc, then insertion index).
+	local buffers = self._buffers
+	local bufferCount = self._bufferCount or (buffers and #buffers) or 0
 	local idx = 1
-	while idx <= #self._buffers and remaining > 0 do
-		local pri = self._buffers[idx].priority or 1
+	while idx <= bufferCount and remaining > 0 do
+		local pri = buffers[idx].priority or 1
 		local groupStart = idx
 		local groupEnd = idx
-		while groupEnd <= #self._buffers and (self._buffers[groupEnd].priority or 1) == pri do
+		while groupEnd <= bufferCount and (buffers[groupEnd].priority or 1) == pri do
 			groupEnd = groupEnd + 1
 		end
 		groupEnd = groupEnd - 1
@@ -116,7 +119,7 @@ function Scheduler:drainTick(handleFn, opts)
 				if remaining <= 0 then
 					break
 				end
-				local entry = self._buffers[groupStart + (cursor - 1)]
+				local entry = buffers[groupStart + (cursor - 1)]
 				cursor = (cursor % n) + 1
 
 				local drainOpts = {
@@ -245,6 +248,7 @@ function Scheduler.new(opts)
 	self.quantum = opts.quantum or 1
 	self.maxMillisPerTick = opts.maxMillisPerTick
 	self._buffers = {}
+	self._bufferCount = 0
 	self._rrCursorByPriority = {}
 	self.totals = {
 		drainCallsTotal = 0,

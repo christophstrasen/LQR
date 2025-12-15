@@ -121,6 +121,47 @@ describe("ingest buffer (latestByKey)", function()
 		assert.are.same({ "b1", "a1", "a2" }, seen)
 	end)
 
+	it("drains FIFO even when the fifo list is sparse", function()
+		local buf = Ingest.buffer({
+			name = "fifo-sparse",
+			mode = "latestByKey",
+			ordering = "fifo",
+			capacity = 10,
+			key = function(item)
+				return item.key
+			end,
+			lane = function()
+				return "a"
+			end,
+		})
+
+		buf:ingest({ key = 99 })
+		buf:ingest({ key = 5 })
+		buf:ingest({ key = 1 })
+
+		local seen = {}
+		buf:drain({
+			maxItems = 1,
+			handle = function(item)
+				table.insert(seen, item.key)
+			end,
+		})
+		assert.are.same({ 99 }, seen)
+
+		-- Simulate a runtime/consumer that creates holes in the fifo array.
+		-- LQR should not rely on `#lane.fifo` to decide whether items remain.
+		buf.lanes.a.fifo[1] = nil
+
+		buf:drain({
+			maxItems = 2,
+			handle = function(item)
+				table.insert(seen, item.key)
+			end,
+		})
+
+		assert.are.same({ 99, 5, 1 }, seen)
+	end)
+
 	it("drops bad keys and warns via metrics", function()
 		local buf = Ingest.buffer({
 			name = "badkey",

@@ -1,5 +1,6 @@
 -- Expiration utilities that prune cached join rows based on count/interval/predicate rules.
 local Log = require("LQR/util/log").withTag("join")
+local OrderQueue = require("LQR/util/order_queue")
 
 local Expiration = {}
 
@@ -93,8 +94,9 @@ function Expiration.createEnforcer(expirationConfig, publishExpirationFn, emitUn
 		local maxItems = expirationConfig.maxItems
 		return function(cache, order, side)
 			order = order or {}
-			while #order > maxItems do
-				local oldest = table.remove(order, 1)
+			local isQueue = OrderQueue.isOrderQueue(order)
+			while (isQueue and order.count or #order) > maxItems do
+				local oldest = isQueue and OrderQueue.pop(order) or table.remove(order, 1)
 				local key, record
 				if type(oldest) == "table" then
 					key = oldest.key

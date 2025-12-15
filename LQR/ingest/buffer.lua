@@ -68,6 +68,7 @@ local function newLaneState(priority, ordering)
 		-- FIFO bookkeeping
 		fifo = {},
 		fifoHead = 1,
+		fifoTail = 0,
 		inFifo = {},
 		-- Queue bookkeeping (queue mode)
 		queue = {},
@@ -77,7 +78,8 @@ local function newLaneState(priority, ordering)
 end
 
 local function pushFifo(lane, key)
-	lane.fifo[#lane.fifo + 1] = key
+	lane.fifoTail = (lane.fifoTail or 0) + 1
+	lane.fifo[lane.fifoTail] = key
 	lane.inFifo[key] = true
 end
 
@@ -89,7 +91,8 @@ end
 
 local function popFifo(lane)
 	local head = lane.fifoHead
-	while head <= #lane.fifo do
+	local tail = lane.fifoTail or 0
+	while head <= tail do
 		local key = lane.fifo[head]
 		if key and lane.pending[key] then
 			lane.fifoHead = head + 1
@@ -823,22 +826,23 @@ end
 function Buffer:clear()
 	-- Drop all buffered items without altering historical totals.
 	local removed = self.metrics.pending
-	for laneName, laneState in pairs(self.lanes) do
-		laneState.pending = {}
-		laneState.lastSeen = {}
-		laneState.pendingCount = 0
-		laneState.lruHeap = {}
-		laneState.maxHeap = {}
-		laneState.fifo = {}
-		laneState.fifoHead = 1
-		laneState.inFifo = {}
-		laneState.queue = {}
-		laneState.queueHead = 1
-		laneState.queueTail = 0
-		-- Per-lane metrics snapshot resets to 0 pending; totals stay.
-		self.metrics.perLane[laneName] = {
-			pending = 0,
-			peakPending = 0,
+		for laneName, laneState in pairs(self.lanes) do
+			laneState.pending = {}
+			laneState.lastSeen = {}
+			laneState.pendingCount = 0
+			laneState.lruHeap = {}
+			laneState.maxHeap = {}
+			laneState.fifo = {}
+			laneState.fifoHead = 1
+			laneState.fifoTail = 0
+			laneState.inFifo = {}
+			laneState.queue = {}
+			laneState.queueHead = 1
+			laneState.queueTail = 0
+			-- Per-lane metrics snapshot resets to 0 pending; totals stay.
+			self.metrics.perLane[laneName] = {
+				pending = 0,
+				peakPending = 0,
 			drainedTotal = self.metrics.perLane[laneName] and self.metrics.perLane[laneName].drainedTotal or 0,
 			droppedTotal = self.metrics.perLane[laneName] and self.metrics.perLane[laneName].droppedTotal or 0,
 			seqSpan = 0,

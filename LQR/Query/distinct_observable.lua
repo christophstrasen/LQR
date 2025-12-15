@@ -3,6 +3,7 @@ local rx = require("reactivex")
 local Expiration = require("LQR/JoinObservable/expiration")
 local Result = require("LQR/JoinObservable/result")
 local Schema = require("LQR/JoinObservable/schema")
+local OrderQueue = require("LQR/util/order_queue")
 local Log = require("LQR/util/log").withTag("distinct")
 
 local function default_now()
@@ -230,9 +231,16 @@ function DistinctObservable.createDistinctObservable(source, opts)
 			cache[key] = nil
 		end
 		if order then
-			-- Avoid relying on Lua's `#` for tables with holes.
-			for index in pairs(order) do
-				order[index] = nil
+			if OrderQueue.isOrderQueue(order) then
+				OrderQueue.clear(order)
+			else
+				local keys = {}
+				for k in pairs(order) do
+					keys[#keys + 1] = k
+				end
+				for i = 1, #keys do
+					order[keys[i]] = nil
+				end
 			end
 		end
 	end
@@ -272,14 +280,15 @@ function DistinctObservable.createDistinctObservable(source, opts)
 		end
 	end
 
-		local observable = rx.Observable.create(function(observer)
-			local cache, order = {}, {}
-			local orderHead = 1
-			local orderTail = 0
-			local batchCounter = 0
-			local warnedClockBehind = false
-			local debugEvents = 0
-			local maxDebugEvents = 25
+	local observable = rx.Observable.create(function(observer)
+		local cache = {}
+		local order = windowConfig.joinWindow.mode == "interval" and {} or OrderQueue.new()
+		local orderHead = 1
+		local orderTail = 0
+		local batchCounter = 0
+		local warnedClockBehind = false
+		local debugEvents = 0
+		local maxDebugEvents = 25
 
 			local function compactOrderIfNeeded()
 				-- Avoid unbounded growth when we keep popping from the head.
@@ -314,9 +323,6 @@ function DistinctObservable.createDistinctObservable(source, opts)
 					return
 				end
 
-				-- NOTE: We intentionally avoid relying on Lua's `#` length operator here because `order` is
-				-- a queue where we nil out head indices. Some runtimes (e.g. PZ Kahlua) compute `#` by
-				-- scanning from index 1 and would return 0 once order[1] is nil, stalling retention forever.
 				while orderHead <= orderTail do
 					local headEntry = order[orderHead]
 					if not headEntry then
@@ -453,8 +459,12 @@ function DistinctObservable.createDistinctObservable(source, opts)
 				schemaName = schemaName,
 			}
 				cache[key] = { entries = { stored } }
-				orderTail = orderTail + 1
-				order[orderTail] = { key = key, record = stored }
+				if windowConfig.joinWindow.mode == "interval" then
+					orderTail = orderTail + 1
+					order[orderTail] = { key = key, record = stored }
+				else
+					OrderQueue.push(order, key, stored)
+				end
 				observer:onNext(emitValue or stored.entry)
 			end
 
