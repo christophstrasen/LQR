@@ -111,7 +111,10 @@ local function splitTags(raw)
 			set[trimmed] = true
 		end
 	end
-	return next(set) and set or nil
+	for _ in pairs(set) do
+		return set
+	end
+	return nil
 end
 
 	tagInclude = splitTags(safe_getenv("LOG_TAG_INCLUDE"))

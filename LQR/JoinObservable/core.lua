@@ -5,21 +5,20 @@ local Result = require("LQR/JoinObservable/result")
 local Strategies = require("LQR/JoinObservable/strategies")
 local Expiration = require("LQR/JoinObservable/expiration")
 local OrderQueue = require("LQR/util/order_queue")
-local Log = require("LQR/util/log").withTag("join")
+local LogModule = require("LQR/util/log")
+local Log = LogModule.withTag("join")
 
 local JoinObservableCore = {}
 
+local function safeGetenv(name)
+	if type(os) == "table" and type(os.getenv) == "function" then
+		return os.getenv(name)
+	end
+	return nil
+end
+
 -- Best-effort structured formatter for payload logging.
 local function formatForLog(value)
-	-- Prefer dkjson if available.
-	local okJson, dkjson = pcall(require, "dkjson")
-	if okJson and dkjson and dkjson.encode then
-		local okEnc, encoded = pcall(dkjson.encode, value, { indent = true })
-		if okEnc and encoded then
-			return encoded
-		end
-	end
-
 	-- Fallback: simple pretty printer with cycle protection.
 	local function encode(v, depth, seen)
 		if depth <= 0 then
@@ -207,7 +206,7 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				joinType = options.joinType,
 			}
 		or nil
-	local debugLifecycle = os.getenv("DEBUG") == "1"
+	local debugLifecycle = safeGetenv("DEBUG") == "1"
 	local function sanitizeMessage(message)
 		local msg = tostring(message or "")
 		return msg:gsub(":", "DOUBLECOLON")
@@ -675,22 +674,26 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 				return
 			end
 			meta.joinKey = key
-			Log:info(
-				"[input] side=%s schema=%s key=%s id=%s sourceTime=%s schemaVersion=%s",
-				side,
-				tostring(schemaName),
-				tostring(key),
-				meta and tostring(meta.id) or "nil",
-				meta and tostring(meta.sourceTime) or "nil",
-				meta and tostring(meta.schemaVersion) or "nil"
-			)
-			Log:debug(
-				"[input payload] side=%s schema=%s key=%s entry=%s",
-				side,
-				tostring(schemaName),
-				tostring(key),
-				formatForLog(entry)
-			)
+			if LogModule.isEnabled("trace", Log.tag) then
+				Log:trace(
+					"[input] side=%s schema=%s key=%s id=%s sourceTime=%s schemaVersion=%s",
+					side,
+					tostring(schemaName),
+					tostring(key),
+					meta and tostring(meta.id) or "nil",
+					meta and tostring(meta.sourceTime) or "nil",
+					meta and tostring(meta.schemaVersion) or "nil"
+				)
+			end
+			if LogModule.isEnabled("debug", Log.tag) then
+				Log:debug(
+					"[input payload] side=%s schema=%s key=%s entry=%s",
+					side,
+					tostring(schemaName),
+					tostring(key),
+					formatForLog(entry)
+				)
+			end
 			local record = upsertBufferEntry(cache, order, side, key, entry, schemaName)
 
 			if baseViz then

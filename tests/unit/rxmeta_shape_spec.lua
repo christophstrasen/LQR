@@ -30,6 +30,16 @@ describe("RxMeta shapes", function()
 		local res = Result.new()
 		res:attach("alpha", {
 			value = 5,
+			extra1 = 1,
+			extra2 = 2,
+			extra3 = 3,
+			extra4 = 4,
+			extra5 = 5,
+			extra6 = 6,
+			extra7 = 7,
+			extra8 = 8,
+			extra9 = 9,
+			extra10 = 10,
 			RxMeta = {
 				schema = "alpha",
 				id = 9,

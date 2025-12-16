@@ -70,6 +70,21 @@ all_ok = probe("no-debug", function()
 	_G.debug = nil
 end) and all_ok
 
+-- Probe 1b: next missing (simulate runtimes where next is nil).
+all_ok = probe("next-nil", function()
+	_G.debug = nil
+	_G.next = nil
+end) and all_ok
+
+-- Probe 1c: os.getenv missing (matches PZ Kahlua).
+all_ok = probe("os-getenv-nil", function()
+	_G.debug = nil
+	if type(os) ~= "table" then
+		os = {}
+	end
+	os.getenv = nil
+end) and all_ok
+
 -- Probe 2: package present but minimal (guards package.loaded accesses).
 all_ok = probe("package-minimal", function()
 	_G.debug = nil

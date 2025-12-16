@@ -12,6 +12,20 @@ local Log = require("LQR/util/log").withTag("join")
 local Schema = {}
 local invalidVersionNotified = {}
 
+local function applyTestPayloadPadding(record)
+	local fieldCount = _G and _G.LQR_TEST_PAYLOAD_FIELDS
+	if type(fieldCount) ~= "number" or fieldCount <= 0 then
+		return
+	end
+
+	for i = 1, fieldCount do
+		local key = "extra" .. tostring(i)
+		if record[key] == nil then
+			record[key] = i
+		end
+	end
+end
+
 local function isPositiveInteger(value)
 	return type(value) == "number" and value > 0 and value == math.floor(value)
 end
@@ -250,6 +264,8 @@ end
 		end
 
 		meta.shape = meta.shape or "record"
+
+		applyTestPayloadPadding(record)
 	return record
 end
 

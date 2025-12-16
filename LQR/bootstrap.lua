@@ -14,6 +14,8 @@ end
 -- This flag is also honored by WorldObserver when running headless smoke tests.
 if type(_G.describe) == "function" then
 	_G.LQR_HEADLESS = true
+	-- Tests should exercise non-trivial payloads to better approximate real workloads.
+	_G.LQR_TEST_PAYLOAD_FIELDS = _G.LQR_TEST_PAYLOAD_FIELDS or 10
 end
 -- TODO(later): re-enable Zomboid stubs when running inside the game runtime.
 -- require("LQR/util/zomboid_stubs")

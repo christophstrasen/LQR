@@ -381,8 +381,15 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **Made ingest hot paths self-counting:** Replaced FIFO draining’s `#lane.fifo` usage with explicit `fifoTail`, and added a scheduler-side `self._bufferCount` so tick loops don’t repeatedly call `#self._buffers`.
 - **Introduced `OrderQueue` for robust FIFO eviction:** Added `LQR/util/order_queue.lua` and used it for count-mode join retention (order tracking + removal by record) and count-mode expiration enforcement, avoiding `#order` assumptions under sparse tables.
 - **Tests lock in the invariants:** Added `order_queue_spec.lua` and a “sparse fifo list” ingest buffer test that would fail if the implementation depended on `#` for progress.
+- **Hardened for missing globals in embedded hosts:** Removed remaining runtime dependencies on `next(...)` and guarded `os.getenv` usage; extended the PZ smoke script to probe `next=nil` and `os.getenv=nil`.
+- **Removed optional `dkjson` requires:** Even a `pcall(require, "dkjson")` can emit warnings in PZ; replaced JSON-based debug formatting/plan printing with small built-in pretty printers.
+- **Benchmarks + CI wiring:** Added `scripts/benchmarks.lua` (lean query, 2-join, 3-join, group-by, ingest) and a CI job that runs LQR unit tests plus the benchmark suite in an informational mode with low log volume.
+- **More realistic test payload sizes:** Tests now exercise records with additional fields via `_G.LQR_TEST_PAYLOAD_FIELDS` + `Schema.wrap` padding, and expanded a few hand-constructed fixtures to match.
+- **Join debug overhead reduced:** Moved per-record join input logging to TRACE and ensured expensive payload stringification only happens when debug logging is enabled.
 
 ### Takeaways
 1. **`#table` is not a portable size primitive:** Even when it’s fast in standard Lua for dense arrays, it is undefined for tables with holes and can behave differently in embedded runtimes like Kahlua.
 2. **Queues need explicit metadata:** If you ever nil out indices, track `head`/`tail`/`count` (and compact occasionally) instead of relying on the runtime to infer length.
 3. **Debug output is part of the performance surface:** The difference between DEBUG and TRACE matters; otherwise logging can dominate CPU and hide the system’s real behavior.
+4. **Some hosts log “failed requires” even when Lua handles them:** Avoid optional requires on hot paths (and especially inside debug helpers) if the runtime emits warnings regardless of `pcall`.
+5. **Benchmarks must measure the right clock:** In tick-driven runtimes, separate “compute time” from “wall time across frames” or you end up benchmarking the scheduler more than the query engine.

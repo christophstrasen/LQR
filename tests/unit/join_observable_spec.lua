@@ -93,11 +93,31 @@ describe("JoinObservable", function()
 			local customer = {
 				id = 1,
 				name = "Ada",
+				extra1 = 1,
+				extra2 = 2,
+				extra3 = 3,
+				extra4 = 4,
+				extra5 = 5,
+				extra6 = 6,
+				extra7 = 7,
+				extra8 = 8,
+				extra9 = 9,
+				extra10 = 10,
 				RxMeta = { schema = "customers", schemaVersion = 2, joinKey = "1", sourceTime = 100 },
 			}
 			local order = {
 				id = 100,
 				customerId = 1,
+				extra1 = 1,
+				extra2 = 2,
+				extra3 = 3,
+				extra4 = 4,
+				extra5 = 5,
+				extra6 = 6,
+				extra7 = 7,
+				extra8 = 8,
+				extra9 = 9,
+				extra10 = 10,
 				RxMeta = { schema = "orders", joinKey = "1", sourceTime = 120 },
 			}
 
@@ -1212,7 +1232,19 @@ end)
 
 describe("JoinObservable.chain helper", function()
 	local function makeResultWithOrder(id)
-		local order = { id = id }
+		local order = {
+			id = id,
+			extra1 = 1,
+			extra2 = 2,
+			extra3 = 3,
+			extra4 = 4,
+			extra5 = 5,
+			extra6 = 6,
+			extra7 = 7,
+			extra8 = 8,
+			extra9 = 9,
+			extra10 = 10,
+		}
 		order.RxMeta = { schema = "orders", schemaVersion = 1, joinKey = tostring(id) }
 		return Result.new():attach("orders", order)
 	end

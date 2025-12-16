@@ -115,6 +115,13 @@ local defaultJoinWindowOverride = nil
 local QueryBuilder = {}
 QueryBuilder.__index = QueryBuilder
 
+local function hasAnyKey(tbl)
+	for _ in pairs(tbl or {}) do
+		return true
+	end
+	return false
+end
+
 -- Explainer: union builds a sorted de-duped list so describe/select stay stable.
 local function union(left, right)
 	local set, output = {}, {}
@@ -166,7 +173,7 @@ local function schemaSet(names)
 			set[name] = true
 		end
 	end
-	return next(set) and set or nil
+	return hasAnyKey(set) and set or nil
 end
 
 -- Explainer: filterFromMap narrows participation to schemas that have selectors configured.
@@ -182,7 +189,7 @@ local function filterFromMap(map, known)
 			end
 		end
 	end
-	if next(set) then
+	if hasAnyKey(set) then
 		return set
 	end
 	for name in pairs(map) do
@@ -532,9 +539,9 @@ local function normalizeKeySelector(step)
 					perKeyBufferSize = 1
 				end
 			bufferSizes[schema] = perKeyBufferSize
-		end
 	end
-	return selectorFromSchemas(normalized), bufferSizes, next(oneShotSchemas) and oneShotSchemas or nil
+	end
+	return selectorFromSchemas(normalized), bufferSizes, hasAnyKey(oneShotSchemas) and oneShotSchemas or nil
 end
 
 -- Explainer: normalizeJoinWindow defaults to a large count join window and threads scheduler into GC if available.
@@ -1073,7 +1080,7 @@ function QueryBuilder:using(map)
 	assert(type(map) == "table", "using expects a table")
 	warnIfBuilt(self, "using")
 	ensureStep(self)
-	local hasEntries = next(map) ~= nil
+	local hasEntries = hasAnyKey(map)
 	assert(hasEntries, "using expects at least one mapping")
 	for schemaName, selector in pairs(map) do
 		assert(type(schemaName) == "string" and schemaName ~= "", "using keys must be non-empty schema names")
@@ -1600,11 +1607,37 @@ end
 ---Returns a stringified description (for logs).
 ---@return string
 function QueryBuilder:describeAsString()
-	local ok, encoded = pcall(require, "dkjson")
-	if ok and encoded and encoded.encode then
-		return encoded.encode(self:describe(), { indent = true })
+	local function encode(v, depth, seen)
+		if depth <= 0 then
+			return "..."
+		end
+		local t = type(v)
+		if t == "table" then
+			if seen[v] then
+				return "<cycle>"
+			end
+			seen[v] = true
+			local keys = {}
+			for k in pairs(v) do
+				keys[#keys + 1] = k
+			end
+			table.sort(keys, function(a, b)
+				return tostring(a) < tostring(b)
+			end)
+			local parts = {}
+			for _, k in ipairs(keys) do
+				parts[#parts + 1] = string.format("%s=%s", tostring(k), encode(v[k], depth - 1, seen))
+			end
+			seen[v] = nil
+			return "{" .. table.concat(parts, ", ") .. "}"
+		elseif t == "string" then
+			return string.format("%q", v)
+		else
+			return tostring(v)
+		end
 	end
-	return tostring(self:describe())
+
+	return encode(self:describe(), 4, {})
 end
 
 local Builder = {}
