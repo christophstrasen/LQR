@@ -1,6 +1,7 @@
 local rx = require("reactivex")
 local Log = require("LQR/util/log").withTag("group")
 local DataModel = require("LQR/GroupByObservable/data_model")
+local TimeUtil = require("LQR/util/time")
 
 local GroupByCore = {}
 
@@ -98,12 +99,7 @@ end
 -- Explainer: normalizeWindow mirrors joinWindow semantics so GC options behave consistently.
 -- We intentionally keep gcOnInsert defaulting to true and support periodic GC via gcIntervalSeconds/gcScheduleFn.
 local function default_now()
-	if os and type(os.time) == "function" then
-		return os.time
-	end
-	return function()
-		return 0
-	end
+	return TimeUtil.defaultNowFn()
 end
 
 local function normalizeWindow(opts)

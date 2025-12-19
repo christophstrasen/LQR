@@ -30,4 +30,16 @@ function Query.setDefaultJoinWindow(joinWindow)
 	Builder.setDefaultJoinWindow(joinWindow)
 end
 
+---Overrides the default currentFn used for time/interval windows (joinWindow/groupWindow/distinct).
+---@param fn fun():number|nil
+function Query.setDefaultCurrentFn(fn)
+	Builder.setDefaultCurrentFn(fn)
+end
+
+---Returns the effective default currentFn used for time/interval windows.
+---@return fun():number
+function Query.getDefaultCurrentFn()
+	return Builder.getDefaultCurrentFn()
+end
+
 return Query

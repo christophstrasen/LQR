@@ -393,3 +393,17 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 3. **Debug output is part of the performance surface:** The difference between DEBUG and TRACE matters; otherwise logging can dominate CPU and hide the system’s real behavior.
 4. **Some hosts log “failed requires” even when Lua handles them:** Avoid optional requires on hot paths (and especially inside debug helpers) if the runtime emits warnings regardless of `pcall`.
 5. **Benchmarks must measure the right clock:** In tick-driven runtimes, separate “compute time” from “wall time across frames” or you end up benchmarking the scheduler more than the query engine.
+
+## Day 25 – Default window clock override (embedded runtime ergonomics)
+
+### Highlights
+- **Centralized the default time source:** Introduced `LQR/util/time.lua` as the single place that defines the default `currentFn` for time/interval windows (with an `os.time` fallback).
+- **Added a public override API:** `LQR.Query.setDefaultCurrentFn(fnOrNil)` and `LQR.Query.getDefaultCurrentFn()` let hosts inject their own clock without repeating `currentFn` in every query.
+- **Applied the default consistently across operators:** Join windows, distinct windows, group windows, and expiration logic now all consult the shared default clock instead of duplicating `default_now()` logic in multiple modules.
+- **Kept behavior stable by default:** When no override is installed, the default remains `os.time` (so existing code keeps working); hosts can opt into different units/clocks explicitly.
+- **Locked the behavior with unit coverage:** Added a focused unit test that asserts a time-based `groupWindow` uses the injected default clock when `currentFn` is omitted.
+
+### Takeaways
+1. **Time windows are a two-part contract:** The window offset (`time`) only makes sense together with the clock that advances it (`currentFn`) and the event-time field (`field`).
+2. **Ergonomics should not force consumer coupling:** A clean “inject default clock” seam lets embedded hosts (games) choose ms clocks without LQR depending on any host-specific modules.
+3. **Consistency beats clever defaults:** If join/group/distinct each invent their own “default now”, you end up with subtle drift; one shared definition keeps window semantics predictable.

@@ -1,18 +1,14 @@
 -- Expiration utilities that prune cached join rows based on count/interval/predicate rules.
 local Log = require("LQR/util/log").withTag("join")
 local OrderQueue = require("LQR/util/order_queue")
+local TimeUtil = require("LQR/util/time")
 
 local Expiration = {}
 
 local DEFAULT_MAX_CACHE_SIZE = 5
 
 local function default_now()
-	if os and type(os.time) == "function" then
-		return os.time
-	end
-	return function()
-		return 0
-	end
+	return TimeUtil.defaultNowFn()
 end
 
 local function normalizeSingle(options, config)

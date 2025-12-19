@@ -5,14 +5,10 @@ local Result = require("LQR/JoinObservable/result")
 local Schema = require("LQR/JoinObservable/schema")
 local OrderQueue = require("LQR/util/order_queue")
 local Log = require("LQR/util/log").withTag("distinct")
+local TimeUtil = require("LQR/util/time")
 
 local function default_now()
-	if os and type(os.time) == "function" then
-		return os.time
-	end
-	return function()
-		return 0
-	end
+	return TimeUtil.defaultNowFn()
 end
 
 local DEFAULT_WINDOW_COUNT = 1000

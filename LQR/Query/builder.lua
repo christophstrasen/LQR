@@ -19,6 +19,7 @@ local GroupByObservable = require("LQR/GroupByObservable")
 local DistinctObservable = require("LQR/Query/distinct_observable")
 local Schema = require("LQR/JoinObservable/schema")
 local TableUtil = require("LQR/util/table")
+local TimeUtil = require("LQR/util/time")
 
 local function warnUnknownKeys(tbl, allowed, label)
 	if type(tbl) ~= "table" then
@@ -240,12 +241,7 @@ local function ensureId(meta, record, opts)
 end
 
 local function default_now()
-	if os and type(os.time) == "function" then
-		return os.time
-	end
-	return function()
-		return 0
-	end
+	return TimeUtil.defaultNowFn()
 end
 
 local function maybeResetTime(record, opts)
@@ -1663,6 +1659,14 @@ end
 
 function Builder.getDefaultJoinWindow()
 	return defaultJoinWindowOverride
+end
+
+function Builder.setDefaultCurrentFn(fn)
+	TimeUtil.setDefaultNowFn(fn)
+end
+
+function Builder.getDefaultCurrentFn()
+	return TimeUtil.defaultNowFn()
 end
 
 Builder.QueryBuilder = QueryBuilder
