@@ -203,12 +203,43 @@ local function isJoinResult(value)
 	return getmetatable(value) == Result
 end
 
+local function isQueryBuilder(value)
+	return getmetatable(value) == QueryBuilder
+end
+
+local function isObservable(value)
+	return type(value) == "table"
+		and type(value.subscribe) == "function"
+		and type(value.map) == "function"
+		and type(value.filter) == "function"
+end
+
 local function normalizeSourceArg(source, opts)
 	local schemaName
 	if type(opts) == "string" then
 		schemaName = opts
 	elseif type(opts) == "table" then
 		schemaName = opts.schema or opts.name or opts.as
+	end
+	if isQueryBuilder(source) or isObservable(source) then
+		return source, schemaName
+	end
+	-- Explainer: allow wrapper sources to expose getLQR/asRx so Query.from can accept stream objects directly.
+	if type(source) == "table" then
+		local getLQR = source.getLQR
+		if type(getLQR) == "function" then
+			local ok, candidate = pcall(getLQR, source)
+			if ok and isQueryBuilder(candidate) then
+				return candidate, schemaName
+			end
+		end
+		local asRx = source.asRx
+		if type(asRx) == "function" then
+			local ok, candidate = pcall(asRx, source)
+			if ok and isObservable(candidate) then
+				return candidate, schemaName
+			end
+		end
 	end
 	return source, schemaName
 end
@@ -824,11 +855,11 @@ local function collectPrimarySchemas(builder, set)
 end
 
 local function resolveObservable(source, opts)
-	if getmetatable(source) == QueryBuilder then
+	if isQueryBuilder(source) then
 		local built = source:_build()
 		return built.observable, built.expired, source._schemaNames
 	end
-	if source and source.subscribe then
+	if isObservable(source) then
 		local adapted, schemas = adaptInput(source, opts)
 		return adapted, nil, schemas
 	end
@@ -862,8 +893,11 @@ end
 ---@param opts table|string|nil
 ---@return QueryBuilder
 local function newBuilder(source, opts)
-	assert(source and source.subscribe, "Query.from expects an observable")
 	local normalizedSource, schemaName = normalizeSourceArg(source, opts)
+	assert(
+		normalizedSource and (isQueryBuilder(normalizedSource) or isObservable(normalizedSource)),
+		"Query.from expects a reactivex observable, QueryBuilder, or source exposing getLQR/asRx"
+	)
 	local observable, inferredSchemas = adaptInput(normalizedSource, opts)
 	local builder = setmetatable({}, QueryBuilder)
 	builder._rootSource = observable

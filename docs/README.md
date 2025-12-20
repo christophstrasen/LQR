@@ -1,6 +1,7 @@
 # LQR Documentation
 
 This folder is the entry point for LQR’s user‑facing documentation.
+`Query.from(...)` accepts either a reactivex observable, a `QueryBuilder`, or a wrapper that exposes `getLQR()` / `asRx()` and returns one of those.
 
 What follows is a “guide of guides”:
 

@@ -106,6 +106,8 @@ local customers = Schema.observableFromTable("customers", {
 
 This is the helper used in the Quickstart example.
 
+`Query.from(...)` accepts either a reactivex observable, a `QueryBuilder`, or a wrapper that exposes `getLQR()` / `asRx()` and returns one of those.
+
 ---
 
 ## Join outputs: `JoinResult`

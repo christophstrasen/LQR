@@ -7,6 +7,7 @@ require('LQR/bootstrap')
 local rx = require("reactivex")
 local Query = require("LQR/Query")
 local Result = require("LQR/JoinObservable/result")
+local SchemaHelpers = require("tests/support/schema_helpers")
 
 ---@diagnostic disable: undefined-global
 describe("Query rewrap of grouped outputs", function()
@@ -120,7 +121,7 @@ end)
 
 describe("Query rewrap from builder sources", function()
 	it("accepts a grouped builder as source", function()
-		local subject, source = require("tests/support/schema_helpers").subjectWithSchema("schema", { idField = "id" })
+		local subject, source = SchemaHelpers.subjectWithSchema("schema", { idField = "id" })
 		local aggregate = Query.from(source)
 		local grouped = aggregate:groupBy("grouped", function(row)
 			return row.schema.id
@@ -236,5 +237,38 @@ describe("Query rewrap from builder sources", function()
 		local payload = bucket[1]:get("agg_schema")
 		assert.are.equal("cid-1", payload.RxMeta.id)
 		assert.are.equal("customId", payload.RxMeta.idField)
+	end)
+end)
+
+describe("Query from wrapper sources", function()
+	it("accepts getLQR wrappers returning a QueryBuilder", function()
+		local subject, source = SchemaHelpers.subjectWithSchema("schema")
+		local builder = Query.from(source)
+		local wrapper = {
+			getLQR = function(self)
+				return builder
+			end,
+		}
+
+		local bucket = {}
+		Query.from(wrapper):into(bucket):subscribe()
+
+		subject:onNext({ id = 1 })
+		assert.is_true(#bucket >= 1)
+	end)
+
+	it("accepts asRx wrappers returning an observable", function()
+		local subject, source = SchemaHelpers.subjectWithSchema("schema")
+		local wrapper = {
+			asRx = function(self)
+				return source
+			end,
+		}
+
+		local bucket = {}
+		Query.from(wrapper):into(bucket):subscribe()
+
+		subject:onNext({ id = 1 })
+		assert.is_true(#bucket >= 1)
 	end)
 end)
