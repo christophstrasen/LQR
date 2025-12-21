@@ -179,7 +179,7 @@ local function deriveSourceTime(record)
 		end
 		return value
 	end
-	return record.observedAtTimeMS or record.sourceTime
+	return record.sourceTime
 end
 
 	local function processRecord(record)

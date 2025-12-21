@@ -64,7 +64,7 @@ local rawCustomers = rx.Observable.fromTable({
 local customers =
   Schema.wrap("customers", rawCustomers, {
     idField = "id",
-    sourceTimeField = "observedAtTimeMS", -- optional; defaults to record.sourceTime
+    sourceTimeField = "sourceTime", -- optional; defaults to record.sourceTime
   })
 ```
 
@@ -73,7 +73,7 @@ After wrapping:
 - every emission from `customers` is a record with a `RxMeta` table;
 - `RxMeta.schema` is `"customers"`;
 - `RxMeta.id` is taken from `record.id` (because we passed `idField = "id"`).
-- `RxMeta.sourceTime` is taken from `record.observedAtTimeMS` (because we passed `sourceTimeField`).
+- `RxMeta.sourceTime` is taken from `record.sourceTime` (because we passed `sourceTimeField`).
 
 If you do not have a natural `id` field, you can supply an `idSelector` function instead of `idField` and generate a **synthetic, but stable** identifier, e.g. a UUID or an auto‑incrementing counter you maintain for that stream.
 
