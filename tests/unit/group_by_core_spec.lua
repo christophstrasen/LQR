@@ -156,4 +156,44 @@ describe("GroupByObservable core", function()
 		assert.are.equal(2, lastEnriched["_groupBy:k1"].schema._count.id)
 		assert.are.equal(30, lastEnriched["_groupBy:k1"].schema._avg.value)
 	end)
+
+	it("computes explicit count aggregates even when row_count is disabled", function()
+		local source = rx.Subject.create()
+		local aggregateStream, enrichedStream = Core.createGroupByObservable(source, {
+			keySelector = function(row)
+				return row.key
+			end,
+			window = { count = 10 },
+			aggregates = {
+				row_count = false,
+				count = {
+					{
+						path = "schema.id",
+						distinctFn = function(row)
+							return row.schema and tostring(row.schema.id)
+						end,
+					},
+				},
+			},
+		})
+
+		local lastAgg
+		local lastEnriched
+		aggregateStream:subscribe(function(row)
+			lastAgg = row
+		end)
+		enrichedStream:subscribe(function(row)
+			lastEnriched = row
+		end)
+
+		source:onNext({ key = "k1", schema = { id = 1 } })
+		source:onNext({ key = "k1", schema = { id = 2 } })
+
+		-- `row_count=false` disables `_count_all` (group row count), but explicit count aggregates still compute.
+		assert.are.equal(0, lastAgg._count_all)
+		assert.are.equal(2, lastAgg.schema._count.id)
+
+		assert.are.equal(0, lastEnriched._count_all)
+		assert.are.equal(2, lastEnriched.schema._count.id)
+	end)
 end)

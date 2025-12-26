@@ -336,20 +336,20 @@ local function computeAggregates(entries, aggregateConfig)
 		return hadExplicit
 	end
 
-	if aggregates.rowCount then
-		local hadExplicit = accumulateCount(aggregateConfig.count)
-		if not hadExplicit then
-			-- Default: count rows per schema (id presence) if no explicit count paths supplied.
-			for _, entry in ipairs(entries) do
-				local row = entry.value
-				if type(row) == "table" then
-					for schemaName, record in pairs(row) do
-						if schemaName ~= "_raw_result" and schemaName ~= "RxMeta" and type(record) == "table" then
-							local key = schemaName .. ".id"
-							local current = aggregates.count[key] or 0
-							if record.id ~= nil or (record.RxMeta and record.RxMeta.id ~= nil) then
-								aggregates.count[key] = current + 1
-							end
+	-- Explicit count aggregates should be computed whenever requested, even if `row_count` is disabled.
+	-- `row_count` only controls whether we also emit default per-schema row counts (and `_count_all`).
+	local hadExplicit = accumulateCount(aggregateConfig.count)
+	if aggregates.rowCount and not hadExplicit then
+		-- Default: count rows per schema (id presence) if no explicit count paths supplied.
+		for _, entry in ipairs(entries) do
+			local row = entry.value
+			if type(row) == "table" then
+				for schemaName, record in pairs(row) do
+					if schemaName ~= "_raw_result" and schemaName ~= "RxMeta" and type(record) == "table" then
+						local key = schemaName .. ".id"
+						local current = aggregates.count[key] or 0
+						if record.id ~= nil or (record.RxMeta and record.RxMeta.id ~= nil) then
+							aggregates.count[key] = current + 1
 						end
 					end
 				end
