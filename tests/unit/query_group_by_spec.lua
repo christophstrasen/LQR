@@ -82,4 +82,31 @@ describe("Query grouping (high level)", function()
 		assert.are.equal(2, last["_groupBy:customers"]._count_all)
 		assert.are.equal(2, last.customers._count and last.customers._count.id)
 	end)
+
+	it("runs withFinalTap after grouping/having filters", function()
+		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+
+		local tappedCounts = {}
+		local grouped = Query.from(customers, "customers")
+			:groupBy("customers_grouped", function(row)
+				return row.customers.id
+			end)
+			:groupWindow({ count = 2 })
+			:aggregates({ row_count = true })
+			:having(function(g)
+				return (g._count_all or 0) >= 2
+			end)
+			:withFinalTap(function(row)
+				tappedCounts[#tappedCounts + 1] = row._count_all
+			end)
+
+		local aggregates = collect(grouped)
+
+		customersSubject:onNext({ id = 1, value = 10 })
+		customersSubject:onNext({ id = 1, value = 20 })
+		customersSubject:onNext({ id = 1, value = 30 })
+
+		assert.are.equal(2, #aggregates)
+		assert.are.same({ 2, 2 }, tappedCounts)
+	end)
 end)

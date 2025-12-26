@@ -83,3 +83,26 @@ A few guidelines for `where` predicates:
   Predicates run once per row in the stream; avoid blocking I/O or heavy work inside them.
 
 With this mental model, `where` stays close to its SQL cousin while remaining a predictable, streaming‑friendly filter over joined rows.
+
+---
+
+## Instrumentation: `withFinalTap`
+
+`withFinalTap(fn)` attaches a small “final emission hook” to a `Query` builder: `fn` is called for every value that would reach a normal subscriber. It runs at the **end** of the query pipeline (after joins, `where`, selection, and also after `groupBy`/`having` when those are present).
+
+Use it for debugging/metrics (“what does my query *actually* emit?”) without having to drop out of the fluent `Query` builder into raw Rx plumbing. Unlike calling `:tap(...)` on an Observable, `withFinalTap` has a stable, query‑level placement and won’t accidentally observe intermediate streams before `where`/grouping.
+
+Example:
+
+```lua
+local query = Query.from(customers, "customers")
+  :leftJoin(orders, "orders")
+  :using({ customers = "id", orders = "customerId" })
+  :where(function(row)
+    return row.customers.segment == "VIP"
+  end)
+  :withFinalTap(function(result)
+    -- `result` is the final emission value (for join/selection queries this is a JoinResult).
+    print("final customer id", result:get("customers").id)
+  end)
+```

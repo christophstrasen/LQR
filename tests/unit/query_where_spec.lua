@@ -109,6 +109,28 @@ describe("Query WHERE clause", function()
 		assert.is_true(plan.where)
 	end)
 
+	it("runs withFinalTap only for rows that pass where", function()
+		local subject, source = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+
+		local tappedIds = {}
+		local query = Query.from(source, "customers")
+			:where(function(r)
+				return (r.customers.id or 0) > 1
+			end)
+			:withFinalTap(function(result)
+				tappedIds[#tappedIds + 1] = result:get("customers").id
+			end)
+
+		local results = collect(query)
+
+		subject:onNext({ id = 1 })
+		subject:onNext({ id = 2 })
+		subject:onNext({ id = 3 })
+
+		assert.are.equal(2, #results)
+		assert.are.same({ 2, 3 }, tappedIds)
+	end)
+
 	it("errors on multiple where calls", function()
 		local source = SchemaHelpers.observableFromTable("customers", { { id = 1 } })
 		assert.has_error(function()
