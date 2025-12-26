@@ -83,7 +83,7 @@ describe("Query grouping (high level)", function()
 		assert.are.equal(2, last.customers._count and last.customers._count.id)
 	end)
 
-	it("runs withFinalTap after grouping/having filters", function()
+	it("runs finalTap after grouping/having filters", function()
 		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
 
 		local tappedCounts = {}
@@ -96,9 +96,9 @@ describe("Query grouping (high level)", function()
 			:having(function(g)
 				return (g._count_all or 0) >= 2
 			end)
-			:withFinalTap(function(row)
-				tappedCounts[#tappedCounts + 1] = row._count_all
-			end)
+				:finalTap(function(row)
+					tappedCounts[#tappedCounts + 1] = row._count_all
+				end)
 
 		local aggregates = collect(grouped)
 
@@ -108,5 +108,30 @@ describe("Query grouping (high level)", function()
 
 		assert.are.equal(2, #aggregates)
 		assert.are.same({ 2, 2 }, tappedCounts)
+	end)
+
+	it("applies finalWhere after grouping", function()
+		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+
+		local grouped = Query.from(customers, "customers")
+			:groupBy("customers_grouped", function(row)
+				return row.customers.id
+			end)
+			:groupWindow({ count = 2 })
+			:aggregates({ row_count = true })
+			:finalWhere(function(row)
+				return (row._count_all or 0) >= 2
+			end)
+
+		local aggregates = collect(grouped)
+
+		customersSubject:onNext({ id = 1, value = 10 })
+		customersSubject:onNext({ id = 1, value = 20 })
+		customersSubject:onNext({ id = 1, value = 30 })
+
+		-- group emits counts 1,2,2; finalWhere drops the count=1 emission.
+		assert.are.equal(2, #aggregates)
+		assert.are.equal(2, aggregates[1]._count_all)
+		assert.are.equal(2, aggregates[2]._count_all)
 	end)
 end)

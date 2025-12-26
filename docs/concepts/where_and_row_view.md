@@ -86,11 +86,36 @@ With this mental model, `where` stays close to its SQL cousin while remaining a 
 
 ---
 
-## Instrumentation: `withFinalTap`
+## Filtering at the end: `finalWhere`
 
-`withFinalTap(fn)` attaches a small “final emission hook” to a `Query` builder: `fn` is called for every value that would reach a normal subscriber. It runs at the **end** of the query pipeline (after joins, `where`, selection, and also after `groupBy`/`having` when those are present).
+`finalWhere(fn)` filters the **final** values that a normal subscriber would see.
 
-Use it for debugging/metrics (“what does my query *actually* emit?”) without having to drop out of the fluent `Query` builder into raw Rx plumbing. Unlike calling `:tap(...)` on an Observable, `withFinalTap` has a stable, query‑level placement and won’t accidentally observe intermediate streams before `where`/grouping.
+Compared to `where`:
+
+- `where` runs **before** `selectSchemas` and before grouping. It evaluates the **row view** and is intentionally limited to a single call.
+- `finalWhere` runs **at the end** of the query pipeline (after joins, `where`, selection, and after `groupBy`/`having` when present). It evaluates the **final emission value** and can be called multiple times.
+
+Use `finalWhere` when you want a clean “consumer‑side filter” that stays stable even as you add joins, selection aliases, grouping, or `having`.
+
+Example:
+
+```lua
+local query = Query.from(customers, "customers")
+  :selectSchemas({ customers = "customer" })
+  :finalWhere(function(result)
+    return result.customer.segment == "VIP"
+  end)
+```
+
+---
+
+## Instrumentation: `finalTap`
+
+`finalTap(fn)` attaches a small “final emission hook” to a `Query` builder: `fn` is called for every value that would reach a normal subscriber. It runs at the **end** of the query pipeline (after joins, `where`, selection, `finalWhere`, and also after `groupBy`/`having` when those are present).
+
+You can attach multiple final taps by calling `finalTap(...)` multiple times; they run in call order.
+
+Use it for debugging/metrics (“what does my query *actually* emit?”) without having to drop out of the fluent `Query` builder into raw Rx plumbing. Unlike calling `:tap(...)` on an Observable, `finalTap` has a stable, query‑level placement and won’t accidentally observe intermediate streams before `where`/grouping.
 
 Example:
 
@@ -101,7 +126,7 @@ local query = Query.from(customers, "customers")
   :where(function(row)
     return row.customers.segment == "VIP"
   end)
-  :withFinalTap(function(result)
+  :finalTap(function(result)
     -- `result` is the final emission value (for join/selection queries this is a JoinResult).
     print("final customer id", result:get("customers").id)
   end)

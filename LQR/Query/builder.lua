@@ -7,11 +7,12 @@
 ---@field private _schemaNames table|nil
 ---@field private _built table|nil
 ---@field private _defaultJoinWindow table|nil
----@field private _scheduler any
----@field private _vizHook fun(context:table):table|nil
----@field private _wherePredicate fun(row:table):boolean|nil
----@field private _finalTap fun(value:any)|nil
-local rx = require("reactivex")
+	---@field private _scheduler any
+	---@field private _vizHook fun(context:table):table|nil
+	---@field private _wherePredicate fun(row:table):boolean|nil
+	---@field private _finalWherePredicates table|nil
+	---@field private _finalTap fun(value:any)|nil
+	local rx = require("reactivex")
 local JoinObservable = require("LQR/JoinObservable")
 local Result = require("LQR/JoinObservable/result")
 local Log = require("LQR/util/log").withTag("query")
@@ -751,8 +752,8 @@ local function summarizeRowIds(row, schemaNames)
 	return table.concat(summary, ",")
 end
 
-function QueryBuilder:_clone()
-	local copy = setmetatable({}, QueryBuilder)
+	function QueryBuilder:_clone()
+		local copy = setmetatable({}, QueryBuilder)
 	copy._rootSource = self._rootSource
 	copy._rootSchemas = self._rootSchemas and TableUtil.shallowArray(self._rootSchemas) or nil
 	copy._steps = {}
@@ -773,11 +774,12 @@ function QueryBuilder:_clone()
 	copy._wherePredicate = self._wherePredicate
 	copy._havingPredicate = self._havingPredicate
 	copy._group = self._group
-	copy._groupWindow = self._groupWindow
-	copy._aggregates = self._aggregates
-	copy._finalTap = self._finalTap
-	return copy
-end
+		copy._groupWindow = self._groupWindow
+		copy._aggregates = self._aggregates
+		copy._finalWherePredicates = self._finalWherePredicates and TableUtil.shallowArray(self._finalWherePredicates) or nil
+		copy._finalTap = self._finalTap
+		return copy
+	end
 
 -- Explainer: ensureStep prevents configuring keys/joinWindow before any join is staged.
 local function ensureStep(builder)
@@ -1090,18 +1092,30 @@ function QueryBuilder:withDefaultJoinWindow(joinWindow)
 	return nextBuilder
 end
 
----Attaches a tap that fires on every final emission (after where/select).
----@param finalTap fun(value:any)|nil
----@return QueryBuilder
-function QueryBuilder:withFinalTap(finalTap)
-	if finalTap ~= nil then
-		assert(type(finalTap) == "function", "withFinalTap expects a function or nil")
-	end
-	warnIfBuilt(self, "withFinalTap")
-	local nextBuilder = self:_clone()
-	nextBuilder._finalTap = finalTap
-	return nextBuilder
-end
+		---Attaches a tap that fires on every final emission (after finalWhere).
+	---@param finalTap fun(value:any)|nil
+	---@return QueryBuilder
+		function QueryBuilder:finalTap(finalTap)
+			if finalTap ~= nil then
+				assert(type(finalTap) == "function", "finalTap expects a function or nil")
+			end
+			warnIfBuilt(self, "finalTap")
+			local nextBuilder = self:_clone()
+			if finalTap == nil then
+				nextBuilder._finalTap = nil
+			else
+				local previous = nextBuilder._finalTap
+				if previous ~= nil then
+					nextBuilder._finalTap = function(value)
+						previous(value)
+						finalTap(value)
+					end
+				else
+					nextBuilder._finalTap = finalTap
+				end
+			end
+			return nextBuilder
+		end
 
 ---Configures explicit schema->field mappings for join keys.
 ---@param map table
@@ -1208,16 +1222,28 @@ end
 ---Applies a post-join WHERE-style predicate using the row-view helper.
 ---@param predicate fun(row:table):boolean
 ---@return QueryBuilder
-function QueryBuilder:where(predicate)
-	assert(type(predicate) == "function", "where expects a function predicate")
-	warnIfBuilt(self, "where")
-	if self._wherePredicate ~= nil then
-		error("Multiple where calls are not supported")
+	function QueryBuilder:where(predicate)
+		assert(type(predicate) == "function", "where expects a function predicate")
+		warnIfBuilt(self, "where")
+		if self._wherePredicate ~= nil then
+			error("Multiple where calls are not supported")
+		end
+		local nextBuilder = self:_clone()
+		nextBuilder._wherePredicate = predicate
+		return nextBuilder
 	end
-	local nextBuilder = self:_clone()
-	nextBuilder._wherePredicate = predicate
-	return nextBuilder
-end
+
+	---Applies a predicate to the final emission values (after joins/where/select/group/having).
+	---@param predicate fun(value:any):boolean
+	---@return QueryBuilder
+	function QueryBuilder:finalWhere(predicate)
+		assert(type(predicate) == "function", "finalWhere expects a function predicate")
+		warnIfBuilt(self, "finalWhere")
+		local nextBuilder = self:_clone()
+		nextBuilder._finalWherePredicates = nextBuilder._finalWherePredicates or {}
+		nextBuilder._finalWherePredicates[#nextBuilder._finalWherePredicates + 1] = predicate
+		return nextBuilder
+	end
 
 ---Returns the set of primary schemas (non-join sources) seen anywhere in the builder tree.
 ---@return table
@@ -1419,15 +1445,28 @@ function QueryBuilder:_build()
 		else
 			current = aggregateStream
 		end
-	end
+		end
 
-	local mergedExpired = mergeObservables(expiredStreams)
+		local mergedExpired = mergeObservables(expiredStreams)
 
-	if self._finalTap then
-		local tap = self._finalTap
-		current = current:map(function(value)
-			tap(value)
-			return value
+		if self._finalWherePredicates and #self._finalWherePredicates >= 1 then
+			for _, predicate in ipairs(self._finalWherePredicates) do
+				current = current:filter(function(value)
+					local ok, keep = pcall(predicate, value)
+					if not ok then
+						Log:warn("Query.finalWhere predicate errored - %s", tostring(keep))
+						return false
+					end
+					return keep and true or false
+				end)
+			end
+		end
+
+		if self._finalTap then
+			local tap = self._finalTap
+			current = current:map(function(value)
+				tap(value)
+				return value
 		end)
 	end
 

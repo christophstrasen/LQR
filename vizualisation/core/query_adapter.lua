@@ -527,22 +527,22 @@ function QueryVizAdapter.attach(queryBuilder, opts)
 		end
 	end
 
-	-- sink carries join-stage viz events; finalTapStream carries post-WHERE events.
-	local sink = rx.Subject.create()
-	local finalTapStream = rx.Subject.create()
-	local instrumented = queryBuilder
-		:withVisualizationHook(function(context)
-			return {
+		-- sink carries join-stage viz events; finalTapStream carries post-WHERE events.
+		local sink = rx.Subject.create()
+		local finalTapStream = rx.Subject.create()
+		local instrumented = queryBuilder
+			:withVisualizationHook(function(context)
+				return {
 				emit = function(event)
 					sink:onNext(event)
 				end,
 				stepIndex = context.stepIndex,
-				depth = depthForStep(context.stepIndex),
-			}
-		end)
-		:withFinalTap(function(value)
-			finalTapStream:onNext(value)
-		end)
+					depth = depthForStep(context.stepIndex),
+				}
+			end)
+			:finalTap(function(value)
+				finalTapStream:onNext(value)
+			end)
 
 	local finalDepth = 1
 	local normalizedFinal = finalTapStream:map(function(result)

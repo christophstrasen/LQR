@@ -229,7 +229,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **High-level WHERE implemented on the builder:** Added `QueryBuilder:where(predicate)` as a single, post-join filter. It runs after all joins and before `selectSchemas`, using a schema-aware row view (`row.<schema>`, always a table, plus `_raw_result` escape hatch). Selection-only queries are supported by wrapping single-schema records into `JoinResult`s, so WHERE sees a consistent shape.
 - **Row-view logging and safety:** WHERE predicates receive row tables where missing schemas are represented as empty tables, making `row.orders.id` safe even for left joins. We log WHERE decisions at INFO (`[where] keep=true/false ids=customers:1,orders:102`) using a compact schema/id summary rather than full payloads to keep logs readable.
 - **Default join window knobs:** Introduced `Query.setDefaultJoinWindow` (global) and `QueryBuilder:withDefaultJoinWindow` (per-query) so multi-join pipelines can share a consistent retention policy without repeating `:joinWindow` on each step. Step-level `:joinWindow` still overrides, and `describe()` now surfaces both the effective per-join windows and the GC configuration derived from the default.
-- **Final layer in viz: post-WHERE stream:** The visualization adapter now taps the final, post-WHERE stream via a `withFinalTap` hook and emits synthetic `kind="final"` events. The renderer treats these as a dedicated outer border layer (layer 1) with `palette.final` (default green), so the outer ring always represents “what a final subscriber would see,” even for single-schema queries.
+- **Final layer in viz: post-WHERE stream:** The visualization adapter now taps the final, post-WHERE stream via a `finalTap` hook and emits synthetic `kind="final"` events. The renderer treats these as a dedicated outer border layer (layer 1) with `palette.final` (default green), so the outer ring always represents “what a final subscriber would see,” even for single-schema queries.
 - **Preserved join layers plus final:** We reverted to keeping the original join-stage match/unmatched events in the viz pipeline and layered final on top instead of replacing them. Join layers remain colored by blended schema palettes, and their per-layer counts/legends still reflect pre-WHERE joins, while the final layer shows post-WHERE survivors.
 - **Layer semantics and legends updated:** Layer 1 is now final, join layers are shifted by +1, and `maxLayers`/draw metrics were updated to account for final + joins. The legend shows join layers from inner to outer, followed by a `Final (Layer 1)` line and then `Expired`, so the layering model is explicit in the Love2D header.
 - **Three-circles demo:** Added a `three_circles` demo (customers → orders → shipments) that exercises two join layers plus the final outer layer. Both headless and Love runners are wired in, sharing the same adapter/runtime/renderer stack.
@@ -238,7 +238,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 1. **WHERE is “just” a filter, but needs good ergonomics:** A plain Lua predicate over a row view gives us SQL-like WHERE power (cross-schema conditions, left-join nil handling) without building a query DSL. The key is to guarantee post-join placement and a stable, schema-aware row shape.
 2. **Viz must separate “join mechanics” from “final result”:** Pre-WHERE join layers answer “what is the join doing?”; the final layer answers “what does my subscriber see?”. Keeping both, and making the final ring explicit, gives better intuition than trying to overload a single concept of “joined.”
 3. **Layer indexing and TTLs need a story:** By reserving layer 1 for final and shifting joins inward, `visualsTTLLayerFactors[1]` clearly applies to the final ring and join layers can be tuned separately. The TTL map now has room for a dedicated `final` factor distinct from `match`.
-4. **Instrumentation hooks should mirror the logical pipeline:** Having both `withVisualizationHook` (join-stage) and `withFinalTap` (post-WHERE) kept the adapter simple and made it obvious where each class of events originates. That pattern will generalize to future stages like GROUP/HAVING/LIMIT without re-plumbing the entire viz stack.
+4. **Instrumentation hooks should mirror the logical pipeline:** Having both `withVisualizationHook` (join-stage) and `finalTap` (post-WHERE) kept the adapter simple and made it obvious where each class of events originates. That pattern will generalize to future stages like GROUP/HAVING/LIMIT without re-plumbing the entire viz stack.
 
 ## Day 16 – GROUP BY / HAVING and grouped demos
 
@@ -407,3 +407,16 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 1. **Time windows are a two-part contract:** The window offset (`time`) only makes sense together with the clock that advances it (`currentFn`) and the event-time field (`field`).
 2. **Ergonomics should not force consumer coupling:** A clean “inject default clock” seam lets embedded hosts (games) choose ms clocks without LQR depending on any host-specific modules.
 3. **Consistency beats clever defaults:** If join/group/distinct each invent their own “default now”, you end up with subtle drift; one shared definition keeps window semantics predictable.
+
+## Day 26 – Final-stage operators: `finalWhere` + `finalTap`
+
+### Highlights
+- **Renamed `withFinalTap` → `finalTap` (no compatibility):** Simplified the fluent surface by dropping the `with*` prefix for this stage-level operator.
+- **Added `finalWhere` as a true end-of-pipeline filter:** `finalWhere(fn)` runs after joins, `where`, `selectSchemas`, grouping/aggregation, and `having`. Unlike `where`, it supports multiple calls and filters the same values that a normal subscriber sees.
+- **Made `finalTap` composable:** Multiple `finalTap(...)` calls are supported and execute in call order, so instrumentation can be layered without centralizing it into one callback.
+- **Docs + tests cover the new stage semantics:** Updated the row-view concept doc to introduce `finalWhere` and documented that `finalTap` runs after it; added unit tests for chaining `finalWhere` and stacking multiple `finalTap`s.
+
+### Takeaways
+1. **Separate “row-view filtering” from “consumer-side filtering”:** Keeping `where` as the single row-view clause preserves its “SQL WHERE on the join row” semantics, while `finalWhere` provides a stable, stage-accurate filter for end users.
+2. **Stage-anchored hooks beat ad-hoc `tap(...)`:** A dedicated final stage hook stays correct even as pipelines evolve (joins, selection aliases, grouping), avoiding surprises from tapping intermediate streams.
+3. **Composable instrumentation is important for integration:** Allowing multiple `finalTap`s makes it easier for libraries and apps to attach their own metrics/logging without fighting over a single hook slot.

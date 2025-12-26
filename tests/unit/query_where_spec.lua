@@ -16,7 +16,7 @@ local function collect(observable)
 end
 
 ---@diagnostic disable: undefined-global
-describe("Query WHERE clause", function()
+	describe("Query WHERE clause", function()
 	it("filters joined rows using the row view", function()
 		local customersSubject, customers = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
 		local ordersSubject, orders = SchemaHelpers.subjectWithSchema("orders", { idField = "id" })
@@ -109,17 +109,17 @@ describe("Query WHERE clause", function()
 		assert.is_true(plan.where)
 	end)
 
-	it("runs withFinalTap only for rows that pass where", function()
-		local subject, source = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+		it("runs finalTap only for rows that pass where", function()
+			local subject, source = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
 
 		local tappedIds = {}
 		local query = Query.from(source, "customers")
 			:where(function(r)
 				return (r.customers.id or 0) > 1
 			end)
-			:withFinalTap(function(result)
-				tappedIds[#tappedIds + 1] = result:get("customers").id
-			end)
+				:finalTap(function(result)
+					tappedIds[#tappedIds + 1] = result:get("customers").id
+				end)
 
 		local results = collect(query)
 
@@ -127,14 +127,62 @@ describe("Query WHERE clause", function()
 		subject:onNext({ id = 2 })
 		subject:onNext({ id = 3 })
 
-		assert.are.equal(2, #results)
-		assert.are.same({ 2, 3 }, tappedIds)
-	end)
+			assert.are.equal(2, #results)
+			assert.are.same({ 2, 3 }, tappedIds)
+		end)
 
-	it("errors on multiple where calls", function()
-		local source = SchemaHelpers.observableFromTable("customers", { { id = 1 } })
-		assert.has_error(function()
-			Query.from(source, "customers")
+		it("allows multiple finalTap hooks", function()
+			local subject, source = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+
+			local tapped = {}
+			local query = Query.from(source, "customers")
+				:finalTap(function()
+					tapped[#tapped + 1] = "a"
+				end)
+				:finalTap(function()
+					tapped[#tapped + 1] = "b"
+				end)
+
+			local results = collect(query)
+
+			subject:onNext({ id = 1 })
+			subject:onNext({ id = 2 })
+
+			assert.are.equal(2, #results)
+			assert.are.same({ "a", "b", "a", "b" }, tapped)
+		end)
+
+		it("finalWhere filters final emissions and supports chaining", function()
+			local subject, source = SchemaHelpers.subjectWithSchema("customers", { idField = "id" })
+
+			local tappedIds = {}
+			local query = Query.from(source, "customers")
+				:selectSchemas({ customers = "customer" })
+				:finalWhere(function(result)
+					return (result:get("customer").id or 0) > 1
+				end)
+				:finalWhere(function(result)
+					return result:get("customer").id ~= 3
+				end)
+				:finalTap(function(result)
+					tappedIds[#tappedIds + 1] = result:get("customer").id
+				end)
+
+			local results = collect(query)
+
+			subject:onNext({ id = 1 })
+			subject:onNext({ id = 2 })
+			subject:onNext({ id = 3 })
+
+			assert.are.equal(1, #results)
+			assert.are.equal(2, results[1]:get("customer").id)
+			assert.are.same({ 2 }, tappedIds)
+		end)
+
+		it("errors on multiple where calls", function()
+			local source = SchemaHelpers.observableFromTable("customers", { { id = 1 } })
+			assert.has_error(function()
+				Query.from(source, "customers")
 				:where(function()
 					return true
 				end)
