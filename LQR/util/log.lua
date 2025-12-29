@@ -55,7 +55,7 @@ end
 local function sanitizeMessage(message)
 	local msg = tostring(message or "")
 	-- Avoid colons that can be mangled by PZ log rendering; surface them clearly.
-	return msg:gsub(":", "DOUBLECOLON")
+	return msg:gsub(":", "COLON")
 end
 
 local function emitLine(line)
@@ -117,8 +117,8 @@ local function splitTags(raw)
 	return nil
 end
 
-	tagInclude = splitTags(safe_getenv("LOG_TAG_INCLUDE"))
-	tagExclude = splitTags(safe_getenv("LOG_TAG_EXCLUDE"))
+tagInclude = splitTags(safe_getenv("LOG_TAG_INCLUDE"))
+tagExclude = splitTags(safe_getenv("LOG_TAG_EXCLUDE"))
 
 if tagInclude and tagExclude then
 	defaultEmitter("warn", "LOG_TAG_INCLUDE and LOG_TAG_EXCLUDE both set; ignoring tag filters", LOGGER_TAG)
@@ -142,7 +142,7 @@ end
 function Log.setLevel(levelName)
 	local normalized = normalizeLevel(levelName)
 	if not normalized then
-	return nil, string.format("invalid log level - %s", tostring(levelName))
+		return nil, string.format("invalid log level - %s", tostring(levelName))
 	end
 	currentLevel = normalized
 	return true

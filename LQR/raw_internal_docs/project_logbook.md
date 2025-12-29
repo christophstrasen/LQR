@@ -364,7 +364,7 @@ A Lua library for expressing complex, SQL-like joins and queries over ReactiveX 
 - **Exact ingestSeq span without scans:** Removed the old “scan all pending keys to find oldest/newest” behavior by tracking both oldest and newest `ingestSeq` via heaps (min-heap + max-heap implemented as min-heap over `-seq`), keeping span exact while staying sublinear.
 - **Advice path kept O(1):** `buffer:advice_get()` now reads from the internal metrics state instead of calling a full metrics snapshot, so “budget hints” remain cheap even when called every tick.
 - **Better clock plumbing for ingest metrics:** Extended the ingest scheduler to pass an optional `nowMillis` function through to buffers so load/throughput metrics can work in restricted runtimes where `os.clock` may be missing.
-- **Headless signal-noise improvements:** Suppressed “expected” warnings (badKey drops, advice_applyMaxMillis with insufficient timing) in headless/non-engine contexts without relying on consumer-specific flags, and removed stray `:` in warning text to avoid log sanitizers producing confusing `DOUBLECOLON` artifacts.
+- **Headless signal-noise improvements:** Suppressed “expected” warnings (badKey drops, advice_applyMaxMillis with insufficient timing) in headless/non-engine contexts without relying on consumer-specific flags, and removed stray `:` in warning text to avoid log sanitizers producing confusing `COLON` artifacts.
 - **Tests updated to match the new surface:** Added targeted unit coverage to ensure light metrics omit expensive fields while full metrics report exact `oldestSeq/newestSeq/ingestSeqSpan`.
 
 ### Takeaways
