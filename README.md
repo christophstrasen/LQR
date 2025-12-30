@@ -2,7 +2,7 @@
 
 *A Lua library for expressing SQL‑like joins and queries over ReactiveX observable streams.*
 
-[![CI](https://github.com/christophstrasen/Lua-ReactiveX-exploration/actions/workflows/ci.yml/badge.svg)](https://github.com/christophstrasen/Lua-ReactiveX-exploration/actions/workflows/ci.yml)
+[![CI](https://github.com/christophstrasen/LQR/actions/workflows/ci.yml/badge.svg)](https://github.com/christophstrasen/LQR/actions/workflows/ci.yml)
 
 LQR (pronunced like "LiQoR", /ˈlɪk.ər/) sits on top of [lua‑reactivex](https://github.com/christophstrasen/lua-reactivex) and adds a schema‑aware query layer:
 
