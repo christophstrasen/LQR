@@ -248,9 +248,7 @@ end
 
 		if meta.sourceTime == nil then
 			local sourceTimeValue, sourceSelectorErrored = deriveSourceTime(record)
-			if sourceSelectorErrored then
-				-- deriveSourceTime already logged
-			elseif sourceTimeValue ~= nil then
+			if not sourceSelectorErrored and sourceTimeValue ~= nil then
 				if type(sourceTimeValue) == "number" then
 					meta.sourceTime = sourceTimeValue
 				else

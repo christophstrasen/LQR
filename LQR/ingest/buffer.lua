@@ -106,10 +106,8 @@ local function popFifo(lane)
 end
 
 local function anyPending(lane)
-	for k, v in pairs(lane.pending) do
-		return k, v
-	end
-	return nil, nil
+	local key, value = next(lane.pending)
+	return key, value
 end
 
 local function findOldestKeyBySeq(lane)
@@ -673,18 +671,18 @@ function Buffer:drain(opts)
 		local laneName = entry.name
 		local key, item
 		if self.mode == "queue" then
-			local lane = self.lanes[laneName]
-			local head = lane.queueHead
-			while head <= lane.queueTail do
-				local entry = lane.queue[head]
-				lane.queue[head] = nil
-				head = head + 1
-				if entry then
-					key = entry.key
-					item = entry.item
-					break
+				local lane = self.lanes[laneName]
+				local head = lane.queueHead
+				while head <= lane.queueTail do
+					local queueEntry = lane.queue[head]
+					lane.queue[head] = nil
+					head = head + 1
+					if queueEntry then
+						key = queueEntry.key
+						item = queueEntry.item
+						break
+					end
 				end
-			end
 			lane.queueHead = head
 			if key ~= nil then
 				lane.pendingCount = math.max(0, lane.pendingCount - 1)

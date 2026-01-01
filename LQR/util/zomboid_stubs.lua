@@ -1,3 +1,4 @@
+-- luacheck: ignore 142 143
 ---Explainer: Minimal shims for Project Zomboid-specific Lua helpers so experiments can run outside the game.
 local ZomboidStubs = {}
 

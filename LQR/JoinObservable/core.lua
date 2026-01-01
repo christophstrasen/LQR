@@ -268,13 +268,13 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 		return Result.new():attach(record.schemaName, record.entry)
 	end
 
-	local function emitUnmatched(observer, strategy, side, record)
+	local function emitUnmatched(observer, joinStrategy, side, record)
 		if not record or record.matched then
 			return
 		end
 
-		local shouldEmit = (side == "left" and strategy.emitUnmatchedLeft)
-			or (side == "right" and strategy.emitUnmatchedRight)
+		local shouldEmit = (side == "left" and joinStrategy.emitUnmatchedLeft)
+			or (side == "right" and joinStrategy.emitUnmatchedRight)
 
 		if not shouldEmit then
 			return
@@ -582,7 +582,6 @@ function JoinObservableCore.createJoinObservable(leftStream, rightStream, option
 			return record
 		end
 
-		local gcSubscription
 		local function cancelGc()
 			if not gcSubscription then
 				return

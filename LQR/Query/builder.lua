@@ -22,6 +22,11 @@ local Schema = require("LQR/JoinObservable/schema")
 local TableUtil = require("LQR/util/table")
 local TimeUtil = require("LQR/util/time")
 
+local DEFAULT_WINDOW_COUNT = 1000
+local DEFAULT_PER_KEY_BUFFER_SIZE = 10
+local schedulerOverride = nil
+local defaultJoinWindowOverride = nil
+
 local function warnUnknownKeys(tbl, allowed, label)
 	if type(tbl) ~= "table" then
 		return false
@@ -109,19 +114,15 @@ local VALID_GROUP_WINDOW_KEYS = {
 	gcScheduleFn = true,
 }
 
-local DEFAULT_WINDOW_COUNT = 1000
-local DEFAULT_PER_KEY_BUFFER_SIZE = 10
-local schedulerOverride = nil
-local defaultJoinWindowOverride = nil
-
 local QueryBuilder = {}
 QueryBuilder.__index = QueryBuilder
 
 local function hasAnyKey(tbl)
+	local hasKey = false
 	for _ in pairs(tbl or {}) do
-		return true
+		hasKey = true
 	end
-	return false
+	return hasKey
 end
 
 -- Explainer: union builds a sorted de-duped list so describe/select stay stable.
@@ -1271,8 +1272,8 @@ function QueryBuilder:_build()
 	-- the left side so far.
 	local currentSchemas = self._rootSchemas and TableUtil.shallowArray(self._rootSchemas) or nil
 
-	current = applyDistinctSteps(current, self._distinctSteps, 0, expiredStreams, self._scheduler)
 	local processedJoins = 0
+	current = applyDistinctSteps(current, self._distinctSteps, processedJoins, expiredStreams, self._scheduler)
 	for stepIndex, step in ipairs(self._steps) do
 		local rightObservable, rightExpired, rightSchemas = resolveObservable(step.source, step.sourceOpts)
 		if rightExpired then
